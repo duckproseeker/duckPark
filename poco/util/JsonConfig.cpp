@@ -12,7 +12,7 @@ int main()
     jsconf.setString("config.Name", "xiaoming");
     std::string name2= jsconf.getString("config.Name");
     std::cout << "name2: " << name2 << "\n";
-
+    //增、删
     //将修改的配置文件存储到磁盘
     std::filebuf fb;
     fb.open("config.json", std::ios::out);
