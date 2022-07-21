@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/home/ubuntu/catkinTest_ws/devel/lib/ros_test/listener"
-  "/home/ubuntu/catkinTest_ws/devel/lib/ros_test/listener.pdb"
+  "/home/duck/myRepository/catkinTest_ws/devel/lib/ros_test/listener"
+  "/home/duck/myRepository/catkinTest_ws/devel/lib/ros_test/listener.pdb"
   "CMakeFiles/listener.dir/src/listener.cpp.o"
 )
 

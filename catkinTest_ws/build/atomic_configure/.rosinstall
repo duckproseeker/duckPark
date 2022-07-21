@@ -1,2 +1,2 @@
 - setup-file:
-    local-name: /home/ubuntu/catkinTest_ws/devel/setup.sh
+    local-name: /home/duck/myRepository/catkinTest_ws/devel/setup.sh

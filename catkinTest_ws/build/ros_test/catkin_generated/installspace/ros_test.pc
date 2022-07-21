@@ -1,4 +1,4 @@
-prefix=/home/ubuntu/catkinTest_ws/install
+prefix=/home/duck/myRepository/catkinTest_ws/install
 
 Name: ros_test
 Description: Description of ros_test

@@ -1,8 +1,8 @@
-# Install script for directory: /home/ubuntu/catkinTest_ws/src/ros_test
+# Install script for directory: /home/duck/myRepository/catkinTest_ws/src/ros_test
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-  set(CMAKE_INSTALL_PREFIX "/home/ubuntu/catkinTest_ws/install")
+  set(CMAKE_INSTALL_PREFIX "/home/duck/myRepository/catkinTest_ws/install")
 endif()
 string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 
@@ -38,17 +38,17 @@ if(NOT DEFINED CMAKE_CROSSCOMPILING)
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig" TYPE FILE FILES "/home/ubuntu/catkinTest_ws/build/ros_test/catkin_generated/installspace/ros_test.pc")
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig" TYPE FILE FILES "/home/duck/myRepository/catkinTest_ws/build/ros_test/catkin_generated/installspace/ros_test.pc")
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
   file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/ros_test/cmake" TYPE FILE FILES
-    "/home/ubuntu/catkinTest_ws/build/ros_test/catkin_generated/installspace/ros_testConfig.cmake"
-    "/home/ubuntu/catkinTest_ws/build/ros_test/catkin_generated/installspace/ros_testConfig-version.cmake"
+    "/home/duck/myRepository/catkinTest_ws/build/ros_test/catkin_generated/installspace/ros_testConfig.cmake"
+    "/home/duck/myRepository/catkinTest_ws/build/ros_test/catkin_generated/installspace/ros_testConfig-version.cmake"
     )
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/ros_test" TYPE FILE FILES "/home/ubuntu/catkinTest_ws/src/ros_test/package.xml")
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/ros_test" TYPE FILE FILES "/home/duck/myRepository/catkinTest_ws/src/ros_test/package.xml")
 endif()
 

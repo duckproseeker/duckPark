@@ -1,6 +1,6 @@
 set(_CATKIN_CURRENT_PACKAGE "ros_test")
 set(ros_test_VERSION "0.0.0")
-set(ros_test_MAINTAINER "ubuntu <ubuntu@todo.todo>")
+set(ros_test_MAINTAINER "duck <duck@todo.todo>")
 set(ros_test_PACKAGE_FORMAT "2")
 set(ros_test_BUILD_DEPENDS "roscpp" "rospy" "std_msgs")
 set(ros_test_BUILD_EXPORT_DEPENDS "roscpp" "rospy" "std_msgs")

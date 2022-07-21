@@ -30,6 +30,7 @@ private:
             {
                 if(!ec)
                 {
+                    std::cout << "message from client: " << _data << std::endl;
                     _DoWrite(length);
                 }
             }
@@ -51,6 +52,7 @@ private:
 private:
     tcp::socket _socket;
     char _data[1024];
+    char _reply[1024];
 };
 
 class Server

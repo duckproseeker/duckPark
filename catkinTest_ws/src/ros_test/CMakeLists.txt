@@ -120,8 +120,10 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(talker src/talker.cpp)  # 代表将src/talker.cpp编译成可执行文件talker
-target_link_libraries(talker ${catkin_LIBRARIES})  # 将可执行文件talker与依赖库链接
+#代表将src/talker.cpp编译成可执行文件talker
+add_executable(talker src/talker.cpp)
+#将talker与依赖库链接
+target_link_libraries(talker ${catkin_LIBRARIES})
 
 add_executable(listener src/listener.cpp)
 target_link_libraries(listener ${catkin_LIBRARIES})

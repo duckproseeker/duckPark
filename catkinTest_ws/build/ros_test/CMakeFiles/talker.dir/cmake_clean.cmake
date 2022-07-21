@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/home/ubuntu/catkinTest_ws/devel/lib/ros_test/talker"
-  "/home/ubuntu/catkinTest_ws/devel/lib/ros_test/talker.pdb"
+  "/home/duck/myRepository/catkinTest_ws/devel/lib/ros_test/talker"
+  "/home/duck/myRepository/catkinTest_ws/devel/lib/ros_test/talker.pdb"
   "CMakeFiles/talker.dir/src/talker.cpp.o"
 )
 

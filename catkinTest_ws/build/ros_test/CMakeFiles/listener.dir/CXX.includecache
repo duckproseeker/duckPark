@@ -6,11 +6,11 @@
 
 #IncludeRegexTransform: 
 
-/home/ubuntu/catkinTest_ws/src/ros_test/src/listener.cpp
+/home/duck/myRepository/catkinTest_ws/src/ros_test/src/listener.cpp
 ros/ros.h
-/home/ubuntu/catkinTest_ws/src/ros_test/src/ros/ros.h
+/home/duck/myRepository/catkinTest_ws/src/ros_test/src/ros/ros.h
 std_msgs/String.h
-/home/ubuntu/catkinTest_ws/src/ros_test/src/std_msgs/String.h
+/home/duck/myRepository/catkinTest_ws/src/ros_test/src/std_msgs/String.h
 
 /opt/ros/noetic/include/ros/advertise_options.h
 ros/forwards.h

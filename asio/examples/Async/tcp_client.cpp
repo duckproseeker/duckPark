@@ -39,4 +39,13 @@ int main(int argc, char **argv)
     std::cout << "\n";
     }
 
+    // socket.async_read_some(asio::buffer(reply, 1024), [](std::error_code ec, std::size_t length)
+    //     {
+    //         if(!ec)
+    //         {
+    //             std::cout << "client receive!\n";
+    //         }
+    //     });
+
+
 }
