@@ -27,4 +27,4 @@ int main(int argc, char *argv[])
     root.info("root info");
     sub1.error("sub1 error");
     sub1.warn("sub1 warn");
-}
+} 

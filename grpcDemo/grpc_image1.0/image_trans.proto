@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package img_transfer;
+
+service imgDemo
+{
+    rpc imgUpload(image) returns (myStatus);
+
+    rpc imgDownload(Basename) returns (image);
+
+    rpc imgShowall(myStatus) returns (nameList);
+}
+
+message Basename
+{
+    string base_name = 1;
+}
+
+message image
+{
+    string name = 1;
+    imgData info = 2;
+
+    message imgData{
+        bytes data = 1;
+        int32 length = 2;
+        int32 width = 3;
+    }
+   
+}
+
+message myStatus
+{
+    int32 code = 1;
+}
+
+message nameList
+{
+    repeated string name = 1;
+}
