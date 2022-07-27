@@ -1,9 +1,12 @@
 #include "image_trans.grpc.pb.h"
+#include "imgSqlite/driver.hxx"
+#include "imgSqlite/picture.hxx"
 
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <map>
+#include <chrono>
 
 #include <Poco/Path.h>
 #include <Poco/File.h>
@@ -26,19 +29,26 @@ public:
     //图片上传
     grpc::Status imgUpload(::grpc::ServerContext *context, const ::img_transfer::image *request, ::img_transfer::myStatus *response)
     {
-        name_ = request->name();
+        std::string name = request->name();
         image_data_ = request->info();
 
         std::string data = image_data_.data();
+        std::size_t bytes = data.size();
         int32_t length = image_data_.length();
         int32_t width = image_data_.width();
 
-        //将图片名及额外信息保存到数据库
         //将图片存储到本地
         std::string savePath = "/home/duck/image/";
-        std::ofstream out(savePath + name_, std::ios::out | std::ios::ate | std::ios::binary);
+        std::ofstream out(savePath + name, std::ios::out | std::ios::ate | std::ios::binary);
         out.write(data.c_str(), data.size());
         out.close();
+        //获取图片上传时间
+        std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+        time_t tNow = std::chrono::system_clock::to_time_t(now);
+
+        //将图片名及额外信息保存到数据库
+        Picture picture(name, bytes, tNow, savePath, "kavin");
+        Podb_->persist(picture);
 
         response->set_code(200);
         return grpc::Status::OK;
@@ -96,9 +106,16 @@ public:
         return grpc::Status::OK;
     }
 
+    void loadDB(OdbDriver *odb)
+    {
+        Podb_ = odb;
+    }
+
 private:
-    std::string name_;
+    //std::string name_;
     img_transfer::image::imgData image_data_;
+    OdbDriver *Podb_;
+
 };
 
 void runServer()
@@ -106,12 +123,18 @@ void runServer()
     std::string address("0.0.0.0:50057");
     imgServiceImpl service;
 
+    //导入数据库
+    std::string dbName = "picture.db";
+    OdbDriver odb_driver(dbName);
+    service.loadDB(&odb_driver);
+
     ServerBuilder builder;
     builder.AddListeningPort(address, grpc::InsecureServerCredentials());
 
     //以这种方式创建的服务端实例与客户端之间的通信是同步的
     builder.RegisterService(&service);
     std::unique_ptr<Server> server(builder.BuildAndStart());
+    
 
     server->Wait();
 }
