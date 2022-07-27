@@ -62,6 +62,7 @@ create_database (const std::string& name)
 #if defined(DATABASE_MYSQL)
   auto_ptr<database> db (new odb::mysql::database (argc, argv));
 #elif defined(DATABASE_SQLITE)
+  std::cout << "sqlite db create" << std::endl;
   auto_ptr<database> db (
     new odb::sqlite::database (
       name, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE));
@@ -76,7 +77,7 @@ create_database (const std::string& name)
     c->execute ("PRAGMA foreign_keys=OFF");
 
     transaction t (c->begin ());
-    schema_catalog::create_schema (*db);
+    schema_catalog::migrate(*db);
     t.commit ();
 
     c->execute ("PRAGMA foreign_keys=ON");
