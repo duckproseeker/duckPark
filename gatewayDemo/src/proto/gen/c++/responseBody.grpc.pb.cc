@@ -19,13 +19,13 @@
 #include <grpcpp/impl/codegen/server_context.h>
 #include <grpcpp/impl/codegen/service_type.h>
 #include <grpcpp/impl/codegen/sync_stream.h>
-namespace response_body {
+namespace responseBody {
 
 static const char* ResponseBodyService_method_names[] = {
-  "/response_body.ResponseBodyService/GetResponseBody",
-  "/response_body.ResponseBodyService/ListResponseBodies",
-  "/response_body.ResponseBodyService/ListResponseStrings",
-  "/response_body.ResponseBodyService/GetResponseBodyStream",
+  "/responseBody.ResponseBodyService/GetResponseBody",
+  "/responseBody.ResponseBodyService/ListResponseBodies",
+  "/responseBody.ResponseBodyService/ListResponseStrings",
+  "/responseBody.ResponseBodyService/GetResponseBodyStream",
 };
 
 std::unique_ptr< ResponseBodyService::Stub> ResponseBodyService::NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options) {
@@ -41,130 +41,130 @@ ResponseBodyService::Stub::Stub(const std::shared_ptr< ::grpc::ChannelInterface>
   , rpcmethod_GetResponseBodyStream_(ResponseBodyService_method_names[3], options.suffix_for_stats(),::grpc::internal::RpcMethod::SERVER_STREAMING, channel)
   {}
 
-::grpc::Status ResponseBodyService::Stub::GetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::response_body::ResponseBodyOut* response) {
-  return ::grpc::internal::BlockingUnaryCall< ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_GetResponseBody_, context, request, response);
+::grpc::Status ResponseBodyService::Stub::GetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::responseBody::ResponseBodyOut* response) {
+  return ::grpc::internal::BlockingUnaryCall< ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_GetResponseBody_, context, request, response);
 }
 
-void ResponseBodyService::Stub::async::GetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::ResponseBodyOut* response, std::function<void(::grpc::Status)> f) {
-  ::grpc::internal::CallbackUnaryCall< ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_GetResponseBody_, context, request, response, std::move(f));
+void ResponseBodyService::Stub::async::GetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::ResponseBodyOut* response, std::function<void(::grpc::Status)> f) {
+  ::grpc::internal::CallbackUnaryCall< ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_GetResponseBody_, context, request, response, std::move(f));
 }
 
-void ResponseBodyService::Stub::async::GetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::ResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) {
+void ResponseBodyService::Stub::async::GetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::ResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) {
   ::grpc::internal::ClientCallbackUnaryFactory::Create< ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_GetResponseBody_, context, request, response, reactor);
 }
 
-::grpc::ClientAsyncResponseReader< ::response_body::ResponseBodyOut>* ResponseBodyService::Stub::PrepareAsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::response_body::ResponseBodyOut, ::response_body::ResponseBodyIn, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_GetResponseBody_, context, request);
+::grpc::ClientAsyncResponseReader< ::responseBody::ResponseBodyOut>* ResponseBodyService::Stub::PrepareAsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::responseBody::ResponseBodyOut, ::responseBody::ResponseBodyIn, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_GetResponseBody_, context, request);
 }
 
-::grpc::ClientAsyncResponseReader< ::response_body::ResponseBodyOut>* ResponseBodyService::Stub::AsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::responseBody::ResponseBodyOut>* ResponseBodyService::Stub::AsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
   auto* result =
     this->PrepareAsyncGetResponseBodyRaw(context, request, cq);
   result->StartCall();
   return result;
 }
 
-::grpc::Status ResponseBodyService::Stub::ListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::response_body::RepeatedResponseBodyOut* response) {
-  return ::grpc::internal::BlockingUnaryCall< ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_ListResponseBodies_, context, request, response);
+::grpc::Status ResponseBodyService::Stub::ListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::responseBody::RepeatedResponseBodyOut* response) {
+  return ::grpc::internal::BlockingUnaryCall< ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_ListResponseBodies_, context, request, response);
 }
 
-void ResponseBodyService::Stub::async::ListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseBodyOut* response, std::function<void(::grpc::Status)> f) {
-  ::grpc::internal::CallbackUnaryCall< ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_ListResponseBodies_, context, request, response, std::move(f));
+void ResponseBodyService::Stub::async::ListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseBodyOut* response, std::function<void(::grpc::Status)> f) {
+  ::grpc::internal::CallbackUnaryCall< ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_ListResponseBodies_, context, request, response, std::move(f));
 }
 
-void ResponseBodyService::Stub::async::ListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) {
+void ResponseBodyService::Stub::async::ListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) {
   ::grpc::internal::ClientCallbackUnaryFactory::Create< ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_ListResponseBodies_, context, request, response, reactor);
 }
 
-::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseBodyOut>* ResponseBodyService::Stub::PrepareAsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::response_body::RepeatedResponseBodyOut, ::response_body::ResponseBodyIn, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_ListResponseBodies_, context, request);
+::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseBodyOut>* ResponseBodyService::Stub::PrepareAsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::responseBody::RepeatedResponseBodyOut, ::responseBody::ResponseBodyIn, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_ListResponseBodies_, context, request);
 }
 
-::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseBodyOut>* ResponseBodyService::Stub::AsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseBodyOut>* ResponseBodyService::Stub::AsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
   auto* result =
     this->PrepareAsyncListResponseBodiesRaw(context, request, cq);
   result->StartCall();
   return result;
 }
 
-::grpc::Status ResponseBodyService::Stub::ListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::response_body::RepeatedResponseStrings* response) {
-  return ::grpc::internal::BlockingUnaryCall< ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseStrings, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_ListResponseStrings_, context, request, response);
+::grpc::Status ResponseBodyService::Stub::ListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::responseBody::RepeatedResponseStrings* response) {
+  return ::grpc::internal::BlockingUnaryCall< ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseStrings, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_ListResponseStrings_, context, request, response);
 }
 
-void ResponseBodyService::Stub::async::ListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseStrings* response, std::function<void(::grpc::Status)> f) {
-  ::grpc::internal::CallbackUnaryCall< ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseStrings, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_ListResponseStrings_, context, request, response, std::move(f));
+void ResponseBodyService::Stub::async::ListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseStrings* response, std::function<void(::grpc::Status)> f) {
+  ::grpc::internal::CallbackUnaryCall< ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseStrings, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_ListResponseStrings_, context, request, response, std::move(f));
 }
 
-void ResponseBodyService::Stub::async::ListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseStrings* response, ::grpc::ClientUnaryReactor* reactor) {
+void ResponseBodyService::Stub::async::ListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseStrings* response, ::grpc::ClientUnaryReactor* reactor) {
   ::grpc::internal::ClientCallbackUnaryFactory::Create< ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_ListResponseStrings_, context, request, response, reactor);
 }
 
-::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseStrings>* ResponseBodyService::Stub::PrepareAsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::response_body::RepeatedResponseStrings, ::response_body::ResponseBodyIn, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_ListResponseStrings_, context, request);
+::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseStrings>* ResponseBodyService::Stub::PrepareAsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::responseBody::RepeatedResponseStrings, ::responseBody::ResponseBodyIn, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_ListResponseStrings_, context, request);
 }
 
-::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseStrings>* ResponseBodyService::Stub::AsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseStrings>* ResponseBodyService::Stub::AsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
   auto* result =
     this->PrepareAsyncListResponseStringsRaw(context, request, cq);
   result->StartCall();
   return result;
 }
 
-::grpc::ClientReader< ::response_body::ResponseBodyOut>* ResponseBodyService::Stub::GetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request) {
-  return ::grpc::internal::ClientReaderFactory< ::response_body::ResponseBodyOut>::Create(channel_.get(), rpcmethod_GetResponseBodyStream_, context, request);
+::grpc::ClientReader< ::responseBody::ResponseBodyOut>* ResponseBodyService::Stub::GetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request) {
+  return ::grpc::internal::ClientReaderFactory< ::responseBody::ResponseBodyOut>::Create(channel_.get(), rpcmethod_GetResponseBodyStream_, context, request);
 }
 
-void ResponseBodyService::Stub::async::GetResponseBodyStream(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::grpc::ClientReadReactor< ::response_body::ResponseBodyOut>* reactor) {
-  ::grpc::internal::ClientCallbackReaderFactory< ::response_body::ResponseBodyOut>::Create(stub_->channel_.get(), stub_->rpcmethod_GetResponseBodyStream_, context, request, reactor);
+void ResponseBodyService::Stub::async::GetResponseBodyStream(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::grpc::ClientReadReactor< ::responseBody::ResponseBodyOut>* reactor) {
+  ::grpc::internal::ClientCallbackReaderFactory< ::responseBody::ResponseBodyOut>::Create(stub_->channel_.get(), stub_->rpcmethod_GetResponseBodyStream_, context, request, reactor);
 }
 
-::grpc::ClientAsyncReader< ::response_body::ResponseBodyOut>* ResponseBodyService::Stub::AsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq, void* tag) {
-  return ::grpc::internal::ClientAsyncReaderFactory< ::response_body::ResponseBodyOut>::Create(channel_.get(), cq, rpcmethod_GetResponseBodyStream_, context, request, true, tag);
+::grpc::ClientAsyncReader< ::responseBody::ResponseBodyOut>* ResponseBodyService::Stub::AsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq, void* tag) {
+  return ::grpc::internal::ClientAsyncReaderFactory< ::responseBody::ResponseBodyOut>::Create(channel_.get(), cq, rpcmethod_GetResponseBodyStream_, context, request, true, tag);
 }
 
-::grpc::ClientAsyncReader< ::response_body::ResponseBodyOut>* ResponseBodyService::Stub::PrepareAsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-  return ::grpc::internal::ClientAsyncReaderFactory< ::response_body::ResponseBodyOut>::Create(channel_.get(), cq, rpcmethod_GetResponseBodyStream_, context, request, false, nullptr);
+::grpc::ClientAsyncReader< ::responseBody::ResponseBodyOut>* ResponseBodyService::Stub::PrepareAsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncReaderFactory< ::responseBody::ResponseBodyOut>::Create(channel_.get(), cq, rpcmethod_GetResponseBodyStream_, context, request, false, nullptr);
 }
 
 ResponseBodyService::Service::Service() {
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       ResponseBodyService_method_names[0],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
-      new ::grpc::internal::RpcMethodHandler< ResponseBodyService::Service, ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
+      new ::grpc::internal::RpcMethodHandler< ResponseBodyService::Service, ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](ResponseBodyService::Service* service,
              ::grpc::ServerContext* ctx,
-             const ::response_body::ResponseBodyIn* req,
-             ::response_body::ResponseBodyOut* resp) {
+             const ::responseBody::ResponseBodyIn* req,
+             ::responseBody::ResponseBodyOut* resp) {
                return service->GetResponseBody(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       ResponseBodyService_method_names[1],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
-      new ::grpc::internal::RpcMethodHandler< ResponseBodyService::Service, ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
+      new ::grpc::internal::RpcMethodHandler< ResponseBodyService::Service, ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseBodyOut, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](ResponseBodyService::Service* service,
              ::grpc::ServerContext* ctx,
-             const ::response_body::ResponseBodyIn* req,
-             ::response_body::RepeatedResponseBodyOut* resp) {
+             const ::responseBody::ResponseBodyIn* req,
+             ::responseBody::RepeatedResponseBodyOut* resp) {
                return service->ListResponseBodies(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       ResponseBodyService_method_names[2],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
-      new ::grpc::internal::RpcMethodHandler< ResponseBodyService::Service, ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseStrings, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
+      new ::grpc::internal::RpcMethodHandler< ResponseBodyService::Service, ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseStrings, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](ResponseBodyService::Service* service,
              ::grpc::ServerContext* ctx,
-             const ::response_body::ResponseBodyIn* req,
-             ::response_body::RepeatedResponseStrings* resp) {
+             const ::responseBody::ResponseBodyIn* req,
+             ::responseBody::RepeatedResponseStrings* resp) {
                return service->ListResponseStrings(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       ResponseBodyService_method_names[3],
       ::grpc::internal::RpcMethod::SERVER_STREAMING,
-      new ::grpc::internal::ServerStreamingHandler< ResponseBodyService::Service, ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut>(
+      new ::grpc::internal::ServerStreamingHandler< ResponseBodyService::Service, ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut>(
           [](ResponseBodyService::Service* service,
              ::grpc::ServerContext* ctx,
-             const ::response_body::ResponseBodyIn* req,
-             ::grpc::ServerWriter<::response_body::ResponseBodyOut>* writer) {
+             const ::responseBody::ResponseBodyIn* req,
+             ::grpc::ServerWriter<::responseBody::ResponseBodyOut>* writer) {
                return service->GetResponseBodyStream(ctx, req, writer);
              }, this)));
 }
@@ -172,28 +172,28 @@ ResponseBodyService::Service::Service() {
 ResponseBodyService::Service::~Service() {
 }
 
-::grpc::Status ResponseBodyService::Service::GetResponseBody(::grpc::ServerContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::ResponseBodyOut* response) {
+::grpc::Status ResponseBodyService::Service::GetResponseBody(::grpc::ServerContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::ResponseBodyOut* response) {
   (void) context;
   (void) request;
   (void) response;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }
 
-::grpc::Status ResponseBodyService::Service::ListResponseBodies(::grpc::ServerContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseBodyOut* response) {
+::grpc::Status ResponseBodyService::Service::ListResponseBodies(::grpc::ServerContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseBodyOut* response) {
   (void) context;
   (void) request;
   (void) response;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }
 
-::grpc::Status ResponseBodyService::Service::ListResponseStrings(::grpc::ServerContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseStrings* response) {
+::grpc::Status ResponseBodyService::Service::ListResponseStrings(::grpc::ServerContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseStrings* response) {
   (void) context;
   (void) request;
   (void) response;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }
 
-::grpc::Status ResponseBodyService::Service::GetResponseBodyStream(::grpc::ServerContext* context, const ::response_body::ResponseBodyIn* request, ::grpc::ServerWriter< ::response_body::ResponseBodyOut>* writer) {
+::grpc::Status ResponseBodyService::Service::GetResponseBodyStream(::grpc::ServerContext* context, const ::responseBody::ResponseBodyIn* request, ::grpc::ServerWriter< ::responseBody::ResponseBodyOut>* writer) {
   (void) context;
   (void) request;
   (void) writer;
@@ -201,5 +201,5 @@ ResponseBodyService::Service::~Service() {
 }
 
 
-}  // namespace response_body
+}  // namespace responseBody
 

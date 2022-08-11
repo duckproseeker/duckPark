@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package response_body;
+package responseBody;
 
 // import "google/api/annotations.proto";
 
-option go_package = "github.com/grpc-ecosystem/grpc-gateway/v2/examples/internal/proto/examplepb";
+option go_package = "./";
 
 message ResponseBodyIn {
   string data = 1;

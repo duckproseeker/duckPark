@@ -11,11 +11,11 @@ using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
 using grpc::ServerWriter;
-using response_body::ResponseBodyService;
-using response_body::ResponseBodyIn;
-using response_body::ResponseBodyOut;
-using response_body::RepeatedResponseBodyOut;
-using response_body::RepeatedResponseStrings;
+using responseBody::ResponseBodyService;
+using responseBody::ResponseBodyIn;
+using responseBody::ResponseBodyOut;
+using responseBody::RepeatedResponseBodyOut;
+using responseBody::RepeatedResponseStrings;
 
 class ServiceImpl : public ResponseBodyService::Service {
 public:

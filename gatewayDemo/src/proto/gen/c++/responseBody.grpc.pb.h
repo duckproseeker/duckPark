@@ -25,57 +25,57 @@
 #include <grpcpp/impl/codegen/stub_options.h>
 #include <grpcpp/impl/codegen/sync_stream.h>
 
-namespace response_body {
+namespace responseBody {
 
 class ResponseBodyService final {
  public:
   static constexpr char const* service_full_name() {
-    return "response_body.ResponseBodyService";
+    return "responseBody.ResponseBodyService";
   }
   class StubInterface {
    public:
     virtual ~StubInterface() {}
-    virtual ::grpc::Status GetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::response_body::ResponseBodyOut* response) = 0;
-    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::ResponseBodyOut>> AsyncGetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::ResponseBodyOut>>(AsyncGetResponseBodyRaw(context, request, cq));
+    virtual ::grpc::Status GetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::responseBody::ResponseBodyOut* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::ResponseBodyOut>> AsyncGetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::ResponseBodyOut>>(AsyncGetResponseBodyRaw(context, request, cq));
     }
-    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::ResponseBodyOut>> PrepareAsyncGetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::ResponseBodyOut>>(PrepareAsyncGetResponseBodyRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::ResponseBodyOut>> PrepareAsyncGetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::ResponseBodyOut>>(PrepareAsyncGetResponseBodyRaw(context, request, cq));
     }
     // option (google.api.http) = {
     //   get: "/responsebody/{data}"
     //   response_body: "response"
     // };
-    virtual ::grpc::Status ListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::response_body::RepeatedResponseBodyOut* response) = 0;
-    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseBodyOut>> AsyncListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseBodyOut>>(AsyncListResponseBodiesRaw(context, request, cq));
+    virtual ::grpc::Status ListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::responseBody::RepeatedResponseBodyOut* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseBodyOut>> AsyncListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseBodyOut>>(AsyncListResponseBodiesRaw(context, request, cq));
     }
-    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseBodyOut>> PrepareAsyncListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseBodyOut>>(PrepareAsyncListResponseBodiesRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseBodyOut>> PrepareAsyncListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseBodyOut>>(PrepareAsyncListResponseBodiesRaw(context, request, cq));
     }
     // option (google.api.http) = {
     //   get: "/responsebodies/{data}"
     //   response_body: "response"
     // };
-    virtual ::grpc::Status ListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::response_body::RepeatedResponseStrings* response) = 0;
-    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseStrings>> AsyncListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseStrings>>(AsyncListResponseStringsRaw(context, request, cq));
+    virtual ::grpc::Status ListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::responseBody::RepeatedResponseStrings* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseStrings>> AsyncListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseStrings>>(AsyncListResponseStringsRaw(context, request, cq));
     }
-    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseStrings>> PrepareAsyncListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseStrings>>(PrepareAsyncListResponseStringsRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseStrings>> PrepareAsyncListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseStrings>>(PrepareAsyncListResponseStringsRaw(context, request, cq));
     }
     // option (google.api.http) = {
     //   get: "/responsestrings/{data}"
     //   response_body: "values"
     // };
-    std::unique_ptr< ::grpc::ClientReaderInterface< ::response_body::ResponseBodyOut>> GetResponseBodyStream(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request) {
-      return std::unique_ptr< ::grpc::ClientReaderInterface< ::response_body::ResponseBodyOut>>(GetResponseBodyStreamRaw(context, request));
+    std::unique_ptr< ::grpc::ClientReaderInterface< ::responseBody::ResponseBodyOut>> GetResponseBodyStream(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request) {
+      return std::unique_ptr< ::grpc::ClientReaderInterface< ::responseBody::ResponseBodyOut>>(GetResponseBodyStreamRaw(context, request));
     }
-    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::response_body::ResponseBodyOut>> AsyncGetResponseBodyStream(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq, void* tag) {
-      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::response_body::ResponseBodyOut>>(AsyncGetResponseBodyStreamRaw(context, request, cq, tag));
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::responseBody::ResponseBodyOut>> AsyncGetResponseBodyStream(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::responseBody::ResponseBodyOut>>(AsyncGetResponseBodyStreamRaw(context, request, cq, tag));
     }
-    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::response_body::ResponseBodyOut>> PrepareAsyncGetResponseBodyStream(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::response_body::ResponseBodyOut>>(PrepareAsyncGetResponseBodyStreamRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::responseBody::ResponseBodyOut>> PrepareAsyncGetResponseBodyStream(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::responseBody::ResponseBodyOut>>(PrepareAsyncGetResponseBodyStreamRaw(context, request, cq));
     }
     // option (google.api.http) = {
     //   get: "/responsebody/stream/{data}"
@@ -84,25 +84,25 @@ class ResponseBodyService final {
     class async_interface {
      public:
       virtual ~async_interface() {}
-      virtual void GetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::ResponseBodyOut* response, std::function<void(::grpc::Status)>) = 0;
-      virtual void GetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::ResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void GetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::ResponseBodyOut* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void GetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::ResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) = 0;
       // option (google.api.http) = {
       //   get: "/responsebody/{data}"
       //   response_body: "response"
       // };
-      virtual void ListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseBodyOut* response, std::function<void(::grpc::Status)>) = 0;
-      virtual void ListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void ListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseBodyOut* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void ListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) = 0;
       // option (google.api.http) = {
       //   get: "/responsebodies/{data}"
       //   response_body: "response"
       // };
-      virtual void ListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseStrings* response, std::function<void(::grpc::Status)>) = 0;
-      virtual void ListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseStrings* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void ListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseStrings* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void ListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseStrings* response, ::grpc::ClientUnaryReactor* reactor) = 0;
       // option (google.api.http) = {
       //   get: "/responsestrings/{data}"
       //   response_body: "values"
       // };
-      virtual void GetResponseBodyStream(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::grpc::ClientReadReactor< ::response_body::ResponseBodyOut>* reactor) = 0;
+      virtual void GetResponseBodyStream(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::grpc::ClientReadReactor< ::responseBody::ResponseBodyOut>* reactor) = 0;
       // option (google.api.http) = {
       //   get: "/responsebody/stream/{data}"
       //   response_body: "response"
@@ -112,59 +112,59 @@ class ResponseBodyService final {
     virtual class async_interface* async() { return nullptr; }
     class async_interface* experimental_async() { return async(); }
    private:
-    virtual ::grpc::ClientAsyncResponseReaderInterface< ::response_body::ResponseBodyOut>* AsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
-    virtual ::grpc::ClientAsyncResponseReaderInterface< ::response_body::ResponseBodyOut>* PrepareAsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
-    virtual ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseBodyOut>* AsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
-    virtual ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseBodyOut>* PrepareAsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
-    virtual ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseStrings>* AsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
-    virtual ::grpc::ClientAsyncResponseReaderInterface< ::response_body::RepeatedResponseStrings>* PrepareAsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
-    virtual ::grpc::ClientReaderInterface< ::response_body::ResponseBodyOut>* GetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request) = 0;
-    virtual ::grpc::ClientAsyncReaderInterface< ::response_body::ResponseBodyOut>* AsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq, void* tag) = 0;
-    virtual ::grpc::ClientAsyncReaderInterface< ::response_body::ResponseBodyOut>* PrepareAsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::ResponseBodyOut>* AsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::ResponseBodyOut>* PrepareAsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseBodyOut>* AsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseBodyOut>* PrepareAsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseStrings>* AsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::responseBody::RepeatedResponseStrings>* PrepareAsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientReaderInterface< ::responseBody::ResponseBodyOut>* GetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::responseBody::ResponseBodyOut>* AsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq, void* tag) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::responseBody::ResponseBodyOut>* PrepareAsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) = 0;
   };
   class Stub final : public StubInterface {
    public:
     Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
-    ::grpc::Status GetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::response_body::ResponseBodyOut* response) override;
-    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::ResponseBodyOut>> AsyncGetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::ResponseBodyOut>>(AsyncGetResponseBodyRaw(context, request, cq));
+    ::grpc::Status GetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::responseBody::ResponseBodyOut* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::ResponseBodyOut>> AsyncGetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::ResponseBodyOut>>(AsyncGetResponseBodyRaw(context, request, cq));
     }
-    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::ResponseBodyOut>> PrepareAsyncGetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::ResponseBodyOut>>(PrepareAsyncGetResponseBodyRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::ResponseBodyOut>> PrepareAsyncGetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::ResponseBodyOut>>(PrepareAsyncGetResponseBodyRaw(context, request, cq));
     }
-    ::grpc::Status ListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::response_body::RepeatedResponseBodyOut* response) override;
-    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseBodyOut>> AsyncListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseBodyOut>>(AsyncListResponseBodiesRaw(context, request, cq));
+    ::grpc::Status ListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::responseBody::RepeatedResponseBodyOut* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseBodyOut>> AsyncListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseBodyOut>>(AsyncListResponseBodiesRaw(context, request, cq));
     }
-    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseBodyOut>> PrepareAsyncListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseBodyOut>>(PrepareAsyncListResponseBodiesRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseBodyOut>> PrepareAsyncListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseBodyOut>>(PrepareAsyncListResponseBodiesRaw(context, request, cq));
     }
-    ::grpc::Status ListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::response_body::RepeatedResponseStrings* response) override;
-    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseStrings>> AsyncListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseStrings>>(AsyncListResponseStringsRaw(context, request, cq));
+    ::grpc::Status ListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::responseBody::RepeatedResponseStrings* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseStrings>> AsyncListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseStrings>>(AsyncListResponseStringsRaw(context, request, cq));
     }
-    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseStrings>> PrepareAsyncListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseStrings>>(PrepareAsyncListResponseStringsRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseStrings>> PrepareAsyncListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseStrings>>(PrepareAsyncListResponseStringsRaw(context, request, cq));
     }
-    std::unique_ptr< ::grpc::ClientReader< ::response_body::ResponseBodyOut>> GetResponseBodyStream(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request) {
-      return std::unique_ptr< ::grpc::ClientReader< ::response_body::ResponseBodyOut>>(GetResponseBodyStreamRaw(context, request));
+    std::unique_ptr< ::grpc::ClientReader< ::responseBody::ResponseBodyOut>> GetResponseBodyStream(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request) {
+      return std::unique_ptr< ::grpc::ClientReader< ::responseBody::ResponseBodyOut>>(GetResponseBodyStreamRaw(context, request));
     }
-    std::unique_ptr< ::grpc::ClientAsyncReader< ::response_body::ResponseBodyOut>> AsyncGetResponseBodyStream(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq, void* tag) {
-      return std::unique_ptr< ::grpc::ClientAsyncReader< ::response_body::ResponseBodyOut>>(AsyncGetResponseBodyStreamRaw(context, request, cq, tag));
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::responseBody::ResponseBodyOut>> AsyncGetResponseBodyStream(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::responseBody::ResponseBodyOut>>(AsyncGetResponseBodyStreamRaw(context, request, cq, tag));
     }
-    std::unique_ptr< ::grpc::ClientAsyncReader< ::response_body::ResponseBodyOut>> PrepareAsyncGetResponseBodyStream(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncReader< ::response_body::ResponseBodyOut>>(PrepareAsyncGetResponseBodyStreamRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::responseBody::ResponseBodyOut>> PrepareAsyncGetResponseBodyStream(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::responseBody::ResponseBodyOut>>(PrepareAsyncGetResponseBodyStreamRaw(context, request, cq));
     }
     class async final :
       public StubInterface::async_interface {
      public:
-      void GetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::ResponseBodyOut* response, std::function<void(::grpc::Status)>) override;
-      void GetResponseBody(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::ResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) override;
-      void ListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseBodyOut* response, std::function<void(::grpc::Status)>) override;
-      void ListResponseBodies(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) override;
-      void ListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseStrings* response, std::function<void(::grpc::Status)>) override;
-      void ListResponseStrings(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseStrings* response, ::grpc::ClientUnaryReactor* reactor) override;
-      void GetResponseBodyStream(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn* request, ::grpc::ClientReadReactor< ::response_body::ResponseBodyOut>* reactor) override;
+      void GetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::ResponseBodyOut* response, std::function<void(::grpc::Status)>) override;
+      void GetResponseBody(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::ResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void ListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseBodyOut* response, std::function<void(::grpc::Status)>) override;
+      void ListResponseBodies(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseBodyOut* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void ListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseStrings* response, std::function<void(::grpc::Status)>) override;
+      void ListResponseStrings(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseStrings* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void GetResponseBodyStream(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn* request, ::grpc::ClientReadReactor< ::responseBody::ResponseBodyOut>* reactor) override;
      private:
       friend class Stub;
       explicit async(Stub* stub): stub_(stub) { }
@@ -176,15 +176,15 @@ class ResponseBodyService final {
    private:
     std::shared_ptr< ::grpc::ChannelInterface> channel_;
     class async async_stub_{this};
-    ::grpc::ClientAsyncResponseReader< ::response_body::ResponseBodyOut>* AsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
-    ::grpc::ClientAsyncResponseReader< ::response_body::ResponseBodyOut>* PrepareAsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
-    ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseBodyOut>* AsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
-    ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseBodyOut>* PrepareAsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
-    ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseStrings>* AsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
-    ::grpc::ClientAsyncResponseReader< ::response_body::RepeatedResponseStrings>* PrepareAsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
-    ::grpc::ClientReader< ::response_body::ResponseBodyOut>* GetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request) override;
-    ::grpc::ClientAsyncReader< ::response_body::ResponseBodyOut>* AsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq, void* tag) override;
-    ::grpc::ClientAsyncReader< ::response_body::ResponseBodyOut>* PrepareAsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::response_body::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::responseBody::ResponseBodyOut>* AsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::responseBody::ResponseBodyOut>* PrepareAsyncGetResponseBodyRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseBodyOut>* AsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseBodyOut>* PrepareAsyncListResponseBodiesRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseStrings>* AsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::responseBody::RepeatedResponseStrings>* PrepareAsyncListResponseStringsRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientReader< ::responseBody::ResponseBodyOut>* GetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request) override;
+    ::grpc::ClientAsyncReader< ::responseBody::ResponseBodyOut>* AsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq, void* tag) override;
+    ::grpc::ClientAsyncReader< ::responseBody::ResponseBodyOut>* PrepareAsyncGetResponseBodyStreamRaw(::grpc::ClientContext* context, const ::responseBody::ResponseBodyIn& request, ::grpc::CompletionQueue* cq) override;
     const ::grpc::internal::RpcMethod rpcmethod_GetResponseBody_;
     const ::grpc::internal::RpcMethod rpcmethod_ListResponseBodies_;
     const ::grpc::internal::RpcMethod rpcmethod_ListResponseStrings_;
@@ -196,22 +196,22 @@ class ResponseBodyService final {
    public:
     Service();
     virtual ~Service();
-    virtual ::grpc::Status GetResponseBody(::grpc::ServerContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::ResponseBodyOut* response);
+    virtual ::grpc::Status GetResponseBody(::grpc::ServerContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::ResponseBodyOut* response);
     // option (google.api.http) = {
     //   get: "/responsebody/{data}"
     //   response_body: "response"
     // };
-    virtual ::grpc::Status ListResponseBodies(::grpc::ServerContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseBodyOut* response);
+    virtual ::grpc::Status ListResponseBodies(::grpc::ServerContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseBodyOut* response);
     // option (google.api.http) = {
     //   get: "/responsebodies/{data}"
     //   response_body: "response"
     // };
-    virtual ::grpc::Status ListResponseStrings(::grpc::ServerContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseStrings* response);
+    virtual ::grpc::Status ListResponseStrings(::grpc::ServerContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseStrings* response);
     // option (google.api.http) = {
     //   get: "/responsestrings/{data}"
     //   response_body: "values"
     // };
-    virtual ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* context, const ::response_body::ResponseBodyIn* request, ::grpc::ServerWriter< ::response_body::ResponseBodyOut>* writer);
+    virtual ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* context, const ::responseBody::ResponseBodyIn* request, ::grpc::ServerWriter< ::responseBody::ResponseBodyOut>* writer);
     // option (google.api.http) = {
     //   get: "/responsebody/stream/{data}"
     //   response_body: "response"
@@ -229,11 +229,11 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::ResponseBodyOut* /*response*/) override {
+    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::ResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
-    void RequestGetResponseBody(::grpc::ServerContext* context, ::response_body::ResponseBodyIn* request, ::grpc::ServerAsyncResponseWriter< ::response_body::ResponseBodyOut>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+    void RequestGetResponseBody(::grpc::ServerContext* context, ::responseBody::ResponseBodyIn* request, ::grpc::ServerAsyncResponseWriter< ::responseBody::ResponseBodyOut>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
       ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
@@ -249,11 +249,11 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseBodyOut* /*response*/) override {
+    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
-    void RequestListResponseBodies(::grpc::ServerContext* context, ::response_body::ResponseBodyIn* request, ::grpc::ServerAsyncResponseWriter< ::response_body::RepeatedResponseBodyOut>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+    void RequestListResponseBodies(::grpc::ServerContext* context, ::responseBody::ResponseBodyIn* request, ::grpc::ServerAsyncResponseWriter< ::responseBody::RepeatedResponseBodyOut>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
       ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
@@ -269,11 +269,11 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseStrings* /*response*/) override {
+    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseStrings* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
-    void RequestListResponseStrings(::grpc::ServerContext* context, ::response_body::ResponseBodyIn* request, ::grpc::ServerAsyncResponseWriter< ::response_body::RepeatedResponseStrings>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+    void RequestListResponseStrings(::grpc::ServerContext* context, ::responseBody::ResponseBodyIn* request, ::grpc::ServerAsyncResponseWriter< ::responseBody::RepeatedResponseStrings>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
       ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
@@ -289,11 +289,11 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::response_body::ResponseBodyOut>* /*writer*/) override {
+    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::responseBody::ResponseBodyOut>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
-    void RequestGetResponseBodyStream(::grpc::ServerContext* context, ::response_body::ResponseBodyIn* request, ::grpc::ServerAsyncWriter< ::response_body::ResponseBodyOut>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+    void RequestGetResponseBodyStream(::grpc::ServerContext* context, ::responseBody::ResponseBodyIn* request, ::grpc::ServerAsyncWriter< ::responseBody::ResponseBodyOut>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
       ::grpc::Service::RequestAsyncServerStreaming(3, context, request, writer, new_call_cq, notification_cq, tag);
     }
   };
@@ -305,25 +305,25 @@ class ResponseBodyService final {
    public:
     WithCallbackMethod_GetResponseBody() {
       ::grpc::Service::MarkMethodCallback(0,
-          new ::grpc::internal::CallbackUnaryHandler< ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut>(
+          new ::grpc::internal::CallbackUnaryHandler< ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut>(
             [this](
-                   ::grpc::CallbackServerContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::ResponseBodyOut* response) { return this->GetResponseBody(context, request, response); }));}
+                   ::grpc::CallbackServerContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::ResponseBodyOut* response) { return this->GetResponseBody(context, request, response); }));}
     void SetMessageAllocatorFor_GetResponseBody(
-        ::grpc::MessageAllocator< ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut>* allocator) {
+        ::grpc::MessageAllocator< ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut>* allocator) {
       ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(0);
-      static_cast<::grpc::internal::CallbackUnaryHandler< ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut>*>(handler)
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut>*>(handler)
               ->SetMessageAllocator(allocator);
     }
     ~WithCallbackMethod_GetResponseBody() override {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::ResponseBodyOut* /*response*/) override {
+    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::ResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     virtual ::grpc::ServerUnaryReactor* GetResponseBody(
-      ::grpc::CallbackServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::ResponseBodyOut* /*response*/)  { return nullptr; }
+      ::grpc::CallbackServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::ResponseBodyOut* /*response*/)  { return nullptr; }
   };
   template <class BaseClass>
   class WithCallbackMethod_ListResponseBodies : public BaseClass {
@@ -332,25 +332,25 @@ class ResponseBodyService final {
    public:
     WithCallbackMethod_ListResponseBodies() {
       ::grpc::Service::MarkMethodCallback(1,
-          new ::grpc::internal::CallbackUnaryHandler< ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseBodyOut>(
+          new ::grpc::internal::CallbackUnaryHandler< ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseBodyOut>(
             [this](
-                   ::grpc::CallbackServerContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseBodyOut* response) { return this->ListResponseBodies(context, request, response); }));}
+                   ::grpc::CallbackServerContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseBodyOut* response) { return this->ListResponseBodies(context, request, response); }));}
     void SetMessageAllocatorFor_ListResponseBodies(
-        ::grpc::MessageAllocator< ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseBodyOut>* allocator) {
+        ::grpc::MessageAllocator< ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseBodyOut>* allocator) {
       ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(1);
-      static_cast<::grpc::internal::CallbackUnaryHandler< ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseBodyOut>*>(handler)
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseBodyOut>*>(handler)
               ->SetMessageAllocator(allocator);
     }
     ~WithCallbackMethod_ListResponseBodies() override {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseBodyOut* /*response*/) override {
+    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     virtual ::grpc::ServerUnaryReactor* ListResponseBodies(
-      ::grpc::CallbackServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseBodyOut* /*response*/)  { return nullptr; }
+      ::grpc::CallbackServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseBodyOut* /*response*/)  { return nullptr; }
   };
   template <class BaseClass>
   class WithCallbackMethod_ListResponseStrings : public BaseClass {
@@ -359,25 +359,25 @@ class ResponseBodyService final {
    public:
     WithCallbackMethod_ListResponseStrings() {
       ::grpc::Service::MarkMethodCallback(2,
-          new ::grpc::internal::CallbackUnaryHandler< ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseStrings>(
+          new ::grpc::internal::CallbackUnaryHandler< ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseStrings>(
             [this](
-                   ::grpc::CallbackServerContext* context, const ::response_body::ResponseBodyIn* request, ::response_body::RepeatedResponseStrings* response) { return this->ListResponseStrings(context, request, response); }));}
+                   ::grpc::CallbackServerContext* context, const ::responseBody::ResponseBodyIn* request, ::responseBody::RepeatedResponseStrings* response) { return this->ListResponseStrings(context, request, response); }));}
     void SetMessageAllocatorFor_ListResponseStrings(
-        ::grpc::MessageAllocator< ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseStrings>* allocator) {
+        ::grpc::MessageAllocator< ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseStrings>* allocator) {
       ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(2);
-      static_cast<::grpc::internal::CallbackUnaryHandler< ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseStrings>*>(handler)
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseStrings>*>(handler)
               ->SetMessageAllocator(allocator);
     }
     ~WithCallbackMethod_ListResponseStrings() override {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseStrings* /*response*/) override {
+    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseStrings* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     virtual ::grpc::ServerUnaryReactor* ListResponseStrings(
-      ::grpc::CallbackServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseStrings* /*response*/)  { return nullptr; }
+      ::grpc::CallbackServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseStrings* /*response*/)  { return nullptr; }
   };
   template <class BaseClass>
   class WithCallbackMethod_GetResponseBodyStream : public BaseClass {
@@ -386,20 +386,20 @@ class ResponseBodyService final {
    public:
     WithCallbackMethod_GetResponseBodyStream() {
       ::grpc::Service::MarkMethodCallback(3,
-          new ::grpc::internal::CallbackServerStreamingHandler< ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut>(
+          new ::grpc::internal::CallbackServerStreamingHandler< ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut>(
             [this](
-                   ::grpc::CallbackServerContext* context, const ::response_body::ResponseBodyIn* request) { return this->GetResponseBodyStream(context, request); }));
+                   ::grpc::CallbackServerContext* context, const ::responseBody::ResponseBodyIn* request) { return this->GetResponseBodyStream(context, request); }));
     }
     ~WithCallbackMethod_GetResponseBodyStream() override {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::response_body::ResponseBodyOut>* /*writer*/) override {
+    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::responseBody::ResponseBodyOut>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
-    virtual ::grpc::ServerWriteReactor< ::response_body::ResponseBodyOut>* GetResponseBodyStream(
-      ::grpc::CallbackServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/)  { return nullptr; }
+    virtual ::grpc::ServerWriteReactor< ::responseBody::ResponseBodyOut>* GetResponseBodyStream(
+      ::grpc::CallbackServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/)  { return nullptr; }
   };
   typedef WithCallbackMethod_GetResponseBody<WithCallbackMethod_ListResponseBodies<WithCallbackMethod_ListResponseStrings<WithCallbackMethod_GetResponseBodyStream<Service > > > > CallbackService;
   typedef CallbackService ExperimentalCallbackService;
@@ -415,7 +415,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::ResponseBodyOut* /*response*/) override {
+    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::ResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -432,7 +432,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseBodyOut* /*response*/) override {
+    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -449,7 +449,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseStrings* /*response*/) override {
+    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseStrings* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -466,7 +466,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::response_body::ResponseBodyOut>* /*writer*/) override {
+    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::responseBody::ResponseBodyOut>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -483,7 +483,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::ResponseBodyOut* /*response*/) override {
+    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::ResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -503,7 +503,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseBodyOut* /*response*/) override {
+    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -523,7 +523,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseStrings* /*response*/) override {
+    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseStrings* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -543,7 +543,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::response_body::ResponseBodyOut>* /*writer*/) override {
+    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::responseBody::ResponseBodyOut>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -566,7 +566,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::ResponseBodyOut* /*response*/) override {
+    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::ResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -588,7 +588,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseBodyOut* /*response*/) override {
+    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -610,7 +610,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseStrings* /*response*/) override {
+    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseStrings* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -632,7 +632,7 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::response_body::ResponseBodyOut>* /*writer*/) override {
+    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::responseBody::ResponseBodyOut>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -647,10 +647,10 @@ class ResponseBodyService final {
     WithStreamedUnaryMethod_GetResponseBody() {
       ::grpc::Service::MarkMethodStreamed(0,
         new ::grpc::internal::StreamedUnaryHandler<
-          ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut>(
+          ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut>(
             [this](::grpc::ServerContext* context,
                    ::grpc::ServerUnaryStreamer<
-                     ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut>* streamer) {
+                     ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut>* streamer) {
                        return this->StreamedGetResponseBody(context,
                          streamer);
                   }));
@@ -659,12 +659,12 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable regular version of this method
-    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::ResponseBodyOut* /*response*/) override {
+    ::grpc::Status GetResponseBody(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::ResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     // replace default version of method with streamed unary
-    virtual ::grpc::Status StreamedGetResponseBody(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::response_body::ResponseBodyIn,::response_body::ResponseBodyOut>* server_unary_streamer) = 0;
+    virtual ::grpc::Status StreamedGetResponseBody(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::responseBody::ResponseBodyIn,::responseBody::ResponseBodyOut>* server_unary_streamer) = 0;
   };
   template <class BaseClass>
   class WithStreamedUnaryMethod_ListResponseBodies : public BaseClass {
@@ -674,10 +674,10 @@ class ResponseBodyService final {
     WithStreamedUnaryMethod_ListResponseBodies() {
       ::grpc::Service::MarkMethodStreamed(1,
         new ::grpc::internal::StreamedUnaryHandler<
-          ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseBodyOut>(
+          ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseBodyOut>(
             [this](::grpc::ServerContext* context,
                    ::grpc::ServerUnaryStreamer<
-                     ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseBodyOut>* streamer) {
+                     ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseBodyOut>* streamer) {
                        return this->StreamedListResponseBodies(context,
                          streamer);
                   }));
@@ -686,12 +686,12 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable regular version of this method
-    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseBodyOut* /*response*/) override {
+    ::grpc::Status ListResponseBodies(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseBodyOut* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     // replace default version of method with streamed unary
-    virtual ::grpc::Status StreamedListResponseBodies(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::response_body::ResponseBodyIn,::response_body::RepeatedResponseBodyOut>* server_unary_streamer) = 0;
+    virtual ::grpc::Status StreamedListResponseBodies(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::responseBody::ResponseBodyIn,::responseBody::RepeatedResponseBodyOut>* server_unary_streamer) = 0;
   };
   template <class BaseClass>
   class WithStreamedUnaryMethod_ListResponseStrings : public BaseClass {
@@ -701,10 +701,10 @@ class ResponseBodyService final {
     WithStreamedUnaryMethod_ListResponseStrings() {
       ::grpc::Service::MarkMethodStreamed(2,
         new ::grpc::internal::StreamedUnaryHandler<
-          ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseStrings>(
+          ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseStrings>(
             [this](::grpc::ServerContext* context,
                    ::grpc::ServerUnaryStreamer<
-                     ::response_body::ResponseBodyIn, ::response_body::RepeatedResponseStrings>* streamer) {
+                     ::responseBody::ResponseBodyIn, ::responseBody::RepeatedResponseStrings>* streamer) {
                        return this->StreamedListResponseStrings(context,
                          streamer);
                   }));
@@ -713,12 +713,12 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable regular version of this method
-    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::response_body::RepeatedResponseStrings* /*response*/) override {
+    ::grpc::Status ListResponseStrings(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::responseBody::RepeatedResponseStrings* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     // replace default version of method with streamed unary
-    virtual ::grpc::Status StreamedListResponseStrings(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::response_body::ResponseBodyIn,::response_body::RepeatedResponseStrings>* server_unary_streamer) = 0;
+    virtual ::grpc::Status StreamedListResponseStrings(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::responseBody::ResponseBodyIn,::responseBody::RepeatedResponseStrings>* server_unary_streamer) = 0;
   };
   typedef WithStreamedUnaryMethod_GetResponseBody<WithStreamedUnaryMethod_ListResponseBodies<WithStreamedUnaryMethod_ListResponseStrings<Service > > > StreamedUnaryService;
   template <class BaseClass>
@@ -729,10 +729,10 @@ class ResponseBodyService final {
     WithSplitStreamingMethod_GetResponseBodyStream() {
       ::grpc::Service::MarkMethodStreamed(3,
         new ::grpc::internal::SplitServerStreamingHandler<
-          ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut>(
+          ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut>(
             [this](::grpc::ServerContext* context,
                    ::grpc::ServerSplitStreamer<
-                     ::response_body::ResponseBodyIn, ::response_body::ResponseBodyOut>* streamer) {
+                     ::responseBody::ResponseBodyIn, ::responseBody::ResponseBodyOut>* streamer) {
                        return this->StreamedGetResponseBodyStream(context,
                          streamer);
                   }));
@@ -741,18 +741,18 @@ class ResponseBodyService final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable regular version of this method
-    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::response_body::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::response_body::ResponseBodyOut>* /*writer*/) override {
+    ::grpc::Status GetResponseBodyStream(::grpc::ServerContext* /*context*/, const ::responseBody::ResponseBodyIn* /*request*/, ::grpc::ServerWriter< ::responseBody::ResponseBodyOut>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     // replace default version of method with split streamed
-    virtual ::grpc::Status StreamedGetResponseBodyStream(::grpc::ServerContext* context, ::grpc::ServerSplitStreamer< ::response_body::ResponseBodyIn,::response_body::ResponseBodyOut>* server_split_streamer) = 0;
+    virtual ::grpc::Status StreamedGetResponseBodyStream(::grpc::ServerContext* context, ::grpc::ServerSplitStreamer< ::responseBody::ResponseBodyIn,::responseBody::ResponseBodyOut>* server_split_streamer) = 0;
   };
   typedef WithSplitStreamingMethod_GetResponseBodyStream<Service > SplitStreamedService;
   typedef WithStreamedUnaryMethod_GetResponseBody<WithStreamedUnaryMethod_ListResponseBodies<WithStreamedUnaryMethod_ListResponseStrings<WithSplitStreamingMethod_GetResponseBodyStream<Service > > > > StreamedService;
 };
 
-}  // namespace response_body
+}  // namespace responseBody
 
 
 #endif  // GRPC_responseBody_2eproto__INCLUDED

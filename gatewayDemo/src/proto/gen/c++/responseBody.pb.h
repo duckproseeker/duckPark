@@ -54,7 +54,7 @@ struct TableStruct_responseBody_2eproto {
   static const uint32_t offsets[];
 };
 extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_responseBody_2eproto;
-namespace response_body {
+namespace responseBody {
 class RepeatedResponseBodyOut;
 struct RepeatedResponseBodyOutDefaultTypeInternal;
 extern RepeatedResponseBodyOutDefaultTypeInternal _RepeatedResponseBodyOut_default_instance_;
@@ -73,16 +73,16 @@ extern ResponseBodyOutDefaultTypeInternal _ResponseBodyOut_default_instance_;
 class ResponseBodyOut_Response;
 struct ResponseBodyOut_ResponseDefaultTypeInternal;
 extern ResponseBodyOut_ResponseDefaultTypeInternal _ResponseBodyOut_Response_default_instance_;
-}  // namespace response_body
+}  // namespace responseBody
 PROTOBUF_NAMESPACE_OPEN
-template<> ::response_body::RepeatedResponseBodyOut* Arena::CreateMaybeMessage<::response_body::RepeatedResponseBodyOut>(Arena*);
-template<> ::response_body::RepeatedResponseBodyOut_Response* Arena::CreateMaybeMessage<::response_body::RepeatedResponseBodyOut_Response>(Arena*);
-template<> ::response_body::RepeatedResponseStrings* Arena::CreateMaybeMessage<::response_body::RepeatedResponseStrings>(Arena*);
-template<> ::response_body::ResponseBodyIn* Arena::CreateMaybeMessage<::response_body::ResponseBodyIn>(Arena*);
-template<> ::response_body::ResponseBodyOut* Arena::CreateMaybeMessage<::response_body::ResponseBodyOut>(Arena*);
-template<> ::response_body::ResponseBodyOut_Response* Arena::CreateMaybeMessage<::response_body::ResponseBodyOut_Response>(Arena*);
+template<> ::responseBody::RepeatedResponseBodyOut* Arena::CreateMaybeMessage<::responseBody::RepeatedResponseBodyOut>(Arena*);
+template<> ::responseBody::RepeatedResponseBodyOut_Response* Arena::CreateMaybeMessage<::responseBody::RepeatedResponseBodyOut_Response>(Arena*);
+template<> ::responseBody::RepeatedResponseStrings* Arena::CreateMaybeMessage<::responseBody::RepeatedResponseStrings>(Arena*);
+template<> ::responseBody::ResponseBodyIn* Arena::CreateMaybeMessage<::responseBody::ResponseBodyIn>(Arena*);
+template<> ::responseBody::ResponseBodyOut* Arena::CreateMaybeMessage<::responseBody::ResponseBodyOut>(Arena*);
+template<> ::responseBody::ResponseBodyOut_Response* Arena::CreateMaybeMessage<::responseBody::ResponseBodyOut_Response>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
-namespace response_body {
+namespace responseBody {
 
 enum RepeatedResponseBodyOut_Response_ResponseType : int {
   RepeatedResponseBodyOut_Response_ResponseType_UNKNOWN = 0,
@@ -113,7 +113,7 @@ inline bool RepeatedResponseBodyOut_Response_ResponseType_Parse(
 // ===================================================================
 
 class ResponseBodyIn final :
-    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:response_body.ResponseBodyIn) */ {
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:responseBody.ResponseBodyIn) */ {
  public:
   inline ResponseBodyIn() : ResponseBodyIn(nullptr) {}
   ~ResponseBodyIn() override;
@@ -214,7 +214,7 @@ class ResponseBodyIn final :
   private:
   friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
-    return "response_body.ResponseBodyIn";
+    return "responseBody.ResponseBodyIn";
   }
   protected:
   explicit ResponseBodyIn(::PROTOBUF_NAMESPACE_ID::Arena* arena,
@@ -250,7 +250,7 @@ class ResponseBodyIn final :
   std::string* _internal_mutable_data();
   public:
 
-  // @@protoc_insertion_point(class_scope:response_body.ResponseBodyIn)
+  // @@protoc_insertion_point(class_scope:responseBody.ResponseBodyIn)
  private:
   class _Internal;
 
@@ -264,7 +264,7 @@ class ResponseBodyIn final :
 // -------------------------------------------------------------------
 
 class ResponseBodyOut_Response final :
-    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:response_body.ResponseBodyOut.Response) */ {
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:responseBody.ResponseBodyOut.Response) */ {
  public:
   inline ResponseBodyOut_Response() : ResponseBodyOut_Response(nullptr) {}
   ~ResponseBodyOut_Response() override;
@@ -365,7 +365,7 @@ class ResponseBodyOut_Response final :
   private:
   friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
-    return "response_body.ResponseBodyOut.Response";
+    return "responseBody.ResponseBodyOut.Response";
   }
   protected:
   explicit ResponseBodyOut_Response(::PROTOBUF_NAMESPACE_ID::Arena* arena,
@@ -401,7 +401,7 @@ class ResponseBodyOut_Response final :
   std::string* _internal_mutable_data();
   public:
 
-  // @@protoc_insertion_point(class_scope:response_body.ResponseBodyOut.Response)
+  // @@protoc_insertion_point(class_scope:responseBody.ResponseBodyOut.Response)
  private:
   class _Internal;
 
@@ -415,7 +415,7 @@ class ResponseBodyOut_Response final :
 // -------------------------------------------------------------------
 
 class ResponseBodyOut final :
-    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:response_body.ResponseBodyOut) */ {
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:responseBody.ResponseBodyOut) */ {
  public:
   inline ResponseBodyOut() : ResponseBodyOut(nullptr) {}
   ~ResponseBodyOut() override;
@@ -516,7 +516,7 @@ class ResponseBodyOut final :
   private:
   friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
-    return "response_body.ResponseBodyOut";
+    return "responseBody.ResponseBodyOut";
   }
   protected:
   explicit ResponseBodyOut(::PROTOBUF_NAMESPACE_ID::Arena* arena,
@@ -540,39 +540,39 @@ class ResponseBodyOut final :
   enum : int {
     kResponseFieldNumber = 2,
   };
-  // .response_body.ResponseBodyOut.Response response = 2;
+  // .responseBody.ResponseBodyOut.Response response = 2;
   bool has_response() const;
   private:
   bool _internal_has_response() const;
   public:
   void clear_response();
-  const ::response_body::ResponseBodyOut_Response& response() const;
-  PROTOBUF_NODISCARD ::response_body::ResponseBodyOut_Response* release_response();
-  ::response_body::ResponseBodyOut_Response* mutable_response();
-  void set_allocated_response(::response_body::ResponseBodyOut_Response* response);
+  const ::responseBody::ResponseBodyOut_Response& response() const;
+  PROTOBUF_NODISCARD ::responseBody::ResponseBodyOut_Response* release_response();
+  ::responseBody::ResponseBodyOut_Response* mutable_response();
+  void set_allocated_response(::responseBody::ResponseBodyOut_Response* response);
   private:
-  const ::response_body::ResponseBodyOut_Response& _internal_response() const;
-  ::response_body::ResponseBodyOut_Response* _internal_mutable_response();
+  const ::responseBody::ResponseBodyOut_Response& _internal_response() const;
+  ::responseBody::ResponseBodyOut_Response* _internal_mutable_response();
   public:
   void unsafe_arena_set_allocated_response(
-      ::response_body::ResponseBodyOut_Response* response);
-  ::response_body::ResponseBodyOut_Response* unsafe_arena_release_response();
+      ::responseBody::ResponseBodyOut_Response* response);
+  ::responseBody::ResponseBodyOut_Response* unsafe_arena_release_response();
 
-  // @@protoc_insertion_point(class_scope:response_body.ResponseBodyOut)
+  // @@protoc_insertion_point(class_scope:responseBody.ResponseBodyOut)
  private:
   class _Internal;
 
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
-  ::response_body::ResponseBodyOut_Response* response_;
+  ::responseBody::ResponseBodyOut_Response* response_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_responseBody_2eproto;
 };
 // -------------------------------------------------------------------
 
 class RepeatedResponseBodyOut_Response final :
-    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:response_body.RepeatedResponseBodyOut.Response) */ {
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:responseBody.RepeatedResponseBodyOut.Response) */ {
  public:
   inline RepeatedResponseBodyOut_Response() : RepeatedResponseBodyOut_Response(nullptr) {}
   ~RepeatedResponseBodyOut_Response() override;
@@ -673,7 +673,7 @@ class RepeatedResponseBodyOut_Response final :
   private:
   friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
-    return "response_body.RepeatedResponseBodyOut.Response";
+    return "responseBody.RepeatedResponseBodyOut.Response";
   }
   protected:
   explicit RepeatedResponseBodyOut_Response(::PROTOBUF_NAMESPACE_ID::Arena* arena,
@@ -742,16 +742,16 @@ class RepeatedResponseBodyOut_Response final :
   std::string* _internal_mutable_data();
   public:
 
-  // .response_body.RepeatedResponseBodyOut.Response.ResponseType type = 3;
+  // .responseBody.RepeatedResponseBodyOut.Response.ResponseType type = 3;
   void clear_type();
-  ::response_body::RepeatedResponseBodyOut_Response_ResponseType type() const;
-  void set_type(::response_body::RepeatedResponseBodyOut_Response_ResponseType value);
+  ::responseBody::RepeatedResponseBodyOut_Response_ResponseType type() const;
+  void set_type(::responseBody::RepeatedResponseBodyOut_Response_ResponseType value);
   private:
-  ::response_body::RepeatedResponseBodyOut_Response_ResponseType _internal_type() const;
-  void _internal_set_type(::response_body::RepeatedResponseBodyOut_Response_ResponseType value);
+  ::responseBody::RepeatedResponseBodyOut_Response_ResponseType _internal_type() const;
+  void _internal_set_type(::responseBody::RepeatedResponseBodyOut_Response_ResponseType value);
   public:
 
-  // @@protoc_insertion_point(class_scope:response_body.RepeatedResponseBodyOut.Response)
+  // @@protoc_insertion_point(class_scope:responseBody.RepeatedResponseBodyOut.Response)
  private:
   class _Internal;
 
@@ -766,7 +766,7 @@ class RepeatedResponseBodyOut_Response final :
 // -------------------------------------------------------------------
 
 class RepeatedResponseBodyOut final :
-    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:response_body.RepeatedResponseBodyOut) */ {
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:responseBody.RepeatedResponseBodyOut) */ {
  public:
   inline RepeatedResponseBodyOut() : RepeatedResponseBodyOut(nullptr) {}
   ~RepeatedResponseBodyOut() override;
@@ -867,7 +867,7 @@ class RepeatedResponseBodyOut final :
   private:
   friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
-    return "response_body.RepeatedResponseBodyOut";
+    return "responseBody.RepeatedResponseBodyOut";
   }
   protected:
   explicit RepeatedResponseBodyOut(::PROTOBUF_NAMESPACE_ID::Arena* arena,
@@ -891,39 +891,39 @@ class RepeatedResponseBodyOut final :
   enum : int {
     kResponseFieldNumber = 2,
   };
-  // repeated .response_body.RepeatedResponseBodyOut.Response response = 2;
+  // repeated .responseBody.RepeatedResponseBodyOut.Response response = 2;
   int response_size() const;
   private:
   int _internal_response_size() const;
   public:
   void clear_response();
-  ::response_body::RepeatedResponseBodyOut_Response* mutable_response(int index);
-  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::response_body::RepeatedResponseBodyOut_Response >*
+  ::responseBody::RepeatedResponseBodyOut_Response* mutable_response(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::responseBody::RepeatedResponseBodyOut_Response >*
       mutable_response();
   private:
-  const ::response_body::RepeatedResponseBodyOut_Response& _internal_response(int index) const;
-  ::response_body::RepeatedResponseBodyOut_Response* _internal_add_response();
+  const ::responseBody::RepeatedResponseBodyOut_Response& _internal_response(int index) const;
+  ::responseBody::RepeatedResponseBodyOut_Response* _internal_add_response();
   public:
-  const ::response_body::RepeatedResponseBodyOut_Response& response(int index) const;
-  ::response_body::RepeatedResponseBodyOut_Response* add_response();
-  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::response_body::RepeatedResponseBodyOut_Response >&
+  const ::responseBody::RepeatedResponseBodyOut_Response& response(int index) const;
+  ::responseBody::RepeatedResponseBodyOut_Response* add_response();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::responseBody::RepeatedResponseBodyOut_Response >&
       response() const;
 
-  // @@protoc_insertion_point(class_scope:response_body.RepeatedResponseBodyOut)
+  // @@protoc_insertion_point(class_scope:responseBody.RepeatedResponseBodyOut)
  private:
   class _Internal;
 
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
-  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::response_body::RepeatedResponseBodyOut_Response > response_;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::responseBody::RepeatedResponseBodyOut_Response > response_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_responseBody_2eproto;
 };
 // -------------------------------------------------------------------
 
 class RepeatedResponseStrings final :
-    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:response_body.RepeatedResponseStrings) */ {
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:responseBody.RepeatedResponseStrings) */ {
  public:
   inline RepeatedResponseStrings() : RepeatedResponseStrings(nullptr) {}
   ~RepeatedResponseStrings() override;
@@ -1024,7 +1024,7 @@ class RepeatedResponseStrings final :
   private:
   friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
   static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
-    return "response_body.RepeatedResponseStrings";
+    return "responseBody.RepeatedResponseStrings";
   }
   protected:
   explicit RepeatedResponseStrings(::PROTOBUF_NAMESPACE_ID::Arena* arena,
@@ -1070,7 +1070,7 @@ class RepeatedResponseStrings final :
   std::string* _internal_add_values();
   public:
 
-  // @@protoc_insertion_point(class_scope:response_body.RepeatedResponseStrings)
+  // @@protoc_insertion_point(class_scope:responseBody.RepeatedResponseStrings)
  private:
   class _Internal;
 
@@ -1097,7 +1097,7 @@ inline void ResponseBodyIn::clear_data() {
   data_.ClearToEmpty();
 }
 inline const std::string& ResponseBodyIn::data() const {
-  // @@protoc_insertion_point(field_get:response_body.ResponseBodyIn.data)
+  // @@protoc_insertion_point(field_get:responseBody.ResponseBodyIn.data)
   return _internal_data();
 }
 template <typename ArgT0, typename... ArgT>
@@ -1105,11 +1105,11 @@ inline PROTOBUF_ALWAYS_INLINE
 void ResponseBodyIn::set_data(ArgT0&& arg0, ArgT... args) {
  
  data_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
-  // @@protoc_insertion_point(field_set:response_body.ResponseBodyIn.data)
+  // @@protoc_insertion_point(field_set:responseBody.ResponseBodyIn.data)
 }
 inline std::string* ResponseBodyIn::mutable_data() {
   std::string* _s = _internal_mutable_data();
-  // @@protoc_insertion_point(field_mutable:response_body.ResponseBodyIn.data)
+  // @@protoc_insertion_point(field_mutable:responseBody.ResponseBodyIn.data)
   return _s;
 }
 inline const std::string& ResponseBodyIn::_internal_data() const {
@@ -1124,7 +1124,7 @@ inline std::string* ResponseBodyIn::_internal_mutable_data() {
   return data_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
 inline std::string* ResponseBodyIn::release_data() {
-  // @@protoc_insertion_point(field_release:response_body.ResponseBodyIn.data)
+  // @@protoc_insertion_point(field_release:responseBody.ResponseBodyIn.data)
   return data_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
 inline void ResponseBodyIn::set_allocated_data(std::string* data) {
@@ -1140,7 +1140,7 @@ inline void ResponseBodyIn::set_allocated_data(std::string* data) {
     data_.Set(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), "", GetArenaForAllocation());
   }
 #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
-  // @@protoc_insertion_point(field_set_allocated:response_body.ResponseBodyIn.data)
+  // @@protoc_insertion_point(field_set_allocated:responseBody.ResponseBodyIn.data)
 }
 
 // -------------------------------------------------------------------
@@ -1152,7 +1152,7 @@ inline void ResponseBodyOut_Response::clear_data() {
   data_.ClearToEmpty();
 }
 inline const std::string& ResponseBodyOut_Response::data() const {
-  // @@protoc_insertion_point(field_get:response_body.ResponseBodyOut.Response.data)
+  // @@protoc_insertion_point(field_get:responseBody.ResponseBodyOut.Response.data)
   return _internal_data();
 }
 template <typename ArgT0, typename... ArgT>
@@ -1160,11 +1160,11 @@ inline PROTOBUF_ALWAYS_INLINE
 void ResponseBodyOut_Response::set_data(ArgT0&& arg0, ArgT... args) {
  
  data_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
-  // @@protoc_insertion_point(field_set:response_body.ResponseBodyOut.Response.data)
+  // @@protoc_insertion_point(field_set:responseBody.ResponseBodyOut.Response.data)
 }
 inline std::string* ResponseBodyOut_Response::mutable_data() {
   std::string* _s = _internal_mutable_data();
-  // @@protoc_insertion_point(field_mutable:response_body.ResponseBodyOut.Response.data)
+  // @@protoc_insertion_point(field_mutable:responseBody.ResponseBodyOut.Response.data)
   return _s;
 }
 inline const std::string& ResponseBodyOut_Response::_internal_data() const {
@@ -1179,7 +1179,7 @@ inline std::string* ResponseBodyOut_Response::_internal_mutable_data() {
   return data_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
 inline std::string* ResponseBodyOut_Response::release_data() {
-  // @@protoc_insertion_point(field_release:response_body.ResponseBodyOut.Response.data)
+  // @@protoc_insertion_point(field_release:responseBody.ResponseBodyOut.Response.data)
   return data_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
 inline void ResponseBodyOut_Response::set_allocated_data(std::string* data) {
@@ -1195,14 +1195,14 @@ inline void ResponseBodyOut_Response::set_allocated_data(std::string* data) {
     data_.Set(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), "", GetArenaForAllocation());
   }
 #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
-  // @@protoc_insertion_point(field_set_allocated:response_body.ResponseBodyOut.Response.data)
+  // @@protoc_insertion_point(field_set_allocated:responseBody.ResponseBodyOut.Response.data)
 }
 
 // -------------------------------------------------------------------
 
 // ResponseBodyOut
 
-// .response_body.ResponseBodyOut.Response response = 2;
+// .responseBody.ResponseBodyOut.Response response = 2;
 inline bool ResponseBodyOut::_internal_has_response() const {
   return this != internal_default_instance() && response_ != nullptr;
 }
@@ -1215,17 +1215,17 @@ inline void ResponseBodyOut::clear_response() {
   }
   response_ = nullptr;
 }
-inline const ::response_body::ResponseBodyOut_Response& ResponseBodyOut::_internal_response() const {
-  const ::response_body::ResponseBodyOut_Response* p = response_;
-  return p != nullptr ? *p : reinterpret_cast<const ::response_body::ResponseBodyOut_Response&>(
-      ::response_body::_ResponseBodyOut_Response_default_instance_);
+inline const ::responseBody::ResponseBodyOut_Response& ResponseBodyOut::_internal_response() const {
+  const ::responseBody::ResponseBodyOut_Response* p = response_;
+  return p != nullptr ? *p : reinterpret_cast<const ::responseBody::ResponseBodyOut_Response&>(
+      ::responseBody::_ResponseBodyOut_Response_default_instance_);
 }
-inline const ::response_body::ResponseBodyOut_Response& ResponseBodyOut::response() const {
-  // @@protoc_insertion_point(field_get:response_body.ResponseBodyOut.response)
+inline const ::responseBody::ResponseBodyOut_Response& ResponseBodyOut::response() const {
+  // @@protoc_insertion_point(field_get:responseBody.ResponseBodyOut.response)
   return _internal_response();
 }
 inline void ResponseBodyOut::unsafe_arena_set_allocated_response(
-    ::response_body::ResponseBodyOut_Response* response) {
+    ::responseBody::ResponseBodyOut_Response* response) {
   if (GetArenaForAllocation() == nullptr) {
     delete reinterpret_cast<::PROTOBUF_NAMESPACE_ID::MessageLite*>(response_);
   }
@@ -1235,11 +1235,11 @@ inline void ResponseBodyOut::unsafe_arena_set_allocated_response(
   } else {
     
   }
-  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:response_body.ResponseBodyOut.response)
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:responseBody.ResponseBodyOut.response)
 }
-inline ::response_body::ResponseBodyOut_Response* ResponseBodyOut::release_response() {
+inline ::responseBody::ResponseBodyOut_Response* ResponseBodyOut::release_response() {
   
-  ::response_body::ResponseBodyOut_Response* temp = response_;
+  ::responseBody::ResponseBodyOut_Response* temp = response_;
   response_ = nullptr;
 #ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
   auto* old =  reinterpret_cast<::PROTOBUF_NAMESPACE_ID::MessageLite*>(temp);
@@ -1252,34 +1252,34 @@ inline ::response_body::ResponseBodyOut_Response* ResponseBodyOut::release_respo
 #endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
   return temp;
 }
-inline ::response_body::ResponseBodyOut_Response* ResponseBodyOut::unsafe_arena_release_response() {
-  // @@protoc_insertion_point(field_release:response_body.ResponseBodyOut.response)
+inline ::responseBody::ResponseBodyOut_Response* ResponseBodyOut::unsafe_arena_release_response() {
+  // @@protoc_insertion_point(field_release:responseBody.ResponseBodyOut.response)
   
-  ::response_body::ResponseBodyOut_Response* temp = response_;
+  ::responseBody::ResponseBodyOut_Response* temp = response_;
   response_ = nullptr;
   return temp;
 }
-inline ::response_body::ResponseBodyOut_Response* ResponseBodyOut::_internal_mutable_response() {
+inline ::responseBody::ResponseBodyOut_Response* ResponseBodyOut::_internal_mutable_response() {
   
   if (response_ == nullptr) {
-    auto* p = CreateMaybeMessage<::response_body::ResponseBodyOut_Response>(GetArenaForAllocation());
+    auto* p = CreateMaybeMessage<::responseBody::ResponseBodyOut_Response>(GetArenaForAllocation());
     response_ = p;
   }
   return response_;
 }
-inline ::response_body::ResponseBodyOut_Response* ResponseBodyOut::mutable_response() {
-  ::response_body::ResponseBodyOut_Response* _msg = _internal_mutable_response();
-  // @@protoc_insertion_point(field_mutable:response_body.ResponseBodyOut.response)
+inline ::responseBody::ResponseBodyOut_Response* ResponseBodyOut::mutable_response() {
+  ::responseBody::ResponseBodyOut_Response* _msg = _internal_mutable_response();
+  // @@protoc_insertion_point(field_mutable:responseBody.ResponseBodyOut.response)
   return _msg;
 }
-inline void ResponseBodyOut::set_allocated_response(::response_body::ResponseBodyOut_Response* response) {
+inline void ResponseBodyOut::set_allocated_response(::responseBody::ResponseBodyOut_Response* response) {
   ::PROTOBUF_NAMESPACE_ID::Arena* message_arena = GetArenaForAllocation();
   if (message_arena == nullptr) {
     delete response_;
   }
   if (response) {
     ::PROTOBUF_NAMESPACE_ID::Arena* submessage_arena =
-        ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper<::response_body::ResponseBodyOut_Response>::GetOwningArena(response);
+        ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper<::responseBody::ResponseBodyOut_Response>::GetOwningArena(response);
     if (message_arena != submessage_arena) {
       response = ::PROTOBUF_NAMESPACE_ID::internal::GetOwnedMessage(
           message_arena, response, submessage_arena);
@@ -1289,7 +1289,7 @@ inline void ResponseBodyOut::set_allocated_response(::response_body::ResponseBod
     
   }
   response_ = response;
-  // @@protoc_insertion_point(field_set_allocated:response_body.ResponseBodyOut.response)
+  // @@protoc_insertion_point(field_set_allocated:responseBody.ResponseBodyOut.response)
 }
 
 // -------------------------------------------------------------------
@@ -1301,7 +1301,7 @@ inline void RepeatedResponseBodyOut_Response::clear_data() {
   data_.ClearToEmpty();
 }
 inline const std::string& RepeatedResponseBodyOut_Response::data() const {
-  // @@protoc_insertion_point(field_get:response_body.RepeatedResponseBodyOut.Response.data)
+  // @@protoc_insertion_point(field_get:responseBody.RepeatedResponseBodyOut.Response.data)
   return _internal_data();
 }
 template <typename ArgT0, typename... ArgT>
@@ -1309,11 +1309,11 @@ inline PROTOBUF_ALWAYS_INLINE
 void RepeatedResponseBodyOut_Response::set_data(ArgT0&& arg0, ArgT... args) {
  
  data_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
-  // @@protoc_insertion_point(field_set:response_body.RepeatedResponseBodyOut.Response.data)
+  // @@protoc_insertion_point(field_set:responseBody.RepeatedResponseBodyOut.Response.data)
 }
 inline std::string* RepeatedResponseBodyOut_Response::mutable_data() {
   std::string* _s = _internal_mutable_data();
-  // @@protoc_insertion_point(field_mutable:response_body.RepeatedResponseBodyOut.Response.data)
+  // @@protoc_insertion_point(field_mutable:responseBody.RepeatedResponseBodyOut.Response.data)
   return _s;
 }
 inline const std::string& RepeatedResponseBodyOut_Response::_internal_data() const {
@@ -1328,7 +1328,7 @@ inline std::string* RepeatedResponseBodyOut_Response::_internal_mutable_data() {
   return data_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
 inline std::string* RepeatedResponseBodyOut_Response::release_data() {
-  // @@protoc_insertion_point(field_release:response_body.RepeatedResponseBodyOut.Response.data)
+  // @@protoc_insertion_point(field_release:responseBody.RepeatedResponseBodyOut.Response.data)
   return data_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
 inline void RepeatedResponseBodyOut_Response::set_allocated_data(std::string* data) {
@@ -1344,34 +1344,34 @@ inline void RepeatedResponseBodyOut_Response::set_allocated_data(std::string* da
     data_.Set(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), "", GetArenaForAllocation());
   }
 #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
-  // @@protoc_insertion_point(field_set_allocated:response_body.RepeatedResponseBodyOut.Response.data)
+  // @@protoc_insertion_point(field_set_allocated:responseBody.RepeatedResponseBodyOut.Response.data)
 }
 
-// .response_body.RepeatedResponseBodyOut.Response.ResponseType type = 3;
+// .responseBody.RepeatedResponseBodyOut.Response.ResponseType type = 3;
 inline void RepeatedResponseBodyOut_Response::clear_type() {
   type_ = 0;
 }
-inline ::response_body::RepeatedResponseBodyOut_Response_ResponseType RepeatedResponseBodyOut_Response::_internal_type() const {
-  return static_cast< ::response_body::RepeatedResponseBodyOut_Response_ResponseType >(type_);
+inline ::responseBody::RepeatedResponseBodyOut_Response_ResponseType RepeatedResponseBodyOut_Response::_internal_type() const {
+  return static_cast< ::responseBody::RepeatedResponseBodyOut_Response_ResponseType >(type_);
 }
-inline ::response_body::RepeatedResponseBodyOut_Response_ResponseType RepeatedResponseBodyOut_Response::type() const {
-  // @@protoc_insertion_point(field_get:response_body.RepeatedResponseBodyOut.Response.type)
+inline ::responseBody::RepeatedResponseBodyOut_Response_ResponseType RepeatedResponseBodyOut_Response::type() const {
+  // @@protoc_insertion_point(field_get:responseBody.RepeatedResponseBodyOut.Response.type)
   return _internal_type();
 }
-inline void RepeatedResponseBodyOut_Response::_internal_set_type(::response_body::RepeatedResponseBodyOut_Response_ResponseType value) {
+inline void RepeatedResponseBodyOut_Response::_internal_set_type(::responseBody::RepeatedResponseBodyOut_Response_ResponseType value) {
   
   type_ = value;
 }
-inline void RepeatedResponseBodyOut_Response::set_type(::response_body::RepeatedResponseBodyOut_Response_ResponseType value) {
+inline void RepeatedResponseBodyOut_Response::set_type(::responseBody::RepeatedResponseBodyOut_Response_ResponseType value) {
   _internal_set_type(value);
-  // @@protoc_insertion_point(field_set:response_body.RepeatedResponseBodyOut.Response.type)
+  // @@protoc_insertion_point(field_set:responseBody.RepeatedResponseBodyOut.Response.type)
 }
 
 // -------------------------------------------------------------------
 
 // RepeatedResponseBodyOut
 
-// repeated .response_body.RepeatedResponseBodyOut.Response response = 2;
+// repeated .responseBody.RepeatedResponseBodyOut.Response response = 2;
 inline int RepeatedResponseBodyOut::_internal_response_size() const {
   return response_.size();
 }
@@ -1381,33 +1381,33 @@ inline int RepeatedResponseBodyOut::response_size() const {
 inline void RepeatedResponseBodyOut::clear_response() {
   response_.Clear();
 }
-inline ::response_body::RepeatedResponseBodyOut_Response* RepeatedResponseBodyOut::mutable_response(int index) {
-  // @@protoc_insertion_point(field_mutable:response_body.RepeatedResponseBodyOut.response)
+inline ::responseBody::RepeatedResponseBodyOut_Response* RepeatedResponseBodyOut::mutable_response(int index) {
+  // @@protoc_insertion_point(field_mutable:responseBody.RepeatedResponseBodyOut.response)
   return response_.Mutable(index);
 }
-inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::response_body::RepeatedResponseBodyOut_Response >*
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::responseBody::RepeatedResponseBodyOut_Response >*
 RepeatedResponseBodyOut::mutable_response() {
-  // @@protoc_insertion_point(field_mutable_list:response_body.RepeatedResponseBodyOut.response)
+  // @@protoc_insertion_point(field_mutable_list:responseBody.RepeatedResponseBodyOut.response)
   return &response_;
 }
-inline const ::response_body::RepeatedResponseBodyOut_Response& RepeatedResponseBodyOut::_internal_response(int index) const {
+inline const ::responseBody::RepeatedResponseBodyOut_Response& RepeatedResponseBodyOut::_internal_response(int index) const {
   return response_.Get(index);
 }
-inline const ::response_body::RepeatedResponseBodyOut_Response& RepeatedResponseBodyOut::response(int index) const {
-  // @@protoc_insertion_point(field_get:response_body.RepeatedResponseBodyOut.response)
+inline const ::responseBody::RepeatedResponseBodyOut_Response& RepeatedResponseBodyOut::response(int index) const {
+  // @@protoc_insertion_point(field_get:responseBody.RepeatedResponseBodyOut.response)
   return _internal_response(index);
 }
-inline ::response_body::RepeatedResponseBodyOut_Response* RepeatedResponseBodyOut::_internal_add_response() {
+inline ::responseBody::RepeatedResponseBodyOut_Response* RepeatedResponseBodyOut::_internal_add_response() {
   return response_.Add();
 }
-inline ::response_body::RepeatedResponseBodyOut_Response* RepeatedResponseBodyOut::add_response() {
-  ::response_body::RepeatedResponseBodyOut_Response* _add = _internal_add_response();
-  // @@protoc_insertion_point(field_add:response_body.RepeatedResponseBodyOut.response)
+inline ::responseBody::RepeatedResponseBodyOut_Response* RepeatedResponseBodyOut::add_response() {
+  ::responseBody::RepeatedResponseBodyOut_Response* _add = _internal_add_response();
+  // @@protoc_insertion_point(field_add:responseBody.RepeatedResponseBodyOut.response)
   return _add;
 }
-inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::response_body::RepeatedResponseBodyOut_Response >&
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::responseBody::RepeatedResponseBodyOut_Response >&
 RepeatedResponseBodyOut::response() const {
-  // @@protoc_insertion_point(field_list:response_body.RepeatedResponseBodyOut.response)
+  // @@protoc_insertion_point(field_list:responseBody.RepeatedResponseBodyOut.response)
   return response_;
 }
 
@@ -1427,66 +1427,66 @@ inline void RepeatedResponseStrings::clear_values() {
 }
 inline std::string* RepeatedResponseStrings::add_values() {
   std::string* _s = _internal_add_values();
-  // @@protoc_insertion_point(field_add_mutable:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_add_mutable:responseBody.RepeatedResponseStrings.values)
   return _s;
 }
 inline const std::string& RepeatedResponseStrings::_internal_values(int index) const {
   return values_.Get(index);
 }
 inline const std::string& RepeatedResponseStrings::values(int index) const {
-  // @@protoc_insertion_point(field_get:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_get:responseBody.RepeatedResponseStrings.values)
   return _internal_values(index);
 }
 inline std::string* RepeatedResponseStrings::mutable_values(int index) {
-  // @@protoc_insertion_point(field_mutable:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_mutable:responseBody.RepeatedResponseStrings.values)
   return values_.Mutable(index);
 }
 inline void RepeatedResponseStrings::set_values(int index, const std::string& value) {
   values_.Mutable(index)->assign(value);
-  // @@protoc_insertion_point(field_set:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_set:responseBody.RepeatedResponseStrings.values)
 }
 inline void RepeatedResponseStrings::set_values(int index, std::string&& value) {
   values_.Mutable(index)->assign(std::move(value));
-  // @@protoc_insertion_point(field_set:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_set:responseBody.RepeatedResponseStrings.values)
 }
 inline void RepeatedResponseStrings::set_values(int index, const char* value) {
   GOOGLE_DCHECK(value != nullptr);
   values_.Mutable(index)->assign(value);
-  // @@protoc_insertion_point(field_set_char:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_set_char:responseBody.RepeatedResponseStrings.values)
 }
 inline void RepeatedResponseStrings::set_values(int index, const char* value, size_t size) {
   values_.Mutable(index)->assign(
     reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_set_pointer:responseBody.RepeatedResponseStrings.values)
 }
 inline std::string* RepeatedResponseStrings::_internal_add_values() {
   return values_.Add();
 }
 inline void RepeatedResponseStrings::add_values(const std::string& value) {
   values_.Add()->assign(value);
-  // @@protoc_insertion_point(field_add:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_add:responseBody.RepeatedResponseStrings.values)
 }
 inline void RepeatedResponseStrings::add_values(std::string&& value) {
   values_.Add(std::move(value));
-  // @@protoc_insertion_point(field_add:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_add:responseBody.RepeatedResponseStrings.values)
 }
 inline void RepeatedResponseStrings::add_values(const char* value) {
   GOOGLE_DCHECK(value != nullptr);
   values_.Add()->assign(value);
-  // @@protoc_insertion_point(field_add_char:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_add_char:responseBody.RepeatedResponseStrings.values)
 }
 inline void RepeatedResponseStrings::add_values(const char* value, size_t size) {
   values_.Add()->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_add_pointer:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_add_pointer:responseBody.RepeatedResponseStrings.values)
 }
 inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>&
 RepeatedResponseStrings::values() const {
-  // @@protoc_insertion_point(field_list:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_list:responseBody.RepeatedResponseStrings.values)
   return values_;
 }
 inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>*
 RepeatedResponseStrings::mutable_values() {
-  // @@protoc_insertion_point(field_mutable_list:response_body.RepeatedResponseStrings.values)
+  // @@protoc_insertion_point(field_mutable_list:responseBody.RepeatedResponseStrings.values)
   return &values_;
 }
 
@@ -1506,14 +1506,14 @@ RepeatedResponseStrings::mutable_values() {
 
 // @@protoc_insertion_point(namespace_scope)
 
-}  // namespace response_body
+}  // namespace responseBody
 
 PROTOBUF_NAMESPACE_OPEN
 
-template <> struct is_proto_enum< ::response_body::RepeatedResponseBodyOut_Response_ResponseType> : ::std::true_type {};
+template <> struct is_proto_enum< ::responseBody::RepeatedResponseBodyOut_Response_ResponseType> : ::std::true_type {};
 template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::response_body::RepeatedResponseBodyOut_Response_ResponseType>() {
-  return ::response_body::RepeatedResponseBodyOut_Response_ResponseType_descriptor();
+inline const EnumDescriptor* GetEnumDescriptor< ::responseBody::RepeatedResponseBodyOut_Response_ResponseType>() {
+  return ::responseBody::RepeatedResponseBodyOut_Response_ResponseType_descriptor();
 }
 
 PROTOBUF_NAMESPACE_CLOSE

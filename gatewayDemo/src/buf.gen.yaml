@@ -1,0 +1,14 @@
+version: v1
+
+plugins: 
+  
+  - name: go
+    out: proto/gen/go
+
+  - name: go-grpc
+    out: proto/gen/go
+
+  - name: grpc-gateway
+    out: proto/gen/go
+    opt:
+      - grpc_api_configuration=proto/responseBody/config.yaml
