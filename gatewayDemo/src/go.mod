@@ -3,7 +3,6 @@ module test
 go 1.19
 
 require (
-	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.2
 	golang.org/x/net v0.0.0-20220809184613-07c6da5e1ced
 	google.golang.org/grpc v1.48.0

@@ -4,9 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-	gw "test/proto/responseBody/response_body"
+	gw "test/proto/responseBody"
 
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -22,7 +22,7 @@ func run() error {
 	defer cancel()
 	mux := runtime.NewServeMux()
 	opts := []grpc.DialOption{grpc.WithInsecure()}
-	err := gw.RegisterGreeterHandlerFromEndpoint(ctx, mux, *echoEndpoint, opts)
+	err := gw.RegisterResponseBodyServiceHandlerFromEndpoint(ctx, mux, *echoEndpoint, opts)
 
 	if err != nil {
 		return err
