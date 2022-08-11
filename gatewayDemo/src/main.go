@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+    "log"
 	gw "test/proto/responseBody"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -32,6 +33,8 @@ func run() error {
 }
 
 func main() {
+    log.Println("Serving gRPC-Gateway on http://0.0.0.0:8090")
+
 	if err := run(); err != nil {
 		fmt.Print(err.Error())
 	}
