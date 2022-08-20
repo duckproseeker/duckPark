@@ -12,16 +12,36 @@ class SnackBar
 
 public:
 
-    virtual void run() = 0;
 
-    virtual int sum(std::string&) = 0;
+    virtual void run() = 0;
 
     virtual ~SnackBar(){}
 
-// private:
+    int sum(std::string& command)
+    {
+        parse_ = new CommandParse(command);
+        std::map<int, int> id_num = parse_->handle();
 
-//     CommandParse CommandParse_; 
+        int price = 0;
+        for(auto elem : id_num)
+        {
+            price = price + commodity_[elem.first] * elem.second;
+        }
+
+        delete parse_;
+
+        return price;
+    }
+
+protected:
+
+    std::map<int, int> commodity_;
+
+private:
+
+     CommandParse* parse_; 
 };
+
 
 class DrinkBar : public SnackBar
 {
@@ -43,26 +63,6 @@ public:
                   << "珍珠奶茶 8元；" << std::endl; 
     }
 
-    int sum(std::string& command) override
-    {
-        parse_ = new CommandParse(command);
-        std::map<int, int> id_num = parse_->handle();
-
-        int price = 0;
-        for(auto elem : id_num)
-        {
-            price = price + commodity_[elem.first] * elem.second;
-        }
-
-        delete parse_;
-
-        return price;
-    }
-
-private:
-
-    std::map<int, int> commodity_;
-    CommandParse* parse_;
 };
 
 
@@ -87,26 +87,6 @@ public:
                   << "烤五花肉 2元；" << std::endl; 
     }
 
-    int sum(std::string& command) override
-    {
-        parse_ = new CommandParse(command);
-        std::map<int, int> id_num = parse_->handle();
-
-        int price = 0;
-        for(auto elem : id_num)
-        {
-            price = price + commodity_[elem.first] * elem.second;
-        }
-
-        delete parse_;
-
-        return price;
-    }
-
-private:
-
-    std::map<int, int> commodity_;
-    CommandParse* parse_;
 
 };
 
@@ -132,26 +112,6 @@ public:
                   << "三明治 8元；" << std::endl; 
     }
 
-    int sum(std::string& command) override
-    {
-        parse_ = new CommandParse(command);
-        std::map<int, int> id_num = parse_->handle();
-  
-        int price = 0;
-        for(auto elem : id_num)
-        {
-            price = price + commodity_[elem.first] * elem.second;
-        }
-
-        delete parse_;
-
-        return price;
-    }
-
-private:
-
-    std::map<int, int> commodity_;
-    CommandParse* parse_;
   
 };
 

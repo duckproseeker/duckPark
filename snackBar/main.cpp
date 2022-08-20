@@ -1,5 +1,7 @@
 #include "snackBar.h"
 
+#include <assert.h>
+
 void start()
 {
     std::cout << "商业街有如下店铺：" << std::endl
@@ -13,6 +15,12 @@ void start()
 
     BarFactory* barFactory;
     SnackBar* bar = barFactory->createBar(i);
+    //assert(bar);
+    if(nullptr == bar )
+    {
+        std::cout << "quit success!\n";
+        return;
+    }
 
     bar->run();
 
