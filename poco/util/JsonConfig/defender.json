@@ -1,0 +1,23 @@
+{
+  "autorunner" : {
+    "1" : "\/opt\/script\/start.sh"
+  },
+  "logArchived" : {
+    "1" : "season",
+    "2" : "ros_solver",
+    "3" : "nav",
+    "4" : "mqtt",
+    "5" : "plc_core",
+    "6" : "defender",
+    "7" : "IDoo",
+    "8" : "controller",
+    "9" : "camel"
+  },
+  "protected" : {
+    "1" : ""
+  },
+  "rosModules" : {
+    "1" : "localizer",
+    "2" : "mcu"
+  }
+}
