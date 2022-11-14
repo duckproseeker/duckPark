@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package camel.api;
+option go_package="./";
+
+option csharp_namespace="AGV.Communication.CamelMessage";
+
+import "protobuf/camel-common.proto";
+ 
+message CamelMessage{
+ 
+    oneof onlyone{
+        AllowFromAgvs 	allowFromAgvs	= 1;    
+        ReportToAgvs 	reportToAgvs 	= 2;
+        MissonFromAgvs	missonFromAgvs	= 3;
+        RequestToAgvs 	requestToAgvs 	= 4;
+		AvoidAreaFromAgvs avoidAreaFromAgvs = 5;
+		RequestFromAgvs requestFromAgvs = 6;
+		Collaborative collaborative = 7; //协同搬运组队指令
+		PeriodDataToAgvs periodDataToAgvs = 8; 			// 持续发送的数据
+		PeriodDataFromAgvs periodDataFromAgvs = 9; 		// 持续发送的数据
+		
+    }
+ 
+    //AGVS发给camel的通信点、指令、警告信息
+    message AllowFromAgvs{
+		string 	  currentStation 	= 1;   	//当前站点
+		string 	  targetStation 	= 2;    //通行点
+        bytes	  errorMessage      = 3;    //警告信息 						//废弃 Alarm
+        ChargeCmd charging			= 4;    //充电指令[停止充电、允许充电]  //废弃 更换新的命令
+        bool	  emergency 		= 5;	//急停刹车 						//废弃 更换新的命令
+		bool 	  isUseable 		= 6;    //是否可用状态
+		bool 	  hasTask 			= 7;    //是否有任务
+		repeated  Alarm alarms      = 8;	//系统报警信息
+		DoAction  systemPause		= 9;	//系统暂停所有车[0不暂停,1暂停]
+		AgvsTaskStatus taskStatus	= 10;	//系统任务状态
+    }
+ 
+    //camel给AGVS上报的状态信息
+    message ReportToAgvs{
+        string 		carName 		= 1;	//小车标识符
+        string 		currentStation	= 2;	//当前站点
+        Position	position 		= 3;	//位姿
+        Battery 	battery 		= 4;	//充电状态
+		CarHWInfo	carInfo			= 5;	//小车硬件状态                  //废弃
+		bytes	    errorMessage    = 6;    //报警信息                      //废弃
+        repeated    Alarm alarms    = 7;	//报警信息新      				//使用报警信息
+	    bool	    isPulling 		= 8;	//人工拉车状态
+	    string      IP  			= 9;    //小车的ip地址，agvs通过socket获知的
+		bool 		collaborative   = 10;	//协同搬运状态
+	
+    }
+ 
+    //AGVS发送给camel的路线和任务信息
+    message MissonFromAgvs{
+        string	route 		= 1;	//路线
+        ContextTask contextTask = 2;	//任务信息
+		string targetStation = 3;           //同行点信息
+    }
+	
+	//AGVS发送给camel的避障区域信息
+    message AvoidAreaFromAgvs{
+        AvoidanceAreaCollection avoidArea	= 1;	//避障区域
+    }
+    
+    //camel发送给AGVS的请求
+    message RequestToAgvs {
+        DoAction 		getMissonInfo = 1;     	//查询任务信息          0无操作	 1申请任务信息
+        DoAction 		setUseable = 2;        	//请求设置可调度        0无操作  1设置可用 2设置不可用
+        DoAction 		cancelTask = 3;         //申请取消任务			0无操作  1取消不重新发布 2取消并重新发布
+        DoAction 		requestCharging = 4;   	//请求充电      		0无操作  1请求充电 2结束充电
+        DoAction 		unlock = 5;            	//请求解除管制		    0无操作  1请求解除本小车管制
+        DoAction 		liftEmergency = 6;     	//请求解除刹车			0无操作  1请求接触本小车刹车
+        string 			applyRotue = 7;       	//申请路径 from + to.   ""无操作 "0000112345" 请求00001到123456的路径	废弃
+		string 			manualStation = 8;    	//手动发送站点  		""无操作 "00001" 发送00001站点					废弃
+		DoAction 		avoidAreaOper = 9;    	//申请或释放避障区域    0无操作  1申请避障区域 2释放避障区域
+		DoAction 		initialTraffic = 10;    //一键拉车状态		 	0误操作  1进入一键拉车态 2离开一键拉车态
+		DoAction		trafficRecovery = 11;	//管制点回收			0误操作  1申请回收
+		DoAction  		complishTask	= 12;	//完成任务 				0无操作	 1完成
+		DoAction		nextTaskFlow = 13;		//下一任务流程			0无操作	 1完成
+	    string			strParam = 20;			//请求命令参数
+		string          IP  = 21;               //小车的ip地址，agvs通过socket获知的
+
+    }
+	//AGVS发送的一些命令
+	message RequestFromAgvs{
+		ChargeCmd 	charging 	= 1; //充电命令	
+		DoAction 	emergency	= 2; //0无动作 1系统刹车 2解除系统刹车
+	}
+	
+	//车辆运行信息
+	message PeriodDataToAgvs {
+		string camelVersion = 1;
+		string mapVersion = 2;
+		float totalOdometry = 3;				// 总里程数
+		float totalRuntime = 4;					// 总运行时间
+		float totalTaskOdometry = 5;			// 总任务运行里程
+		float totalTaskRuntime = 6;				// 总任务运行时间
+	}
+	
+	message PeriodDataFromAgvs {
+		bool ok = 1;							// 接头成功
+	}
+}
