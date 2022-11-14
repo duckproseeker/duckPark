@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package camel.api;
+// option go_package="./";
+
+// 获取手柄控制权
+message GamepadControl
+{
+	bool force = 1;
+}
+
+// 令牌
+message Token
+{
+	string key = 1;
+	Result result = 2;
+}
+
+
+//camel 内部错误码
+message Result{
+	int32   errorCode = 1;  //错误码
+	bytes 	message   = 2;  //错误信息
+}
+
+
+//将agv内部数据提供给外部grpc调用者
+service AgvService{
+
+	// 申请手柄控制
+	rpc ApplyStickControl(GamepadControl) returns (Token) ;
+}
