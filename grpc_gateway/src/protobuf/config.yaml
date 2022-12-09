@@ -1,0 +1,92 @@
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    #获取后台软件版本号
+    - selector: AgvService.GetVersion
+      post: /camel/v1/GetVersion
+      body: "*"
+    #获取当前小车运行状态
+    - selector: AgvService.GetAgvState
+      post: /camel/v1/GetAgvState
+      body: "*"
+    #UI向Camel请求配置信息
+    - selector: AgvService.RequestUIConfig
+      post: /camel/v1/RequestUIConfig
+      body: "*"
+    #获取系统信息
+    - selector: AgvService.GetSystemStatus
+      post: /camel/v1/GetSystemStatus
+      body: "*"
+    #获取小车执行的任务信息   
+    - selector: AgvService.GetAgvStateInAgvs
+      post: /camel/v1/GetAgvStateInAgvs
+      body: "*"
+    #客户端发送给服务器的请求
+    - selector: AgvService.SendToAgvs
+      post: /camel/v1/SendToAgvs
+      body: "*"
+    #客户端控制小车的一些操作
+    - selector: AgvService.ControlAgv
+      post: /camel/v1/ControlAgv
+      body: "*"
+    #获取小车当前正在运行的路径
+    - selector: AgvService.GetCamelPathCollection
+      post: /camel/v1/GetCamelPathCollection
+      body: "*"
+    #客户端模拟任务发布
+    - selector: AgvService.RoutePlan
+      post: /camel/v1/RoutePlan
+      body: "*"
+    #设置避障区域
+    - selector: AgvService.SetAvoidanceArea
+      post: /camel/v1/SetAvoidanceArea
+      body: "*"
+    #模拟手柄控制小车
+    - selector: AgvService.StickControl
+      post: /camel/v1/StickControl
+      body: "*"
+    #申请手柄控制
+    - selector: AgvService.ApplyStickControl
+      post: /camel/v1/ApplyStickControl
+      body: "*"
+    #重启小车
+    - selector: AgvService.CarRestart
+      post: /camel/v1/CarRestart
+      body: "*"
+    #更新小车站点坐标
+    - selector: AgvService.UpdateStationPose
+      post: /camel/v1/UpdateStationPose
+      body: "*"
+    #任务调度呼叫及配置
+    - selector: AgvService.TaskAllocationOperation
+      post: /camel/v1/TaskAllocationOperation
+      body: "*"
+    #重置任务列表
+    - selector: AgvService.AssignAllocationTasks
+      post: /camel/v1/AssignAllocationTasks
+      body: "*"
+    
+    #############################  Defender Service  ################################
+    #软件升级
+    - selector: defender.DefenderService.SoftwareUpgrade
+      post: /defender/v1/SoftwareUpgrade
+      body: "*"
+    #软件备份
+    - selector: defender.DefenderService.SoftwareBackup
+      post: /defender/v1/SoftwareBackup
+      body: "*"
+    #软件还原
+    - selector: defender.DefenderService.SoftwareRollback
+      post: /defender/v1/SoftwareRollback
+      body: "*"
+    #版本回退
+    - selector: defender.DefenderService.SoftwareDowngrade
+      post: /defender/v1/SoftwareDowngrade
+      body: "*"
+    #日志导出
+    - selector: defender.DefenderService.LogExport
+      post: /defender/v1/LogExport
+      body: "*"
+    

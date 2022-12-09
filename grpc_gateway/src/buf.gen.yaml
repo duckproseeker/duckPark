@@ -1,0 +1,20 @@
+version: v1
+
+plugins: 
+  
+  - name: go
+    out: protobuf/gen/go
+
+  - name: go-grpc
+    out: protobuf/gen/go
+
+  - name: grpc-gateway
+    out: protobuf/gen/go
+    opt:
+      - grpc_api_configuration=protobuf/config.yaml
+      - generate_unbound_methods=true
+
+        # - name: openapiv2
+        #    out: protobuf/gen/go
+        #    opt:
+        #      - grpc_api_configuration=protobuf/config.yaml

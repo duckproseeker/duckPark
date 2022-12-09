@@ -1,0 +1,21 @@
+{
+    "camel" : {
+        "host" : "58.211.31.82",
+        "port" : "5001"
+    },
+
+    "defender" : {
+        "host" : "58.211.31.82",
+        "port" : "5002"
+    },
+
+    "camel_gateway" : {
+        "host" : "0.0.0.0",
+        "port" : "5101"
+    },
+
+    "defender_gateway" : {
+        "host" : "0.0.0.0",
+        "port" : "5102"
+    }
+}

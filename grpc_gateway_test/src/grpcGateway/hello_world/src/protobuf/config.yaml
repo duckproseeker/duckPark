@@ -1,9 +1,0 @@
-type: google.api.Service
-config_version: 3
-
-http:
-  rules:
-    - selector: helloworld.Greeter.SayHello
-      post: /camel/v1/SayHello
-      body: "*"
-
