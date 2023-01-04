@@ -1,0 +1,39 @@
+{
+    "asioContextSize": 1,
+    "autorunner": {},
+    "camelConfig": "/opt/config/config.json",
+    "camelServerEndpoint": "127.0.0.1:5001",
+    "grpcPort": 5012,
+    "keepAlive": {
+        "camel_ui": "/opt/script/start.sh"
+    },
+    "key1": true,
+    "localizerDefaultNode": "",
+    "logArchived": {
+        "1": "camel",
+        "2": "controller",
+        "3": "defender",
+        "4": "plc_core",
+        "5": "nav",
+        "6": "ros_solver",
+        "7": "season",
+        "8": "IDoo",
+        "9": "mqtt"
+    },
+    "ntpServer": "",
+    "packageCompoundMode": false,
+    "protected": {
+        "1": ""
+    },
+    "ros": {
+        "hostname": "127.0.0.1",
+        "master": "http://192.168.0.100:11311",
+        "slave": true
+    },
+    "rosModules": {
+        "1": "localizer",
+        "2": "mcu"
+    },
+    "rosPath": "/opt/rospackage",
+    "sqliteDB": "/opt/config/sqlite.db"
+}

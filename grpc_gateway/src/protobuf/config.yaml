@@ -69,6 +69,11 @@ http:
       body: "*"
     
     #############################  Defender Service  ################################
+    #小车重启
+    - selector: defender.DefenderService.CarRestart
+      post: /defender/v1/CarRestart
+      body: "*"
+
     #软件升级
     - selector: defender.DefenderService.SoftwareUpgrade
       post: /defender/v1/SoftwareUpgrade
