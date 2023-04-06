@@ -1,0 +1,8 @@
+{
+    "camelIp" : "127.0.0.1:5001",
+    "defenderIp" : "127.0.0.1:5002",
+    "camelGatewayIp" : "0.0.0.0:5101",
+    "defenderGatewayIp" : "0.0.0.0:5102",
+    
+    "logLevel" : "info"
+}

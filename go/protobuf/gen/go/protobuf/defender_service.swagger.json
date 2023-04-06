@@ -1,0 +1,442 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "protobuf/defender_service.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "DefenderService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/defender/v1/LogExport": {
+      "post": {
+        "summary": "日志导出",
+        "operationId": "DefenderService_LogExport",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/defenderLogResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/defenderLogRequest"
+            }
+          }
+        ],
+        "tags": [
+          "DefenderService"
+        ]
+      }
+    },
+    "/defender/v1/SoftwareBackup": {
+      "post": {
+        "summary": "软件备份",
+        "operationId": "DefenderService_SoftwareBackup",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/defenderResult"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "tags": [
+          "DefenderService"
+        ]
+      }
+    },
+    "/defender/v1/SoftwareDowngrade": {
+      "post": {
+        "summary": "版本回退（Result: Code -\u003e 0 成功, Message-\u003e 非零时的错误消息）\r\n若成功则会在5s后重启电脑！！！",
+        "operationId": "DefenderService_SoftwareDowngrade",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/defenderResult"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "tags": [
+          "DefenderService"
+        ]
+      }
+    },
+    "/defender/v1/SoftwareRollback": {
+      "post": {
+        "summary": "软件还原",
+        "operationId": "DefenderService_SoftwareRollback",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/defenderResult"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/defenderInstallPack"
+            }
+          }
+        ],
+        "tags": [
+          "DefenderService"
+        ]
+      }
+    },
+    "/defender/v1/SoftwareUpgrade": {
+      "post": {
+        "summary": "软件升级（Result: Code -\u003e 0 成功, Message-\u003e 非零时的错误消息）\r\n若成功则会在5s后重启电脑！！！",
+        "operationId": "DefenderService_SoftwareUpgrade",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/defenderResult"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/defenderInstallPack"
+            }
+          }
+        ],
+        "tags": [
+          "DefenderService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "InputCommandType": {
+      "type": "string",
+      "enum": [
+        "ShellCommand",
+        "CamelCommand"
+      ],
+      "default": "ShellCommand",
+      "title": "- ShellCommand: shell命令\n - CamelCommand: camel命令"
+    },
+    "defenderFileExportRsp": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "$ref": "#/definitions/defenderResult",
+          "title": "导出结果"
+        },
+        "filename": {
+          "type": "string",
+          "title": "待导出的文件名(默认存放在ftp://ip/log下)"
+        }
+      }
+    },
+    "defenderInstallPack": {
+      "type": "object",
+      "properties": {
+        "filename": {
+          "type": "string"
+        }
+      }
+    },
+    "defenderLogRequest": {
+      "type": "object",
+      "properties": {
+        "car": {
+          "type": "string",
+          "title": "小车名"
+        },
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "需要获取日志的模块 (camel, localizer, rosplc...)"
+        },
+        "time": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "获取哪一天的日志 (2020-06-01, 2020-06-02, 2020-06-03)"
+        }
+      }
+    },
+    "defenderLogResponse": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "title": "文件路径(ftp://192.168.1.73:21/AGV#01_2020-06-01.zip)"
+        }
+      }
+    },
+    "defenderNetworkConfig": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "mac": {
+          "type": "string"
+        },
+        "netmask": {
+          "type": "string"
+        },
+        "gateway": {
+          "type": "string"
+        },
+        "dns": {
+          "type": "string"
+        }
+      }
+    },
+    "defenderNetworkConfigCollection": {
+      "type": "object",
+      "properties": {
+        "configCollection": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/defenderNetworkConfig"
+          }
+        }
+      }
+    },
+    "defenderOutputMessage": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        }
+      },
+      "title": "ui命令执行的结果"
+    },
+    "defenderResult": {
+      "type": "object",
+      "properties": {
+        "errorCode": {
+          "type": "integer",
+          "format": "int32",
+          "title": "错误码"
+        },
+        "message": {
+          "type": "string",
+          "format": "byte",
+          "title": "错误信息"
+        }
+      },
+      "title": "camel 内部错误码"
+    },
+    "defenderRosNode": {
+      "type": "object",
+      "properties": {
+        "configuration": {
+          "type": "string"
+        },
+        "modifyEnable": {
+          "type": "boolean"
+        },
+        "setMaster": {
+          "type": "boolean"
+        },
+        "module": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "isRunning": {
+          "type": "boolean"
+        }
+      }
+    },
+    "defenderRosNodesCfg": {
+      "type": "object",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/defenderRosNode"
+          }
+        }
+      },
+      "title": "defender-\u003eiSee"
+    },
+    "defenderRosoutMsg": {
+      "type": "object",
+      "properties": {
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/defenderRosoutMsgRosoutInfo"
+          }
+        }
+      }
+    },
+    "defenderRosoutMsgRosoutInfo": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "name": {
+          "type": "string"
+        },
+        "msg": {
+          "type": "string"
+        },
+        "topic": {
+          "type": "string"
+        }
+      }
+    },
+    "defenderSystemStatus": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "cpuUsage": {
+          "type": "number",
+          "format": "float"
+        },
+        "memTotal": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "memUsed": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "diskTotal": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "diskUsed": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "title": "defender-\u003ecamel_ui"
+    },
+    "defenderVersion": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        }
+      },
+      "title": "defender版本/包版本"
+    },
+    "googlerpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    }
+  }
+}

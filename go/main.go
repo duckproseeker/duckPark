@@ -29,7 +29,7 @@ func main() {
 	log.Info("camel gateway serve:", camelIp)
 	log.Info("defender gateway serve:", defenderIp)
 
-	//创建协程
+	//创建协程监听defender的request
 	go func() {
 		err := gw.RunDefenderGateway(defenderIp, config.GetDefenderGatewayIp())
 		if err != nil {

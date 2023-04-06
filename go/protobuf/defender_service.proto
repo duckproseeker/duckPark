@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package defender;
+option go_package="./defender";
+
+import "protobuf/defender_struct.proto";
+import "google/protobuf/empty.proto";
+
+//defender对外grpc接口
+service DefenderService{
+	
+	// 获取Defender版本信息
+	rpc GetVersion(google.protobuf.Empty) returns (Version);
+
+	// 获取系统信息
+	rpc GetSystemStatus(google.protobuf.Empty) returns (SystemStatus);
+
+	// 获取所有节点的配置信息
+	rpc GetRosNodeCfg(google.protobuf.Empty) returns (RosNodesCfg);
+
+	// 返回设置单个节点的配置信息
+	rpc SetRosNodeCfg(RosNode) returns (Result);
+
+	// 删除单个节点
+	// master节点不允许删除
+	rpc DeleteNodeCfg(RosNode) returns (Result);
+
+	// 停止单个节点
+	rpc StopRosnode(RosNode) returns (Result);
+
+	// 获取rosout输出的所有信息，保存一百条
+	rpc GetRosoutMsg(google.protobuf.Empty) returns (RosoutMsg);
+
+	// 日志导出
+	rpc LogExport(LogRequest) returns (LogResponse);
+
+	// 文件导出
+	rpc FileExport(FileExportReq) returns (FileExportRsp);
+
+	// 查询网络信息
+	rpc QueryNetworkInformation(google.protobuf.Empty) returns (NetworkConfigCollection);
+
+	// 设置网络
+	rpc SetNetworkInformation(NetworkConfig) returns (google.protobuf.Empty);
+
+	// 软件升级（Result: Code -> 0 成功, Message-> 非零时的错误消息）
+	// 若成功则会在5s后重启电脑！！！
+	rpc SoftwareUpgrade(InstallPack) returns (Result);
+
+	// 版本回退（Result: Code -> 0 成功, Message-> 非零时的错误消息）
+	// 若成功则会在5s后重启电脑！！！
+	rpc SoftwareDowngrade(google.protobuf.Empty) returns (Result);
+	
+	// 软件备份
+	rpc SoftwareBackup(google.protobuf.Empty) returns (Result);
+	
+	// 软件还原
+	rpc SoftwareRollback(InstallPack) returns (Result);
+	
+	// 重启小车
+	rpc CarRestart(google.protobuf.Empty) returns (google.protobuf.Empty);
+	
+	// 模拟终端，执行下发的shell命令及其他模块命令
+	rpc CommandTerminal(stream InputCommand) returns (stream OutputMessage);
+}

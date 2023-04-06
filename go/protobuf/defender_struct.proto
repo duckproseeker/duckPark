@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package defender;
+option go_package="./defender";
+
+//camel 内部错误码
+message Result{
+	int32   errorCode = 1;  //错误码
+	bytes 	message   = 2;  //错误信息
+}
+
+// defender->camel_ui 
+message SystemStatus {
+	string version = 1;
+	float cpu_usage = 2;
+	int32 mem_total = 3;
+	int32 mem_used = 4;
+	int32 disk_total = 5;
+	int32 disk_used = 6;
+}
+
+// defender->iSee
+message RosNodesCfg {
+	repeated RosNode nodes = 1;
+}
+
+message RosNode {
+	string 	configuration = 1;
+	bool	modify_enable = 2;
+	bool    set_master = 3;
+	string  module = 4;
+	string  filename = 5;
+	bool 	is_running = 6;
+}
+
+message RosoutMsg {
+	message RosoutInfo
+	{
+		int32 	level = 1;
+		string 	name = 2;
+		string 	msg = 3;
+		string 	topic = 4;
+	}
+
+	repeated RosoutInfo messages = 1;
+}
+
+message LogRequest {
+	string 		car	= 1;	//小车名
+	repeated string modules = 2;	//需要获取日志的模块 (camel, localizer, rosplc...)
+	repeated string time 	= 3;	//获取哪一天的日志 (2020-06-01, 2020-06-02, 2020-06-03)
+}
+
+message LogResponse {
+	string path = 1;		//文件路径(ftp://192.168.1.73:21/AGV#01_2020-06-01.zip)
+}
+
+message FileExportReq
+{
+	repeated string files = 1; 	// 文件列表(压缩后导出)
+}
+
+message FileExportRsp
+{
+	Result result = 1;  // 导出结果
+	string filename = 2; // 待导出的文件名(默认存放在ftp://ip/log下)
+}
+
+message NetworkConfig {
+	string name	= 1;
+	string address	= 2;
+	string mac	= 3;
+	string netmask 	= 4;
+	string gateway	= 5;
+	string dns	= 6;
+}
+
+message NetworkConfigCollection {
+	repeated NetworkConfig config_collection = 1;
+}
+
+message InstallPack {
+	string filename = 1;
+}
+
+
+// ui发送的终端命令
+message InputCommand {
+	enum Type {
+		ShellCommand = 0;	//shell命令
+		CamelCommand = 1;	//camel命令
+	}
+	
+	Type type = 1; 
+	string command = 2;
+}
+
+// ui命令执行的结果
+message OutputMessage {
+	string message = 1;
+}
+
+// defender版本/包版本
+message Version {
+	string version = 1;
+	string package = 2;
+}

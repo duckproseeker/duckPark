@@ -1,0 +1,8 @@
+2023-03-30 11:17:19 [INFO] [init config successfully]
+2023-03-30 11:17:19 [INFO] [camel gateway serve: 127.0.0.1:5001]
+2023-03-30 11:17:19 [INFO] [defender gateway serve: 127.0.0.1:5002]
+2023-03-30 11:17:19 [ERRO] [defender gateway start failed, listen tcp 0.0.0.0:5102: bind: address already in use]
+2023-03-30 11:17:19 [ERRO] [camel gateway start failed, listen tcp 0.0.0.0:5101: bind: address already in use]
+2023-03-30 11:18:43 [INFO] [init config successfully]
+2023-03-30 11:18:43 [INFO] [camel gateway serve: 127.0.0.1:5001]
+2023-03-30 11:18:43 [INFO] [defender gateway serve: 127.0.0.1:5002]
