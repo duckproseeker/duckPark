@@ -106,12 +106,19 @@ class CarlaClient:
             ),
         )
 
-    def spawn_ego_vehicle(self, blueprint: str, spawn_point: dict[str, float]) -> Any:
+    def spawn_ego_vehicle(
+        self,
+        blueprint: str,
+        spawn_point: dict[str, float],
+        role_name: str = "ego_vehicle",
+    ) -> Any:
         if self._world is None:
             raise CarlaClientError("CARLA world is not ready")
 
         blueprint_library = self._world.get_blueprint_library()
         blueprint_obj = blueprint_library.find(blueprint)
+        if blueprint_obj.has_attribute("role_name"):
+            blueprint_obj.set_attribute("role_name", role_name)
         transform = self._build_transform(spawn_point)
         actor = self._world.try_spawn_actor(blueprint_obj, transform)
         if actor is None:
