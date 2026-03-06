@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ system_name }} - {{ stage }}</title>
+    <link rel="stylesheet" href="/static/ui.css" />
+  </head>
+  <body>
+    <header>
+      <h1>{{ system_name }}</h1>
+      <p class="sub">当前阶段：{{ stage }}</p>
+      <p class="warn">当前未接入 HIL / 树莓派 / DUT 注入，仅实现场景仿真控制层。</p>
+      <p class="links">
+        开发调试接口页：<a href="/docs" target="_blank" rel="noreferrer">/docs</a>
+      </p>
+    </header>
+
+    <main>
+      <section>
+        <h2>内置场景列表</h2>
+        <table id="scenario-table">
+          <thead>
+            <tr>
+              <th>场景名</th>
+              <th>说明</th>
+              <th>默认地图</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>创建运行</h2>
+        <form id="create-form">
+          <label>
+            选择场景
+            <select id="scenario-name" required></select>
+          </label>
+          <label>
+            地图名 map_name
+            <input id="map-name" type="text" required />
+          </label>
+          <label>
+            超时 termination.timeout_seconds
+            <input id="timeout-seconds" type="number" min="1" step="1" required />
+          </label>
+          <label>
+            固定步长 sync.fixed_delta_seconds
+            <input id="fixed-delta" type="number" min="0.01" max="0.2" step="0.01" required />
+          </label>
+          <button type="submit">创建运行</button>
+        </form>
+        <pre id="create-result" class="result"></pre>
+      </section>
+
+      <section>
+        <h2>运行列表</h2>
+        <div class="toolbar">
+          <button id="refresh-runs">刷新运行列表</button>
+        </div>
+        <table id="runs-table">
+          <thead>
+            <tr>
+              <th>run_id</th>
+              <th>场景名</th>
+              <th>状态</th>
+              <th>开始时间</th>
+              <th>结束时间</th>
+              <th>错误原因</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>事件查看</h2>
+        <div class="toolbar">
+          <label>
+            run_id
+            <input id="events-run-id" type="text" placeholder="输入 run_id 或点击运行列表中的查看事件" />
+          </label>
+          <button id="load-events">查看事件</button>
+        </div>
+        <pre id="events-result" class="result"></pre>
+      </section>
+    </main>
+
+    <script src="/static/ui.js"></script>
+  </body>
+</html>

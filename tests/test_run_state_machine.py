@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from app.core.models import RunStatus
-from app.orchestrator.state_machine import InvalidTransitionError, can_transition, validate_transition
+from app.orchestrator.state_machine import (
+    InvalidTransitionError,
+    can_transition,
+    validate_transition,
+)
 
 
 def test_valid_transitions() -> None:

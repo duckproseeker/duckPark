@@ -1,15 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from app.core.models import RunStatus
-
-
-@dataclass(frozen=True)
-class TransitionRule:
-    source: RunStatus
-    target: RunStatus
-
 
 ALLOWED_TRANSITIONS: dict[RunStatus, set[RunStatus]] = {
     RunStatus.CREATED: {RunStatus.QUEUED, RunStatus.CANCELED, RunStatus.FAILED},
@@ -30,7 +21,7 @@ ALLOWED_TRANSITIONS: dict[RunStatus, set[RunStatus]] = {
 
 
 class InvalidTransitionError(ValueError):
-    pass
+    """Raised when a run state transition violates the lifecycle rules."""
 
 
 def can_transition(current: RunStatus, target: RunStatus) -> bool:

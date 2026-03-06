@@ -9,6 +9,8 @@ from app.utils.file_utils import ensure_dir
 
 
 class ArtifactStore:
+    """Manage per-run artifact files and event streams."""
+
     def __init__(self, artifacts_root: Path) -> None:
         self._artifacts_root = ensure_dir(artifacts_root)
 
@@ -19,7 +21,6 @@ class ArtifactStore:
         run_dir = ensure_dir(self.run_dir(run_id))
         ensure_dir(run_dir / "recorder")
         ensure_dir(run_dir / "outputs")
-
         (run_dir / "events.jsonl").touch(exist_ok=True)
         (run_dir / "run.log").touch(exist_ok=True)
         return run_dir
@@ -60,8 +61,8 @@ class ArtifactStore:
         events: list[dict[str, Any]] = []
         with path.open("r", encoding="utf-8") as handle:
             for line in handle:
-                line = line.strip()
-                if not line:
+                stripped = line.strip()
+                if not stripped:
                     continue
-                events.append(json.loads(line))
+                events.append(json.loads(stripped))
         return events

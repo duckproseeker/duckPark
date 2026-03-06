@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 
 from app.api.main import app
 
-
 VALID_DESCRIPTOR = {
     "version": 1,
     "scenario_name": "empty_drive",

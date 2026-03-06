@@ -13,11 +13,19 @@ class CarlaTickResult:
 
 
 class CarlaClientError(RuntimeError):
-    pass
+    """CARLA client wrapper error."""
 
 
 class CarlaClient:
-    def __init__(self, host: str, port: int, timeout_seconds: float, traffic_manager_port: int) -> None:
+    """Thin wrapper around CARLA Python API.
+
+    The executor keeps exclusive world tick authority and uses this class only
+    from the execution thread/process.
+    """
+
+    def __init__(
+        self, host: str, port: int, timeout_seconds: float, traffic_manager_port: int
+    ) -> None:
         self._host = host
         self._port = port
         self._timeout_seconds = timeout_seconds
@@ -103,9 +111,9 @@ class CarlaClient:
             raise CarlaClientError("CARLA world is not ready")
 
         blueprint_library = self._world.get_blueprint_library()
-        bp = blueprint_library.find(blueprint)
+        blueprint_obj = blueprint_library.find(blueprint)
         transform = self._build_transform(spawn_point)
-        actor = self._world.try_spawn_actor(bp, transform)
+        actor = self._world.try_spawn_actor(blueprint_obj, transform)
         if actor is None:
             raise CarlaClientError("Failed to spawn ego vehicle")
 
@@ -129,13 +137,14 @@ class CarlaClient:
         for spawn_point in spawn_points:
             if len(spawned) >= count:
                 break
-            bp = random.choice(blueprint_library)
-            actor = self._world.try_spawn_actor(bp, spawn_point)
+            blueprint_obj = random.choice(blueprint_library)
+            actor = self._world.try_spawn_actor(blueprint_obj, spawn_point)
             if actor is None:
                 continue
             actor.set_autopilot(autopilot, self._traffic_manager_port)
             self._spawned_actors.append(actor)
             spawned.append(actor)
+
         return spawned
 
     def spawn_crossing_actor_ahead(self, ego_vehicle: Any) -> Any | None:
@@ -193,7 +202,6 @@ class CarlaClient:
     def _destroy_spawned_actors(self) -> None:
         if not self._spawned_actors:
             return
-
         if self._client is None or self._carla is None:
             return
 
@@ -204,12 +212,14 @@ class CarlaClient:
     def _restore_world_settings(self) -> None:
         if self._world is None:
             return
+
         settings = self._world.get_settings()
         if self._original_sync_mode is not None:
             settings.synchronous_mode = self._original_sync_mode
         if self._original_fixed_delta is not None:
             settings.fixed_delta_seconds = self._original_fixed_delta
         self._world.apply_settings(settings)
+
         if self._tm is not None and self._tm_sync_enabled:
             self._tm.set_synchronous_mode(False)
 

@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
 
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import ConflictError, ValidationError
 from app.core.models import EventLevel, RunEvent, RunRecord, RunStatus
 from app.orchestrator.queue import FileCommandQueue
 from app.scenario.registry import BUILTIN_SCENARIOS
@@ -17,6 +17,8 @@ from app.utils.time_utils import now_utc
 
 
 class RunManager:
+    """Control-plane orchestrator: create/list/query runs and issue lifecycle commands."""
+
     def __init__(
         self,
         run_store: RunStore,
@@ -34,7 +36,7 @@ class RunManager:
         message: str,
         payload: dict[str, Any] | None = None,
         level: EventLevel = EventLevel.INFO,
-        ) -> None:
+    ) -> None:
         event = RunEvent(
             timestamp=now_utc(),
             run_id=run_id,
@@ -58,7 +60,7 @@ class RunManager:
         descriptor_path: str | None = None,
     ) -> RunRecord:
         if descriptor_payload is None and descriptor_path is None:
-            raise ValidationError("Either descriptor payload or descriptor_path is required")
+            raise ValidationError("必须提供 descriptor 或 descriptor_path")
 
         try:
             if descriptor_path is not None:
@@ -67,12 +69,12 @@ class RunManager:
                 assert descriptor_payload is not None
                 descriptor = validate_descriptor(descriptor_payload)
         except (ValueError, PydanticValidationError) as exc:
-            raise ValidationError(str(exc)) from exc
+            raise ValidationError(f"场景描述校验失败: {exc}") from exc
 
         if descriptor.scenario_name not in BUILTIN_SCENARIOS:
             raise ValidationError(
-                f"Unknown scenario_name '{descriptor.scenario_name}'. "
-                f"Available: {sorted(BUILTIN_SCENARIOS.keys())}"
+                f"未知场景: '{descriptor.scenario_name}'。"
+                f"可用场景: {sorted(BUILTIN_SCENARIOS.keys())}"
             )
 
         run_id = f"run_{now_utc().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
@@ -95,7 +97,7 @@ class RunManager:
         self._emit_event(
             run_id,
             "RUN_CREATED",
-            "Run created with validated scenario descriptor",
+            "运行已创建并完成 descriptor 校验",
             payload={
                 "scenario_name": descriptor.scenario_name,
                 "map_name": descriptor.map_name,
@@ -106,7 +108,7 @@ class RunManager:
     def start_run(self, run_id: str) -> RunRecord:
         run = self._run_store.get(run_id)
         if run.status != RunStatus.CREATED:
-            raise ConflictError(f"Run {run_id} can only be started from CREATED. Current={run.status}")
+            raise ConflictError(f"Run {run_id} 仅能从 CREATED 启动，当前状态为 {run.status.value}")
 
         run = self._run_store.transition(run_id, RunStatus.QUEUED)
         self._persist_status(run)
@@ -115,7 +117,7 @@ class RunManager:
         self._emit_event(
             run_id,
             "RUN_QUEUED",
-            "Run queued for executor",
+            "运行已进入队列，等待 executor 执行",
             payload={"command_id": command.command_id},
         )
         return run
@@ -126,17 +128,22 @@ class RunManager:
         if run.status in {RunStatus.CREATED, RunStatus.QUEUED}:
             run = self._run_store.transition(run_id, RunStatus.CANCELED, set_ended_at=True)
             self._persist_status(run)
-            self._emit_event(run_id, "SCENARIO_STOP_REQUESTED", "Stop requested before execution")
-            self._emit_event(run_id, "SCENARIO_COMPLETED", "Run canceled before start")
+            self._emit_event(run_id, "SCENARIO_STOP_REQUESTED", "运行尚未开始，已取消")
+            self._emit_event(run_id, "SCENARIO_COMPLETED", "运行在启动前被停止")
             return run
 
-        if run.status in {RunStatus.STARTING, RunStatus.RUNNING, RunStatus.PAUSED, RunStatus.STOPPING}:
+        if run.status in {
+            RunStatus.STARTING,
+            RunStatus.RUNNING,
+            RunStatus.PAUSED,
+            RunStatus.STOPPING,
+        }:
             run = self._run_store.mark_stop_requested(run_id)
             self._persist_status(run)
-            self._emit_event(run_id, "SCENARIO_STOP_REQUESTED", "Stop requested by API")
+            self._emit_event(run_id, "SCENARIO_STOP_REQUESTED", "收到停止请求")
             return run
 
-        raise ConflictError(f"Run {run_id} cannot be stopped from state {run.status}")
+        raise ConflictError(f"Run {run_id} 在状态 {run.status.value} 下不可停止")
 
     def cancel_run(self, run_id: str) -> RunRecord:
         run = self._run_store.get(run_id)
@@ -144,17 +151,22 @@ class RunManager:
         if run.status in {RunStatus.CREATED, RunStatus.QUEUED}:
             run = self._run_store.transition(run_id, RunStatus.CANCELED, set_ended_at=True)
             self._persist_status(run)
-            self._emit_event(run_id, "SCENARIO_STOP_REQUESTED", "Cancel requested before execution")
-            self._emit_event(run_id, "SCENARIO_COMPLETED", "Run canceled before start")
+            self._emit_event(run_id, "SCENARIO_STOP_REQUESTED", "运行尚未开始，已取消")
+            self._emit_event(run_id, "SCENARIO_COMPLETED", "运行在启动前被取消")
             return run
 
-        if run.status in {RunStatus.STARTING, RunStatus.RUNNING, RunStatus.PAUSED, RunStatus.STOPPING}:
+        if run.status in {
+            RunStatus.STARTING,
+            RunStatus.RUNNING,
+            RunStatus.PAUSED,
+            RunStatus.STOPPING,
+        }:
             run = self._run_store.mark_stop_requested(run_id, cancel_requested=True)
             self._persist_status(run)
-            self._emit_event(run_id, "SCENARIO_STOP_REQUESTED", "Cancel requested by API")
+            self._emit_event(run_id, "SCENARIO_STOP_REQUESTED", "收到取消请求")
             return run
 
-        raise ConflictError(f"Run {run_id} cannot be canceled from state {run.status}")
+        raise ConflictError(f"Run {run_id} 在状态 {run.status.value} 下不可取消")
 
     def get_run(self, run_id: str) -> RunRecord:
         return self._run_store.get(run_id)
@@ -166,7 +178,7 @@ class RunManager:
         try:
             parsed_status = RunStatus(status)
         except ValueError as exc:
-            raise ValidationError(f"Invalid status filter: {status}") from exc
+            raise ValidationError(f"无效的状态过滤值: {status}") from exc
 
         return self._run_store.list(status=parsed_status)
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from app.core.errors import ConflictError, NotFoundError
 from app.core.models import RunRecord, RunStatus
@@ -10,11 +10,12 @@ from app.orchestrator.state_machine import validate_transition
 from app.utils.file_utils import ensure_dir
 from app.utils.time_utils import now_utc
 
-
 RunUpdater = Callable[[RunRecord], RunRecord]
 
 
 class RunStore:
+    """File-based persistence for run records."""
+
     def __init__(self, runs_root: Path) -> None:
         self._runs_root = ensure_dir(runs_root)
 
@@ -62,7 +63,6 @@ class RunStore:
     def update(self, run_id: str, updater: RunUpdater) -> RunRecord:
         run = self.get(run_id)
         updated = updater(run)
-        updated.updated_at = now_utc()
         return self.save(updated)
 
     def transition(
@@ -73,7 +73,7 @@ class RunStore:
         set_started_at: bool = False,
         set_ended_at: bool = False,
     ) -> RunRecord:
-        def _transition(run: RunRecord) -> RunRecord:
+        def _apply_transition(run: RunRecord) -> RunRecord:
             validate_transition(run.status, target)
             run.status = target
             if set_started_at and run.started_at is None:
@@ -83,7 +83,7 @@ class RunStore:
             run.error_reason = error_reason
             return run
 
-        return self.update(run_id, _transition)
+        return self.update(run_id, _apply_transition)
 
     def mark_stop_requested(self, run_id: str, cancel_requested: bool = False) -> RunRecord:
         def _mark(run: RunRecord) -> RunRecord:
