@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import queue
 import sys
 import time
@@ -109,6 +110,15 @@ class CarlaEgoViewer:
         pygame.display.set_caption("CARLA Ego Viewer")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("monospace", 18)
+
+        driver = pygame.display.get_driver()
+        print(f"[viewer] pygame video driver={driver}", flush=True)
+        if driver in {"offscreen", "dummy"}:
+            print(
+                "[viewer] 警告：当前是无窗口视频驱动，pygame 不会弹出可见界面。"
+                f" DISPLAY={os.getenv('DISPLAY', '<empty>')}",
+                flush=True,
+            )
 
     def close(self) -> None:
         self.destroy_camera()
