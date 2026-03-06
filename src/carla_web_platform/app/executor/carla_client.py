@@ -48,7 +48,9 @@ class CarlaClient:
         try:
             import carla  # type: ignore
         except ImportError as exc:
-            raise CarlaClientError("carla Python API not found in executor environment") from exc
+            raise CarlaClientError(
+                "carla Python API not found in executor environment"
+            ) from exc
 
         self._carla = carla
         self._client = carla.Client(self._host, self._port)
@@ -178,7 +180,9 @@ class CarlaClient:
         if not blueprints:
             return None
 
-        actor = self._world.try_spawn_actor(random.choice(blueprints), blocker_transform)
+        actor = self._world.try_spawn_actor(
+            random.choice(blueprints), blocker_transform
+        )
         if actor is not None:
             self._spawned_actors.append(actor)
         return actor
@@ -212,7 +216,9 @@ class CarlaClient:
         if self._client is None or self._carla is None:
             return
 
-        commands = [self._carla.command.DestroyActor(actor.id) for actor in self._spawned_actors]
+        commands = [
+            self._carla.command.DestroyActor(actor.id) for actor in self._spawned_actors
+        ]
         self._client.apply_batch(commands)
         self._spawned_actors.clear()
 

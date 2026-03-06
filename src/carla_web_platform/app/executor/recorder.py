@@ -15,7 +15,11 @@ class RecorderManager:
         return self._output_path
 
     def start(
-        self, run_id: str, descriptor: ScenarioDescriptor, carla_client: object, run_dir: Path
+        self,
+        run_id: str,
+        descriptor: ScenarioDescriptor,
+        carla_client: object,
+        run_dir: Path,
     ) -> None:
         self._active = False
         self._output_path = None

@@ -34,6 +34,7 @@ def test_descriptor_validation_success() -> None:
     descriptor = validate_descriptor(VALID_DESCRIPTOR)
     assert descriptor.scenario_name == "empty_drive"
     assert descriptor.sync.fixed_delta_seconds == 0.05
+    assert descriptor.debug.viewer_friendly is False
 
 
 def test_descriptor_validation_failure() -> None:

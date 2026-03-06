@@ -32,4 +32,6 @@ def validate_transition(current: RunStatus, target: RunStatus) -> None:
     if current == target:
         return
     if not can_transition(current, target):
-        raise InvalidTransitionError(f"Invalid run state transition: {current} -> {target}")
+        raise InvalidTransitionError(
+            f"Invalid run state transition: {current} -> {target}"
+        )

@@ -5,7 +5,10 @@ from app.scenario.runtime import ScenarioRuntimeContext
 
 def setup(context: ScenarioRuntimeContext) -> None:
     context.carla_client.set_vehicle_autopilot(context.ego_vehicle, enabled=True)
-    if context.descriptor.traffic.enabled and context.descriptor.traffic.num_vehicles > 0:
+    if (
+        context.descriptor.traffic.enabled
+        and context.descriptor.traffic.num_vehicles > 0
+    ):
         context.npc_vehicles.extend(
             context.carla_client.spawn_traffic_vehicles(
                 count=context.descriptor.traffic.num_vehicles,

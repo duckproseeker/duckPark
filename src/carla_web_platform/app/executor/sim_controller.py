@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import traceback
 from collections.abc import Callable
 from typing import Any
@@ -89,7 +90,9 @@ class SimController:
             self._emit_event(run_id, "SCENARIO_COMPLETED", "运行在执行前被取消")
             return
 
-        telemetry = TelemetryCollector(run_id, descriptor.scenario_name, descriptor.map_name)
+        telemetry = TelemetryCollector(
+            run_id, descriptor.scenario_name, descriptor.map_name
+        )
         carla_client: CarlaClient | None = None
         context: ScenarioRuntimeContext | None = None
         failure_reason: str | None = None
@@ -132,7 +135,9 @@ class SimController:
 
             if descriptor.traffic.enabled:
                 carla_client.configure_tm_sync(True)
-                self._emit_event(run_id, "TM_SYNC_ENABLED", "Traffic Manager 已启用同步模式")
+                self._emit_event(
+                    run_id, "TM_SYNC_ENABLED", "Traffic Manager 已启用同步模式"
+                )
 
             ego_vehicle = carla_client.spawn_ego_vehicle(
                 descriptor.ego_vehicle.blueprint,
@@ -162,6 +167,18 @@ class SimController:
 
             timeout_seconds = descriptor.termination.timeout_seconds
             max_ticks = int(timeout_seconds / descriptor.sync.fixed_delta_seconds)
+            viewer_friendly_sleep = 0.0
+            if descriptor.debug.viewer_friendly:
+                # Debug mode only: slightly slow down wall-clock speed for easier manual observation.
+                viewer_friendly_sleep = max(
+                    0.0, min(descriptor.sync.fixed_delta_seconds * 0.5, 0.05)
+                )
+                self._emit_event(
+                    run_id,
+                    "DEBUG_VIEWER_FRIENDLY_ENABLED",
+                    "已启用 viewer_friendly 调试模式",
+                    payload={"sleep_seconds_per_tick": viewer_friendly_sleep},
+                )
 
             for tick_count in range(max_ticks):
                 latest = self._run_store.get(run_id)
@@ -177,6 +194,8 @@ class SimController:
                     tick_count=tick_count,
                     sim_time=tick_result.sim_time,
                 )
+                if viewer_friendly_sleep > 0.0:
+                    time.sleep(viewer_friendly_sleep)
 
             latest = self._run_store.get(run_id)
             if latest.cancel_requested:
@@ -210,7 +229,9 @@ class SimController:
                 try:
                     self._scenario_adapter.teardown(context)
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("Scenario teardown failed for run %s: %s", run_id, exc)
+                    logger.warning(
+                        "Scenario teardown failed for run %s: %s", run_id, exc
+                    )
 
             spawned_count = 0
             if carla_client is not None:
@@ -235,7 +256,11 @@ class SimController:
             self._artifact_store.write_metrics(metrics)
 
             run_after = self._run_store.get(run_id)
-            if run_after.status in {RunStatus.COMPLETED, RunStatus.CANCELED, RunStatus.FAILED}:
+            if run_after.status in {
+                RunStatus.COMPLETED,
+                RunStatus.CANCELED,
+                RunStatus.FAILED,
+            }:
                 self._artifact_store.write_status(run_after)
             elif final_status == RunStatus.FAILED:
                 self._transition(
@@ -245,7 +270,10 @@ class SimController:
                     set_ended_at=True,
                 )
             else:
-                if run_after.status == RunStatus.STOPPING and final_status == RunStatus.CANCELED:
+                if (
+                    run_after.status == RunStatus.STOPPING
+                    and final_status == RunStatus.CANCELED
+                ):
                     self._transition(run_id, RunStatus.CANCELED, set_ended_at=True)
                 else:
                     self._transition(run_id, RunStatus.COMPLETED, set_ended_at=True)

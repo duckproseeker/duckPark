@@ -29,7 +29,11 @@ VALID_DESCRIPTOR = {
     "sensors": {"enabled": False},
     "termination": {"timeout_seconds": 10, "success_condition": "timeout"},
     "recorder": {"enabled": False},
-    "metadata": {"author": "test", "tags": ["artifact"], "description": "artifact test"},
+    "metadata": {
+        "author": "test",
+        "tags": ["artifact"],
+        "description": "artifact test",
+    },
 }
 
 

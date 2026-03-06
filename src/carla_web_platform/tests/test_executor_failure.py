@@ -30,7 +30,11 @@ VALID_DESCRIPTOR = {
     "sensors": {"enabled": False},
     "termination": {"timeout_seconds": 10, "success_condition": "timeout"},
     "recorder": {"enabled": False},
-    "metadata": {"author": "test", "tags": ["executor"], "description": "executor failure"},
+    "metadata": {
+        "author": "test",
+        "tags": ["executor"],
+        "description": "executor failure",
+    },
 }
 
 

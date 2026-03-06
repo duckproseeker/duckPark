@@ -34,7 +34,9 @@ class FileCommandQueue:
             command_type=RunCommandType.START,
             created_at=datetime.utcnow(),
         )
-        filename = f"{command.created_at.strftime('%Y%m%d%H%M%S%f')}_{command.command_id}.json"
+        filename = (
+            f"{command.created_at.strftime('%Y%m%d%H%M%S%f')}_{command.command_id}.json"
+        )
         path = self._commands_root / filename
         with path.open("w", encoding="utf-8") as handle:
             json.dump(command.model_dump(mode="json"), handle, indent=2)

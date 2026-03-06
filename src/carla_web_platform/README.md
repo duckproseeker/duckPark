@@ -3,7 +3,7 @@
 本项目是面向 **CARLA 0.9.16** 的“场景仿真控制层 MVP”。
 
 定位：
-- 先打通仿真控制与任务编排闭环
+- 打通仿真控制与任务编排闭环
 - 保持 API 层与 executor 层分离
 - 保证 synchronous mode 下只有一个 tick 控制方
 - 为后续 Web 扩展与 HIL 扩展保留清晰边界
@@ -12,11 +12,12 @@
 
 - run 生命周期管理（创建/启动/停止/取消/查询）
 - run state machine（CREATED/QUEUED/STARTING/RUNNING/PAUSED/STOPPING/COMPLETED/FAILED/CANCELED）
-- descriptor 驱动场景配置（YAML/Pydantic 校验）
-- executor 统一控制 CARLA 生命周期：连接、加载地图、设置同步、推进 tick、清理资源
+- descriptor 场景配置（YAML/Pydantic 校验）
+- executor 控制 CARLA 生命周期（连接、加载地图、同步参数、tick 推进、资源清理）
 - 每个 run 的 artifact 输出（`config_snapshot.json`、`status.json`、`metrics.json`、`events.jsonl`、`run.log`）
 - 极简中文 Web 控制台（`/` 或 `/ui`）
 - Swagger 调试页（`/docs`）
+- `debug.viewer_friendly` 调试友好模式（可选）
 
 ## 当前未实现
 
@@ -41,17 +42,23 @@
 - `/docs`：开发调试接口页（Swagger/OpenAPI），用于接口联调，不是正式控制台
 - `/` 或 `/ui`：正式最小中文控制台（浏览器操作入口）
 
+## 时间语义（重点）
+
+- `started_at_utc` / `ended_at_utc`：系统 UTC 时间（控制层时间）
+- `sim_time`：CARLA 仿真时间（由 world tick 推进）
+- `wall_elapsed_seconds`：墙钟耗时（本机真实运行时间）
+- `timeout_seconds`：**按仿真时间**判定，不等于墙钟运行时长
+
+说明：
+- 正式模式下 executor 会尽快推进仿真，run 可能在墙钟上很快结束
+- 如果你需要人工观察（例如 pygame viewer），建议启用 `debug.viewer_friendly=true` 或提高 timeout
+
 ## 项目结构
 
 ```text
 carla_web_platform/
   app/
     api/
-      main.py
-      routes_runs.py
-      routes_scenarios.py
-      routes_ui.py
-      schemas.py
     core/
     orchestrator/
     executor/
@@ -100,11 +107,12 @@ CARLA_HOST=127.0.0.1 CARLA_PORT=2000 TRAFFIC_MANAGER_PORT=8010 bash run_platform
 
 1. 打开 `http://127.0.0.1:8000/`，进入中文控制台
 2. 在“创建运行”中选择场景，设置 `map_name`、`timeout_seconds`、`fixed_delta_seconds`
-3. 点击“创建运行”
-4. 在“运行列表”点击“启动”
-5. 观察状态变化（QUEUED -> STARTING -> RUNNING -> COMPLETED/FAILED）
-6. 点击“查看事件”检查事件流
-7. 到 artifact 目录查看结果
+3. 如需便于观察勾选 `debug.viewer_friendly`
+4. 点击“创建运行”
+5. 在“运行列表”点击“启动”
+6. 观察状态变化（QUEUED -> STARTING -> RUNNING -> COMPLETED/FAILED）
+7. 点击“查看事件”检查事件流
+8. 到 artifact 目录查看结果
 
 artifact 默认目录：
 
@@ -119,13 +127,57 @@ artifacts/<run_id>/
   outputs/
 ```
 
+## 无头模式下如何确认场景在执行
+
+`/docs` 和最小 Web 控制台展示的是控制面/状态面，不是实时 3D 画面。可通过以下方式确认场景执行：
+
+1. run 状态流转是否正常（CREATED -> QUEUED -> STARTING -> RUNNING -> COMPLETED/FAILED）
+2. `events.jsonl` 是否持续写入（如 `RUN_STARTING`、`WORLD_SYNC_ENABLED`、`SCENARIO_STARTED`）
+3. `metrics.json` 是否更新 `sim_time` / `current_tick` / `wall_time`
+4. 使用 pygame `ego_viewer.py` 观察 ego 视角
+
+viewer 局限：
+- 仅用于本地调试观察，不参与控制
+- 不调用 tick，不影响单一 tick 控制权
+- 场景切图/重载 world 时需自动重绑（脚本已支持）
+
+## pygame ego viewer（本地观察工具）
+
+脚本路径：`/ros2_ws/src/scripts/ego_viewer.py`
+
+运行示例：
+
+```bash
+python3 /ros2_ws/src/scripts/ego_viewer.py --host 127.0.0.1 --port 2000
+```
+
+你会在终端看到：
+- 当前 map
+- 当前 vehicle 总数
+- role_name 摘要
+- world/map 是否切换
+- 命中 ego 后的 id/role_name/位置/速度
+
+## 调试友好模式示例
+
+示例文件：`configs/scenarios/sample_empty_drive_viewer_friendly.yaml`
+
+核心字段：
+
+```yaml
+debug:
+  viewer_friendly: true
+```
+
+开启后 executor 会在每 tick 插入非常小的 sleep（默认逻辑仍是尽快推进仿真）。
+
 ## 接口概览
 
 - `POST /runs`：创建 run
 - `POST /runs/{run_id}/start`：启动 run
 - `POST /runs/{run_id}/stop`：停止 run
 - `POST /runs/{run_id}/cancel`：取消 run
-- `GET /runs/{run_id}`：查询 run
+- `GET /runs/{run_id}`：查询 run（含 UTC 时间 + sim/wall 指标字段）
 - `GET /runs`：查询列表
 - `GET /runs/{run_id}/events`：查询事件
 - `GET /scenarios`：查询内置场景与模板

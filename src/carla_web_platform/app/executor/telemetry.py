@@ -21,7 +21,10 @@ class TelemetryCollector:
         self._metrics.sim_time = sim_time
 
     def finalize(
-        self, final_status: RunStatus, failure_reason: str | None, spawned_actors_count: int
+        self,
+        final_status: RunStatus,
+        failure_reason: str | None,
+        spawned_actors_count: int,
     ) -> RunMetrics:
         self._metrics.end_time = now_utc()
         self._metrics.final_status = final_status

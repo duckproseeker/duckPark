@@ -85,7 +85,9 @@ class RunStore:
 
         return self.update(run_id, _apply_transition)
 
-    def mark_stop_requested(self, run_id: str, cancel_requested: bool = False) -> RunRecord:
+    def mark_stop_requested(
+        self, run_id: str, cancel_requested: bool = False
+    ) -> RunRecord:
         def _mark(run: RunRecord) -> RunRecord:
             run.stop_requested = True
             if cancel_requested:

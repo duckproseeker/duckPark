@@ -33,7 +33,9 @@ class ExecutorService:
                 time.sleep(self._settings.command_poll_interval_seconds)
                 continue
 
-            logger.info("Received command %s for run %s", command.command_type, command.run_id)
+            logger.info(
+                "Received command %s for run %s", command.command_type, command.run_id
+            )
             if command.command_type == RunCommandType.START:
                 self._sim_controller.execute_run(command.run_id)
 
