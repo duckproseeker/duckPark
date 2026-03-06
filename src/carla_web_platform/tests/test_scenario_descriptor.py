@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError as PydanticValidationError
 
 from app.scenario.validators import validate_descriptor
-
 
 VALID_DESCRIPTOR = {
     "version": 1,
@@ -37,6 +37,9 @@ def test_descriptor_validation_success() -> None:
 
 
 def test_descriptor_validation_failure() -> None:
-    bad_payload = {**VALID_DESCRIPTOR, "termination": {"timeout_seconds": 0, "success_condition": "timeout"}}
-    with pytest.raises(Exception):
+    bad_payload = {
+        **VALID_DESCRIPTOR,
+        "termination": {"timeout_seconds": 0, "success_condition": "timeout"},
+    }
+    with pytest.raises(PydanticValidationError):
         validate_descriptor(bad_payload)

@@ -9,7 +9,6 @@ from app.storage.artifact_store import ArtifactStore
 from app.storage.run_store import RunStore
 from app.utils.time_utils import now_utc
 
-
 VALID_DESCRIPTOR = {
     "version": 1,
     "scenario_name": "empty_drive",
@@ -36,7 +35,9 @@ VALID_DESCRIPTOR = {
 
 
 class FailingCarlaClient:
-    def __init__(self, host: str, port: int, timeout_seconds: float, traffic_manager_port: int) -> None:
+    def __init__(
+        self, host: str, port: int, timeout_seconds: float, traffic_manager_port: int
+    ) -> None:
         self._spawn_count = 0
 
     def connect(self) -> None:
@@ -47,7 +48,6 @@ class FailingCarlaClient:
 
     def cleanup(self) -> None:
         return
-
 
 
 def test_executor_failure_transitions_to_failed() -> None:

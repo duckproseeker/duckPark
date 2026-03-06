@@ -8,7 +8,6 @@ from app.orchestrator.run_manager import RunManager
 from app.storage.artifact_store import ArtifactStore
 from app.storage.run_store import RunStore
 
-
 VALID_DESCRIPTOR = {
     "version": 1,
     "scenario_name": "empty_drive",

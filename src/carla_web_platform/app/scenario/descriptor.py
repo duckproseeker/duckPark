@@ -24,7 +24,7 @@ class SyncConfig(BaseModel):
 
     @field_validator("fixed_delta_seconds")
     @classmethod
-    def _validate_fixed_delta(cls, value: float) -> float:
+    def validate_fixed_delta_seconds(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("fixed_delta_seconds must be > 0")
         if value > 0.2:
@@ -44,7 +44,7 @@ class TrafficConfig(BaseModel):
 
     @field_validator("num_vehicles", "num_walkers")
     @classmethod
-    def _validate_non_negative(cls, value: int) -> int:
+    def validate_non_negative(cls, value: int) -> int:
         if value < 0:
             raise ValueError("traffic counts must be non-negative")
         return value
@@ -60,7 +60,7 @@ class TerminationConfig(BaseModel):
 
     @field_validator("timeout_seconds")
     @classmethod
-    def _validate_timeout(cls, value: int) -> int:
+    def validate_timeout_seconds(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("timeout_seconds must be > 0")
         return value
@@ -91,7 +91,7 @@ class ScenarioDescriptor(BaseModel):
 
     @field_validator("scenario_name", "map_name")
     @classmethod
-    def _validate_non_empty(cls, value: str) -> str:
+    def validate_non_empty_text(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("field must not be empty")
         return value

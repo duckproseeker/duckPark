@@ -13,4 +13,3 @@ class ScenarioRuntimeContext:
     carla_client: Any
     ego_vehicle: Any
     npc_vehicles: list[Any] = field(default_factory=list)
-

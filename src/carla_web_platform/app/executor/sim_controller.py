@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import traceback
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from app.core.config import Settings
 from app.core.models import EventLevel, RunEvent, RunStatus
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class SimController:
+    """Execution plane: own CARLA lifecycle and single tick control authority."""
+
     def __init__(
         self,
         settings: Settings,
@@ -41,7 +44,7 @@ class SimController:
         message: str,
         payload: dict[str, Any] | None = None,
         level: EventLevel = EventLevel.INFO,
-        ) -> None:
+    ) -> None:
         event = RunEvent(
             timestamp=now_utc(),
             run_id=run_id,
@@ -55,10 +58,6 @@ class SimController:
             run_id,
             f"[{event.timestamp.isoformat()}] {event.level.value} {event.event_type} {event.message}",
         )
-
-    def _persist_status(self, run_id: str) -> None:
-        run = self._run_store.get(run_id)
-        self._artifact_store.write_status(run)
 
     def _transition(
         self,
@@ -82,12 +81,12 @@ class SimController:
         descriptor = validate_descriptor(run.descriptor)
 
         if run.status != RunStatus.QUEUED:
-            logger.warning("Skipping run %s because status=%s", run_id, run.status)
+            logger.warning("Skip run %s because status=%s", run_id, run.status)
             return
 
         if run.cancel_requested:
             self._transition(run_id, RunStatus.CANCELED, set_ended_at=True)
-            self._emit_event(run_id, "SCENARIO_COMPLETED", "Run canceled before start")
+            self._emit_event(run_id, "SCENARIO_COMPLETED", "运行在执行前被取消")
             return
 
         telemetry = TelemetryCollector(run_id, descriptor.scenario_name, descriptor.map_name)
@@ -98,10 +97,12 @@ class SimController:
 
         try:
             self._transition(run_id, RunStatus.STARTING)
-            self._emit_event(run_id, "RUN_STARTING", "Executor started run")
+            self._emit_event(run_id, "RUN_STARTING", "executor 开始启动运行")
 
             if not descriptor.sync.enabled:
-                raise RuntimeError("sync.enabled must be true. Executor owns single tick authority")
+                raise RuntimeError(
+                    "sync.enabled must be true; executor keeps single tick authority"
+                )
 
             carla_client = self._client_factory(
                 self._settings.carla_host,
@@ -110,23 +111,28 @@ class SimController:
                 self._settings.traffic_manager_port,
             )
             carla_client.connect()
-            self._emit_event(run_id, "CARLA_CONNECTED", "Connected to CARLA server")
+            self._emit_event(run_id, "CARLA_CONNECTED", "已连接 CARLA")
 
             carla_client.load_map(descriptor.map_name)
-            self._emit_event(run_id, "MAP_LOADED", "Loaded CARLA map", payload={"map_name": descriptor.map_name})
+            self._emit_event(
+                run_id,
+                "MAP_LOADED",
+                "地图加载完成",
+                payload={"map_name": descriptor.map_name},
+            )
 
             carla_client.set_weather(descriptor.weather.preset)
             carla_client.configure_world_sync(True, descriptor.sync.fixed_delta_seconds)
             self._emit_event(
                 run_id,
                 "WORLD_SYNC_ENABLED",
-                "World synchronous mode enabled",
+                "World 已启用 synchronous mode",
                 payload={"fixed_delta_seconds": descriptor.sync.fixed_delta_seconds},
             )
 
             if descriptor.traffic.enabled:
                 carla_client.configure_tm_sync(True)
-                self._emit_event(run_id, "TM_SYNC_ENABLED", "Traffic Manager synchronous mode enabled")
+                self._emit_event(run_id, "TM_SYNC_ENABLED", "Traffic Manager 已启用同步模式")
 
             ego_vehicle = carla_client.spawn_ego_vehicle(
                 descriptor.ego_vehicle.blueprint,
@@ -135,7 +141,7 @@ class SimController:
             self._emit_event(
                 run_id,
                 "EGO_SPAWNED",
-                "Ego vehicle spawned",
+                "Ego 车辆生成成功",
                 payload={"blueprint": descriptor.ego_vehicle.blueprint},
             )
 
@@ -147,10 +153,12 @@ class SimController:
             )
             self._scenario_adapter.setup(context)
 
-            self._recorder.start(run_id, descriptor, carla_client, self._artifact_store.run_dir(run_id))
+            self._recorder.start(
+                run_id, descriptor, carla_client, self._artifact_store.run_dir(run_id)
+            )
 
             self._transition(run_id, RunStatus.RUNNING, set_started_at=True)
-            self._emit_event(run_id, "SCENARIO_STARTED", "Scenario execution started")
+            self._emit_event(run_id, "SCENARIO_STARTED", "场景执行开始")
 
             timeout_seconds = descriptor.termination.timeout_seconds
             max_ticks = int(timeout_seconds / descriptor.sync.fixed_delta_seconds)
@@ -159,12 +167,16 @@ class SimController:
                 latest = self._run_store.get(run_id)
                 if latest.stop_requested or latest.cancel_requested:
                     self._transition(run_id, RunStatus.STOPPING)
-                    self._emit_event(run_id, "RUN_STOPPING", "Run entered STOPPING state")
+                    self._emit_event(run_id, "RUN_STOPPING", "运行进入 STOPPING")
                     break
 
                 tick_result = carla_client.tick()
                 telemetry.on_tick(tick_result.frame, tick_result.sim_time)
-                self._scenario_adapter.on_tick(context, tick_count=tick_count, sim_time=tick_result.sim_time)
+                self._scenario_adapter.on_tick(
+                    context,
+                    tick_count=tick_count,
+                    sim_time=tick_result.sim_time,
+                )
 
             latest = self._run_store.get(run_id)
             if latest.cancel_requested:
@@ -177,22 +189,22 @@ class SimController:
             self._emit_event(
                 run_id,
                 "SCENARIO_COMPLETED",
-                "Scenario loop finished",
+                "场景执行循环结束",
                 payload={"final_status": final_status.value},
             )
         except Exception as exc:  # noqa: BLE001
             failure_reason = str(exc)
             final_status = RunStatus.FAILED
-            logger.error("Run %s failed: %s", run_id, traceback.format_exc())
+            logger.error("Run %s failed:\n%s", run_id, traceback.format_exc())
             self._emit_event(
                 run_id,
                 "RUN_FAILED",
-                "Run failed due to exception",
+                "运行因异常失败",
                 payload={"error": failure_reason},
                 level=EventLevel.ERROR,
             )
         finally:
-            self._emit_event(run_id, "CLEANUP_STARTED", "Run cleanup started")
+            self._emit_event(run_id, "CLEANUP_STARTED", "开始清理资源")
 
             if context is not None:
                 try:
@@ -213,7 +225,7 @@ class SimController:
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("CARLA cleanup failed for run %s: %s", run_id, exc)
 
-            self._emit_event(run_id, "CLEANUP_FINISHED", "Run cleanup finished")
+            self._emit_event(run_id, "CLEANUP_FINISHED", "资源清理完成")
 
             metrics = telemetry.finalize(
                 final_status=final_status,
@@ -225,9 +237,7 @@ class SimController:
             run_after = self._run_store.get(run_id)
             if run_after.status in {RunStatus.COMPLETED, RunStatus.CANCELED, RunStatus.FAILED}:
                 self._artifact_store.write_status(run_after)
-                return
-
-            if final_status == RunStatus.FAILED:
+            elif final_status == RunStatus.FAILED:
                 self._transition(
                     run_id,
                     RunStatus.FAILED,
@@ -237,7 +247,5 @@ class SimController:
             else:
                 if run_after.status == RunStatus.STOPPING and final_status == RunStatus.CANCELED:
                     self._transition(run_id, RunStatus.CANCELED, set_ended_at=True)
-                elif run_after.status == RunStatus.STOPPING:
-                    self._transition(run_id, RunStatus.COMPLETED, set_ended_at=True)
                 else:
                     self._transition(run_id, RunStatus.COMPLETED, set_ended_at=True)
