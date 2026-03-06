@@ -9,7 +9,9 @@ class ScenarioAdapter:
         module = get_builtin_scenario_module(context.descriptor.scenario_name)
         module.setup(context)
 
-    def on_tick(self, context: ScenarioRuntimeContext, tick_count: int, sim_time: float) -> None:
+    def on_tick(
+        self, context: ScenarioRuntimeContext, tick_count: int, sim_time: float
+    ) -> None:
         module = get_builtin_scenario_module(context.descriptor.scenario_name)
         module.on_tick(context, tick_count, sim_time)
 

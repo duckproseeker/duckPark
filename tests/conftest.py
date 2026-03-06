@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.api.routes_runs import get_run_manager
+from app.api.routes_runs import get_artifact_store, get_run_manager
 from app.core.config import get_settings
 
 
@@ -22,8 +22,10 @@ def reset_settings_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
     get_settings.cache_clear()
     get_run_manager.cache_clear()
+    get_artifact_store.cache_clear()
 
     yield
 
     get_settings.cache_clear()
     get_run_manager.cache_clear()
+    get_artifact_store.cache_clear()

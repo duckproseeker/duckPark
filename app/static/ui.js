@@ -4,6 +4,7 @@ const scenarioSelect = document.getElementById("scenario-name");
 const mapInput = document.getElementById("map-name");
 const timeoutInput = document.getElementById("timeout-seconds");
 const fixedDeltaInput = document.getElementById("fixed-delta");
+const viewerFriendlyInput = document.getElementById("viewer-friendly");
 const createForm = document.getElementById("create-form");
 const createResult = document.getElementById("create-result");
 const refreshRunsButton = document.getElementById("refresh-runs");
@@ -71,10 +72,21 @@ function applyScenarioDefaults(scenarioName) {
   mapInput.value = template.map_name;
   timeoutInput.value = template.termination.timeout_seconds;
   fixedDeltaInput.value = template.sync.fixed_delta_seconds;
+  viewerFriendlyInput.checked = Boolean(template.debug?.viewer_friendly);
 }
 
-function formatTime(value) {
-  return value || "-";
+function formatNumber(value, digits = 2) {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+  return Number(value).toFixed(digits);
+}
+
+function formatValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+  return value;
 }
 
 function renderRuns(runs) {
@@ -114,13 +126,18 @@ function renderRuns(runs) {
     tr.innerHTML = `
       <td><code>${run.run_id}</code></td>
       <td>${run.scenario_name}</td>
+      <td>${formatValue(run.map_name)}</td>
       <td>${run.status}</td>
-      <td>${formatTime(run.start_time)}</td>
-      <td>${formatTime(run.end_time)}</td>
+      <td>${formatValue(run.started_at_utc)}</td>
+      <td>${formatValue(run.ended_at_utc)}</td>
+      <td>${formatNumber(run.sim_time, 3)}</td>
+      <td>${formatValue(run.current_tick)}</td>
+      <td>${formatNumber(run.wall_elapsed_seconds, 3)}</td>
+      <td>${formatValue(run.spawned_actors_count)}</td>
       <td>${run.error_reason || "-"}</td>
       <td></td>
     `;
-    tr.children[6].appendChild(actions);
+    tr.children[11].appendChild(actions);
 
     runsTableBody.appendChild(tr);
   });
@@ -162,6 +179,9 @@ function buildDescriptorFromForm() {
   descriptor.map_name = mapInput.value.trim();
   descriptor.termination.timeout_seconds = Number.parseInt(timeoutInput.value, 10);
   descriptor.sync.fixed_delta_seconds = Number.parseFloat(fixedDeltaInput.value);
+
+  descriptor.debug = descriptor.debug || {};
+  descriptor.debug.viewer_friendly = viewerFriendlyInput.checked;
 
   descriptor.metadata = descriptor.metadata || {};
   descriptor.metadata.author = "web-ui";

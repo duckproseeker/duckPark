@@ -28,18 +28,35 @@ def get_run_manager() -> RunManager:
     )
 
 
+@lru_cache(maxsize=1)
+def get_artifact_store() -> ArtifactStore:
+    settings = get_settings()
+    return ArtifactStore(settings.artifacts_root)
+
+
 def run_to_payload(run: RunRecord) -> dict[str, Any]:
+    metrics = get_artifact_store().read_metrics(run.run_id) or {}
+    started_at_utc = to_iso8601(run.started_at)
+    ended_at_utc = to_iso8601(run.ended_at)
+
     return {
         "run_id": run.run_id,
         "status": run.status.value,
         "scenario_name": run.scenario_name,
         "map_name": run.map_name,
-        "start_time": to_iso8601(run.started_at),
-        "end_time": to_iso8601(run.ended_at),
+        "started_at_utc": started_at_utc,
+        "ended_at_utc": ended_at_utc,
+        # Backward compatible aliases.
+        "start_time": started_at_utc,
+        "end_time": ended_at_utc,
         "error_reason": run.error_reason,
         "stop_requested": run.stop_requested,
         "cancel_requested": run.cancel_requested,
         "artifact_dir": run.artifact_dir,
+        "sim_time": metrics.get("sim_time"),
+        "current_tick": metrics.get("current_tick"),
+        "wall_elapsed_seconds": metrics.get("wall_time"),
+        "spawned_actors_count": metrics.get("spawned_actors_count"),
     }
 
 
@@ -67,7 +84,9 @@ def create_run(request: CreateRunRequest) -> ApiResponse:
     except AppError as exc:
         raise_http_error(exc)
 
-    return ApiResponse(success=True, data={"run_id": run.run_id, "status": run.status.value})
+    return ApiResponse(
+        success=True, data={"run_id": run.run_id, "status": run.status.value}
+    )
 
 
 @router.post(

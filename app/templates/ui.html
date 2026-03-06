@@ -11,6 +11,8 @@
       <h1>{{ system_name }}</h1>
       <p class="sub">当前阶段：{{ stage }}</p>
       <p class="warn">当前未接入 HIL / 树莓派 / DUT 注入，仅实现场景仿真控制层。</p>
+      <p class="warn">时间语义：started_at_utc/ended_at_utc 是系统 UTC；sim_time 是仿真时间。</p>
+      <p class="warn">timeout_seconds 按仿真时间生效，不等于墙钟运行时长。</p>
       <p class="links">
         开发调试接口页：<a href="/docs" target="_blank" rel="noreferrer">/docs</a>
       </p>
@@ -43,12 +45,16 @@
             <input id="map-name" type="text" required />
           </label>
           <label>
-            超时 termination.timeout_seconds
+            超时 termination.timeout_seconds（仿真时间）
             <input id="timeout-seconds" type="number" min="1" step="1" required />
           </label>
           <label>
             固定步长 sync.fixed_delta_seconds
             <input id="fixed-delta" type="number" min="0.01" max="0.2" step="0.01" required />
+          </label>
+          <label>
+            <input id="viewer-friendly" type="checkbox" />
+            启用调试友好模式（debug.viewer_friendly）
           </label>
           <button type="submit">创建运行</button>
         </form>
@@ -65,9 +71,14 @@
             <tr>
               <th>run_id</th>
               <th>场景名</th>
+              <th>地图</th>
               <th>状态</th>
-              <th>开始时间</th>
-              <th>结束时间</th>
+              <th>started_at_utc</th>
+              <th>ended_at_utc</th>
+              <th>sim_time</th>
+              <th>current_tick</th>
+              <th>wall_elapsed_seconds</th>
+              <th>spawned_actors</th>
               <th>错误原因</th>
               <th>操作</th>
             </tr>

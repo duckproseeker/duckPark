@@ -108,7 +108,9 @@ class RunManager:
     def start_run(self, run_id: str) -> RunRecord:
         run = self._run_store.get(run_id)
         if run.status != RunStatus.CREATED:
-            raise ConflictError(f"Run {run_id} 仅能从 CREATED 启动，当前状态为 {run.status.value}")
+            raise ConflictError(
+                f"Run {run_id} 仅能从 CREATED 启动，当前状态为 {run.status.value}"
+            )
 
         run = self._run_store.transition(run_id, RunStatus.QUEUED)
         self._persist_status(run)
@@ -126,7 +128,9 @@ class RunManager:
         run = self._run_store.get(run_id)
 
         if run.status in {RunStatus.CREATED, RunStatus.QUEUED}:
-            run = self._run_store.transition(run_id, RunStatus.CANCELED, set_ended_at=True)
+            run = self._run_store.transition(
+                run_id, RunStatus.CANCELED, set_ended_at=True
+            )
             self._persist_status(run)
             self._emit_event(run_id, "SCENARIO_STOP_REQUESTED", "运行尚未开始，已取消")
             self._emit_event(run_id, "SCENARIO_COMPLETED", "运行在启动前被停止")
@@ -149,7 +153,9 @@ class RunManager:
         run = self._run_store.get(run_id)
 
         if run.status in {RunStatus.CREATED, RunStatus.QUEUED}:
-            run = self._run_store.transition(run_id, RunStatus.CANCELED, set_ended_at=True)
+            run = self._run_store.transition(
+                run_id, RunStatus.CANCELED, set_ended_at=True
+            )
             self._persist_status(run)
             self._emit_event(run_id, "SCENARIO_STOP_REQUESTED", "运行尚未开始，已取消")
             self._emit_event(run_id, "SCENARIO_COMPLETED", "运行在启动前被取消")

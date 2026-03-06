@@ -26,7 +26,9 @@ def get_settings() -> Settings:
     project_root = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
 
     runs_root = Path(os.getenv("RUNS_ROOT", project_root / "run_data" / "runs"))
-    commands_root = Path(os.getenv("COMMANDS_ROOT", project_root / "run_data" / "commands"))
+    commands_root = Path(
+        os.getenv("COMMANDS_ROOT", project_root / "run_data" / "commands")
+    )
     artifacts_root = Path(os.getenv("ARTIFACTS_ROOT", project_root / "artifacts"))
 
     return Settings(
@@ -37,7 +39,9 @@ def get_settings() -> Settings:
         carla_port=int(os.getenv("CARLA_PORT", "2000")),
         carla_timeout_seconds=float(os.getenv("CARLA_TIMEOUT_SECONDS", "10.0")),
         traffic_manager_port=int(os.getenv("TRAFFIC_MANAGER_PORT", "8010")),
-        command_poll_interval_seconds=float(os.getenv("COMMAND_POLL_INTERVAL_SECONDS", "1.0")),
+        command_poll_interval_seconds=float(
+            os.getenv("COMMAND_POLL_INTERVAL_SECONDS", "1.0")
+        ),
         runs_root=runs_root,
         commands_root=commands_root,
         artifacts_root=artifacts_root,

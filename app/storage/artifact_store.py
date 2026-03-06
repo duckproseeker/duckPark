@@ -38,7 +38,16 @@ class ArtifactStore:
     def write_metrics(self, metrics: RunMetrics) -> None:
         path = self.run_dir(metrics.run_id) / "metrics.json"
         with path.open("w", encoding="utf-8") as handle:
-            json.dump(metrics.model_dump(mode="json"), handle, indent=2, ensure_ascii=False)
+            json.dump(
+                metrics.model_dump(mode="json"), handle, indent=2, ensure_ascii=False
+            )
+
+    def read_metrics(self, run_id: str) -> dict[str, Any] | None:
+        path = self.run_dir(run_id) / "metrics.json"
+        if not path.exists():
+            return None
+        with path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
 
     def append_event(self, event: RunEvent) -> None:
         path = self.run_dir(event.run_id) / "events.jsonl"

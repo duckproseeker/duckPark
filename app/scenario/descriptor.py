@@ -70,6 +70,10 @@ class RecorderConfig(BaseModel):
     enabled: bool = False
 
 
+class DebugConfig(BaseModel):
+    viewer_friendly: bool = False
+
+
 class MetadataConfig(BaseModel):
     author: str = "unknown"
     tags: list[str] = Field(default_factory=list)
@@ -87,6 +91,7 @@ class ScenarioDescriptor(BaseModel):
     sensors: SensorsConfig = Field(default_factory=SensorsConfig)
     termination: TerminationConfig = Field(default_factory=TerminationConfig)
     recorder: RecorderConfig = Field(default_factory=RecorderConfig)
+    debug: DebugConfig = Field(default_factory=DebugConfig)
     metadata: MetadataConfig = Field(default_factory=MetadataConfig)
 
     @field_validator("scenario_name", "map_name")

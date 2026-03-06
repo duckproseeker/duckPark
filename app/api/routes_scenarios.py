@@ -18,7 +18,9 @@ router = APIRouter(tags=["场景管理"])
 )
 def list_scenarios() -> ApiResponse:
     project_root = Path(__file__).resolve().parents[2]
-    sample_files = sorted((project_root / "configs" / "scenarios").glob("sample_*.yaml"))
+    sample_files = sorted(
+        (project_root / "configs" / "scenarios").glob("sample_*.yaml")
+    )
     return ApiResponse(
         success=True,
         data={

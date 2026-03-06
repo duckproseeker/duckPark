@@ -92,6 +92,7 @@ def _descriptor_template_from_spec(spec: BuiltinScenarioSpec) -> dict[str, Any]:
             "success_condition": "timeout",
         },
         "recorder": {"enabled": False},
+        "debug": {"viewer_friendly": False},
         "metadata": {
             "author": "mvp-ui",
             "tags": [spec.scenario_name],
