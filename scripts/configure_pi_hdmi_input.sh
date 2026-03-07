@@ -93,7 +93,10 @@ sleep 1
 
 STATUS_LOG=$(v4l2-ctl -d "${HDMI_STATUS_DEVICE}" --log-status 2>&1 || true)
 if [[ -z "${WIDTH}" || -z "${HEIGHT}" ]]; then
-  RESOLUTION=$(printf '%s\n' "${STATUS_LOG}" | sed -n 's/.*Configured format: \([0-9]\+\)x\([0-9]\+\).*/\1 \2/p' | head -n1)
+  RESOLUTION=$(printf '%s\n' "${STATUS_LOG}" | sed -n 's/.*Detected format: \([0-9]\+\)x\([0-9]\+\).*/\1 \2/p' | head -n1)
+  if [[ -z "${RESOLUTION}" ]]; then
+    RESOLUTION=$(printf '%s\n' "${STATUS_LOG}" | sed -n 's/.*Configured format: \([0-9]\+\)x\([0-9]\+\).*/\1 \2/p' | head -n1)
+  fi
   if [[ -n "${RESOLUTION}" ]]; then
     WIDTH="${WIDTH:-$(printf '%s' "${RESOLUTION}" | awk '{print $1}')}"
     HEIGHT="${HEIGHT:-$(printf '%s' "${RESOLUTION}" | awk '{print $2}')}"
