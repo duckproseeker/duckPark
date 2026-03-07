@@ -11,6 +11,10 @@ def test_ui_page_available() -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert "场景仿真控制层" in response.text
+    assert "运行概览" in response.text
+    assert "活跃运行" in response.text
+    assert "历史运行" in response.text
+    assert "运行详情" in response.text
     assert "/docs" in response.text
 
     response_ui = client.get("/ui")

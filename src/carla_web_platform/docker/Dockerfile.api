@@ -10,4 +10,4 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app
 
-CMD ["bash", "scripts/start_api.sh"]
+CMD ["bash", "scripts/start_platform.sh", "--no-executor"]

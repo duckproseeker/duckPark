@@ -12,6 +12,24 @@ class CarlaTickResult:
     sim_time: float
 
 
+@dataclass
+class EgoSpawnResult:
+    actor: Any
+    resolved_spawn_point: dict[str, float]
+    source: str
+    requested_spawn_point: dict[str, float]
+    distance_to_requested_m: float | None = None
+    fallback_index: int | None = None
+
+
+@dataclass
+class SpawnCandidate:
+    transform: Any
+    source: str
+    distance_to_requested_m: float | None = None
+    fallback_index: int | None = None
+
+
 class CarlaClientError(RuntimeError):
     """CARLA client wrapper error."""
 
@@ -63,6 +81,11 @@ class CarlaClient:
             raise CarlaClientError("CARLA client is not connected")
         self._world = self._client.load_world(map_name)
 
+    def get_available_maps(self) -> list[str]:
+        if self._client is None:
+            raise CarlaClientError("CARLA client is not connected")
+        return [str(name) for name in self._client.get_available_maps()]
+
     def set_weather(self, preset_name: str) -> None:
         if self._world is None or self._carla is None:
             raise CarlaClientError("CARLA world is not ready")
@@ -108,12 +131,136 @@ class CarlaClient:
             ),
         )
 
+    def _transform_to_dict(self, transform: Any) -> dict[str, float]:
+        return {
+            "x": float(transform.location.x),
+            "y": float(transform.location.y),
+            "z": float(transform.location.z),
+            "roll": float(transform.rotation.roll),
+            "pitch": float(transform.rotation.pitch),
+            "yaw": float(transform.rotation.yaw),
+        }
+
+    def _transform_key(self, transform: Any) -> tuple[float, float, float, float, float, float]:
+        payload = self._transform_to_dict(transform)
+        return (
+            round(payload["x"], 3),
+            round(payload["y"], 3),
+            round(payload["z"], 3),
+            round(payload["roll"], 3),
+            round(payload["pitch"], 3),
+            round(payload["yaw"], 3),
+        )
+
+    def _project_to_driving_lane(
+        self, requested_transform: Any
+    ) -> tuple[Any | None, float | None]:
+        if self._world is None or self._carla is None:
+            raise CarlaClientError("CARLA world is not ready")
+
+        waypoint = self._world.get_map().get_waypoint(
+            requested_transform.location,
+            project_to_road=True,
+            lane_type=self._carla.LaneType.Driving,
+        )
+        if waypoint is None:
+            return None, None
+
+        waypoint_transform = waypoint.transform
+        resolved_transform = self._carla.Transform(
+            self._carla.Location(
+                x=float(waypoint_transform.location.x),
+                y=float(waypoint_transform.location.y),
+                z=max(
+                    float(waypoint_transform.location.z) + 0.3,
+                    float(requested_transform.location.z),
+                ),
+            ),
+            self._carla.Rotation(
+                roll=float(waypoint_transform.rotation.roll),
+                pitch=float(waypoint_transform.rotation.pitch),
+                yaw=float(waypoint_transform.rotation.yaw),
+            ),
+        )
+        distance_to_requested = float(
+            requested_transform.location.distance(waypoint_transform.location)
+        )
+        return resolved_transform, distance_to_requested
+
+    def _build_ego_spawn_candidates(
+        self,
+        requested_spawn_point: dict[str, float],
+        max_projection_distance_m: float = 8.0,
+    ) -> list[SpawnCandidate]:
+        if self._world is None:
+            raise CarlaClientError("CARLA world is not ready")
+
+        requested_transform = self._build_transform(requested_spawn_point)
+        map_obj = self._world.get_map()
+        spawn_points = list(map_obj.get_spawn_points())
+        ordered_spawn_points = sorted(
+            spawn_points,
+            key=lambda transform: requested_transform.location.distance(transform.location),
+        )
+
+        candidates: list[SpawnCandidate] = []
+        seen_keys: set[tuple[float, float, float, float, float, float]] = set()
+        deferred_projection_candidate: SpawnCandidate | None = None
+
+        projected_transform, distance_to_requested = self._project_to_driving_lane(
+            requested_transform
+        )
+        if projected_transform is not None and (
+            distance_to_requested is None
+            or distance_to_requested <= max_projection_distance_m
+            or not ordered_spawn_points
+        ):
+            projected_key = self._transform_key(projected_transform)
+            seen_keys.add(projected_key)
+            candidates.append(
+                SpawnCandidate(
+                    transform=projected_transform,
+                    source="projected_to_driving_lane",
+                    distance_to_requested_m=distance_to_requested,
+                )
+            )
+        elif projected_transform is not None:
+            deferred_projection_candidate = SpawnCandidate(
+                transform=projected_transform,
+                source="projected_to_driving_lane_fallback",
+                distance_to_requested_m=distance_to_requested,
+            )
+
+        for index, transform in enumerate(ordered_spawn_points):
+            transform_key = self._transform_key(transform)
+            if transform_key in seen_keys:
+                continue
+
+            candidates.append(
+                SpawnCandidate(
+                    transform=transform,
+                    source="map_spawn_point_fallback",
+                    distance_to_requested_m=float(
+                        requested_transform.location.distance(transform.location)
+                    ),
+                    fallback_index=index,
+                )
+            )
+            seen_keys.add(transform_key)
+
+        if deferred_projection_candidate is not None:
+            deferred_key = self._transform_key(deferred_projection_candidate.transform)
+            if deferred_key not in seen_keys:
+                candidates.append(deferred_projection_candidate)
+
+        return candidates
+
     def spawn_ego_vehicle(
         self,
         blueprint: str,
         spawn_point: dict[str, float],
         role_name: str = "ego_vehicle",
-    ) -> Any:
+    ) -> EgoSpawnResult:
         if self._world is None:
             raise CarlaClientError("CARLA world is not ready")
 
@@ -121,13 +268,29 @@ class CarlaClient:
         blueprint_obj = blueprint_library.find(blueprint)
         if blueprint_obj.has_attribute("role_name"):
             blueprint_obj.set_attribute("role_name", role_name)
-        transform = self._build_transform(spawn_point)
-        actor = self._world.try_spawn_actor(blueprint_obj, transform)
-        if actor is None:
-            raise CarlaClientError("Failed to spawn ego vehicle")
 
-        self._spawned_actors.append(actor)
-        return actor
+        candidates = self._build_ego_spawn_candidates(spawn_point)
+        if not candidates:
+            raise CarlaClientError("Failed to resolve any valid ego spawn point")
+
+        for candidate in candidates:
+            actor = self._world.try_spawn_actor(blueprint_obj, candidate.transform)
+            if actor is None:
+                continue
+
+            self._spawned_actors.append(actor)
+            return EgoSpawnResult(
+                actor=actor,
+                resolved_spawn_point=self._transform_to_dict(candidate.transform),
+                source=candidate.source,
+                requested_spawn_point=dict(spawn_point),
+                distance_to_requested_m=candidate.distance_to_requested_m,
+                fallback_index=candidate.fallback_index,
+            )
+
+        raise CarlaClientError(
+            f"Failed to spawn ego vehicle after trying {len(candidates)} candidate spawn points"
+        )
 
     def set_vehicle_autopilot(self, vehicle: Any, enabled: bool) -> None:
         if vehicle is None:
@@ -156,25 +319,42 @@ class CarlaClient:
 
         return spawned
 
-    def spawn_crossing_actor_ahead(self, ego_vehicle: Any) -> Any | None:
+    def spawn_crossing_actor_ahead(
+        self, ego_vehicle: Any, distance_m: float = 18.0, lateral_offset_m: float = 2.8
+    ) -> Any | None:
         if self._world is None or self._carla is None:
             raise CarlaClientError("CARLA world is not ready")
 
         ego_transform = ego_vehicle.get_transform()
-        forward = ego_transform.get_forward_vector()
-        blocker_location = ego_transform.location + self._carla.Location(
-            x=forward.x * 20.0,
-            y=forward.y * 20.0,
+        anchor_transform = ego_transform
+        waypoint = self._world.get_map().get_waypoint(
+            ego_transform.location,
+            project_to_road=True,
+            lane_type=self._carla.LaneType.Driving,
+        )
+        if waypoint is not None:
+            next_waypoints = waypoint.next(distance_m)
+            if next_waypoints:
+                anchor_transform = next_waypoints[0].transform
+
+        forward = anchor_transform.get_forward_vector()
+        lateral = self._carla.Location(
+            x=-forward.y * lateral_offset_m,
+            y=forward.x * lateral_offset_m,
             z=0.0,
         )
+        blocker_location = anchor_transform.location + lateral
+        blocker_location.z = float(blocker_location.z) + 0.8
         blocker_rotation = self._carla.Rotation(
             pitch=0.0,
-            yaw=ego_transform.rotation.yaw + 90.0,
+            yaw=anchor_transform.rotation.yaw + 90.0,
             roll=0.0,
         )
         blocker_transform = self._carla.Transform(blocker_location, blocker_rotation)
 
         blueprints = self._world.get_blueprint_library().filter("walker.pedestrian.*")
+        if not blueprints:
+            blueprints = self._world.get_blueprint_library().filter("static.prop.streetbarrier")
         if not blueprints:
             blueprints = self._world.get_blueprint_library().filter("vehicle.*")
         if not blueprints:

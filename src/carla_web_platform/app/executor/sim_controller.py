@@ -139,15 +139,23 @@ class SimController:
                     run_id, "TM_SYNC_ENABLED", "Traffic Manager 已启用同步模式"
                 )
 
-            ego_vehicle = carla_client.spawn_ego_vehicle(
+            ego_spawn = carla_client.spawn_ego_vehicle(
                 descriptor.ego_vehicle.blueprint,
                 descriptor.ego_vehicle.spawn_point.model_dump(mode="python"),
             )
+            ego_vehicle = ego_spawn.actor
             self._emit_event(
                 run_id,
                 "EGO_SPAWNED",
                 "Ego 车辆生成成功",
-                payload={"blueprint": descriptor.ego_vehicle.blueprint},
+                payload={
+                    "blueprint": descriptor.ego_vehicle.blueprint,
+                    "spawn_source": ego_spawn.source,
+                    "requested_spawn_point": ego_spawn.requested_spawn_point,
+                    "resolved_spawn_point": ego_spawn.resolved_spawn_point,
+                    "distance_to_requested_m": ego_spawn.distance_to_requested_m,
+                    "fallback_index": ego_spawn.fallback_index,
+                },
             )
 
             context = ScenarioRuntimeContext(

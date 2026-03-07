@@ -39,6 +39,8 @@ def test_create_start_stop_run() -> None:
     start_resp = client.post(f"/runs/{run_id}/start")
     assert start_resp.status_code == 200
     assert start_resp.json()["data"]["status"] == "QUEUED"
+    assert "created_at_utc" in start_resp.json()["data"]
+    assert "updated_at_utc" in start_resp.json()["data"]
     assert "started_at_utc" in start_resp.json()["data"]
     assert "sim_time" in start_resp.json()["data"]
     assert "wall_elapsed_seconds" in start_resp.json()["data"]

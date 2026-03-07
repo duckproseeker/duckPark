@@ -41,8 +41,11 @@
             <select id="scenario-name" required></select>
           </label>
           <label>
-            地图名 map_name
-            <input id="map-name" type="text" required />
+            地图 map_name
+            <select id="map-name" required disabled>
+              <option value="">正在读取 CARLA 地图...</option>
+            </select>
+            <span id="map-field-note" class="field-note">仅显示当前 CARLA server 可加载的地图。</span>
           </label>
           <label>
             超时 termination.timeout_seconds（仿真时间）
@@ -56,49 +59,102 @@
             <input id="viewer-friendly" type="checkbox" />
             启用调试友好模式（debug.viewer_friendly）
           </label>
-          <button type="submit">创建运行</button>
+          <button id="create-run-button" type="submit">创建运行</button>
         </form>
         <pre id="create-result" class="result"></pre>
       </section>
 
       <section>
-        <h2>运行列表</h2>
+        <div class="section-head">
+          <div>
+            <h2>运行概览</h2>
+            <p class="section-note">运行中任务固定置顶；历史任务单独折叠，避免首页被旧记录淹没。</p>
+          </div>
+        </div>
         <div class="toolbar">
           <button id="refresh-runs">刷新运行列表</button>
         </div>
-        <table id="runs-table">
-          <thead>
-            <tr>
-              <th>run_id</th>
-              <th>场景名</th>
-              <th>地图</th>
-              <th>状态</th>
-              <th>started_at_utc</th>
-              <th>ended_at_utc</th>
-              <th>sim_time</th>
-              <th>current_tick</th>
-              <th>wall_elapsed_seconds</th>
-              <th>spawned_actors</th>
-              <th>错误原因</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </section>
-
-      <section>
-        <h2>事件查看</h2>
-        <div class="toolbar">
-          <label>
-            run_id
-            <input id="events-run-id" type="text" placeholder="输入 run_id 或点击运行列表中的查看事件" />
-          </label>
-          <button id="load-events">查看事件</button>
+        <div class="runs-section">
+          <div class="runs-section-head">
+            <div>
+              <h3>活跃运行</h3>
+              <p class="section-note">显示 CREATED 到 STOPPING 的运行，按最近更新时间倒序。</p>
+            </div>
+            <span id="active-runs-count" class="count-badge">0</span>
+          </div>
+          <div class="runs-table-shell">
+            <table id="active-runs-table">
+              <thead>
+                <tr>
+                  <th>运行</th>
+                  <th>状态</th>
+                  <th>时间</th>
+                  <th>指标</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
         </div>
-        <pre id="events-result" class="result"></pre>
+
+        <details id="history-runs-panel" class="history-panel">
+          <summary>
+            <span>历史运行</span>
+            <span id="history-runs-count" class="count-badge">0</span>
+          </summary>
+          <p class="section-note">默认收起，只在需要排查旧任务时展开。</p>
+          <div class="runs-table-shell">
+            <table id="history-runs-table">
+              <thead>
+                <tr>
+                  <th>运行</th>
+                  <th>状态</th>
+                  <th>时间</th>
+                  <th>指标</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </details>
       </section>
     </main>
+
+    <div id="detail-backdrop" class="detail-backdrop" hidden></div>
+    <aside id="run-detail-drawer" class="run-detail-drawer" aria-hidden="true">
+      <div class="drawer-head">
+        <div>
+          <p class="drawer-kicker">运行详情</p>
+          <h2 id="detail-run-title">未选择运行</h2>
+        </div>
+        <button id="close-detail" class="ghost-button" type="button">关闭</button>
+      </div>
+
+      <div class="drawer-tabs">
+        <button id="detail-tab-overview" class="tab-button is-active" type="button">概览</button>
+        <button id="detail-tab-events" class="tab-button" type="button">事件流</button>
+        <button id="detail-refresh" class="ghost-button" type="button">刷新</button>
+      </div>
+
+      <div id="detail-panel-overview" class="drawer-panel is-active">
+        <div id="detail-summary" class="detail-summary"></div>
+        <div class="detail-block">
+          <h3>控制标记</h3>
+          <div id="detail-flags" class="flag-row"></div>
+        </div>
+        <div class="detail-block">
+          <h3>错误原因</h3>
+          <pre id="detail-error" class="result compact-result">-</pre>
+        </div>
+      </div>
+
+      <div id="detail-panel-events" class="drawer-panel">
+        <p id="events-state" class="section-note">选择一个运行后再查看事件流。</p>
+        <div id="events-timeline" class="events-timeline"></div>
+      </div>
+    </aside>
 
     <script src="/static/ui.js"></script>
   </body>

@@ -36,6 +36,8 @@ def get_artifact_store() -> ArtifactStore:
 
 def run_to_payload(run: RunRecord) -> dict[str, Any]:
     metrics = get_artifact_store().read_metrics(run.run_id) or {}
+    created_at_utc = to_iso8601(run.created_at)
+    updated_at_utc = to_iso8601(run.updated_at)
     started_at_utc = to_iso8601(run.started_at)
     ended_at_utc = to_iso8601(run.ended_at)
 
@@ -44,9 +46,13 @@ def run_to_payload(run: RunRecord) -> dict[str, Any]:
         "status": run.status.value,
         "scenario_name": run.scenario_name,
         "map_name": run.map_name,
+        "created_at_utc": created_at_utc,
+        "updated_at_utc": updated_at_utc,
         "started_at_utc": started_at_utc,
         "ended_at_utc": ended_at_utc,
         # Backward compatible aliases.
+        "created_time": created_at_utc,
+        "updated_time": updated_at_utc,
         "start_time": started_at_utc,
         "end_time": ended_at_utc,
         "error_reason": run.error_reason,

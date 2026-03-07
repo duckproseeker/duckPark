@@ -5,6 +5,7 @@ from app.scenario.runtime import ScenarioRuntimeContext
 
 def setup(context: ScenarioRuntimeContext) -> None:
     context.carla_client.set_vehicle_autopilot(context.ego_vehicle, enabled=True)
+    context.state["ego_control_mode"] = "autopilot"
     if (
         context.descriptor.traffic.enabled
         and context.descriptor.traffic.num_vehicles > 0
