@@ -23,6 +23,8 @@ class GatewayAgentSettings:
     gateway_id: str
     gateway_name: str
     input_video_device: str
+    media_device: str
+    hdmi_status_device: str
     heartbeat_interval_seconds: float
     api_timeout_seconds: float
     state_dir: Path
@@ -44,6 +46,14 @@ def parse_args(argv: list[str] | None = None) -> GatewayAgentSettings:
     parser.add_argument(
         "--input-video-device",
         default=os.getenv("PI_GATEWAY_INPUT_VIDEO_DEVICE", "/dev/video0"),
+    )
+    parser.add_argument(
+        "--media-device",
+        default=os.getenv("PI_GATEWAY_MEDIA_DEVICE", "/dev/media0"),
+    )
+    parser.add_argument(
+        "--hdmi-status-device",
+        default=os.getenv("PI_GATEWAY_HDMI_STATUS_DEVICE", "/dev/v4l-subdev2"),
     )
     parser.add_argument(
         "--heartbeat-interval",
@@ -95,6 +105,8 @@ def parse_args(argv: list[str] | None = None) -> GatewayAgentSettings:
         gateway_id=args.gateway_id.strip(),
         gateway_name=args.gateway_name.strip(),
         input_video_device=args.input_video_device.strip(),
+        media_device=args.media_device.strip(),
+        hdmi_status_device=args.hdmi_status_device.strip(),
         heartbeat_interval_seconds=max(args.heartbeat_interval, 1.0),
         api_timeout_seconds=max(args.api_timeout, 1.0),
         state_dir=state_dir,
@@ -225,6 +237,53 @@ def probe_v4l2_device(device_path: str, prefix: str) -> dict[str, Any]:
     return metrics
 
 
+def parse_tc358743_status(status_output: str) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
+    mapping = {
+        "Cable detected (+5V power)": "hdmi_cable_detected",
+        "DDC lines enabled": "hdmi_ddc_enabled",
+        "Hotplug enabled": "hdmi_hotplug_enabled",
+        "TMDS signal detected": "hdmi_tmds_signal_detected",
+        "Stable sync signal": "hdmi_stable_sync_signal",
+        "PHY PLL locked": "hdmi_phy_pll_locked",
+        "PHY DE detected": "hdmi_phy_de_detected",
+        "Transmit mode": "hdmi_transmit_mode",
+        "Receive mode": "hdmi_receive_mode",
+    }
+    for label, metric_name in mapping.items():
+        match = re.search(rf"{re.escape(label)}:\s+(yes|no)", status_output)
+        if match:
+            metrics[metric_name] = match.group(1) == "yes"
+
+    configured_format = re.search(r"Configured format:\s+(.+)", status_output)
+    input_color_space = re.search(r"Input color space:\s+(.+)", status_output)
+    metrics["hdmi_no_video_detected"] = "No video detected" in status_output
+    if configured_format:
+        metrics["hdmi_configured_format"] = configured_format.group(1).strip()
+    if input_color_space:
+        metrics["hdmi_input_color_space"] = input_color_space.group(1).strip()
+
+    video_detected = metrics.get("hdmi_tmds_signal_detected", False) and metrics.get(
+        "hdmi_stable_sync_signal", False
+    )
+    metrics["hdmi_video_detected"] = video_detected
+    return metrics
+
+
+def detect_capture_link_enabled(media_device: str) -> bool | None:
+    output = run_command(["media-ctl", "-p", "-d", media_device], timeout_seconds=2.0)
+    if not output:
+        return None
+    match = re.search(
+        r'-> "rp1-cfe-csi2_ch0":0 \[(?P<flags>[A-Z,]+)?\]',
+        output,
+    )
+    if not match:
+        return None
+    flags = match.group("flags") or ""
+    return "ENABLED" in flags.split(",")
+
+
 def detect_local_address(api_base_url: str) -> str | None:
     parsed = parse.urlparse(api_base_url)
     if not parsed.hostname:
@@ -303,6 +362,11 @@ def collect_gateway_metrics(settings: GatewayAgentSettings) -> tuple[dict[str, A
         or bridge_state.get("gadget_video_device")
         or find_gadget_video_device()
     )
+    capture_link_enabled = detect_capture_link_enabled(settings.media_device)
+    hdmi_status_output = run_command(
+        ["v4l2-ctl", "-d", settings.hdmi_status_device, "--log-status"],
+        timeout_seconds=3.0,
+    )
 
     metrics: dict[str, Any] = {
         "captured_at_utc": now_utc_iso8601(),
@@ -320,10 +384,15 @@ def collect_gateway_metrics(settings: GatewayAgentSettings) -> tuple[dict[str, A
         "gadget_video_device_exists": bool(
             gadget_video_device and Path(gadget_video_device).exists()
         ),
+        "capture_link_enabled": capture_link_enabled,
+        "media_device": settings.media_device,
+        "hdmi_status_device": settings.hdmi_status_device,
     }
     metrics.update(probe_v4l2_device(settings.input_video_device, "input"))
     if gadget_video_device:
         metrics.update(probe_v4l2_device(gadget_video_device, "gadget"))
+    if hdmi_status_output:
+        metrics.update(parse_tc358743_status(hdmi_status_output))
     metrics.update(gadget_state)
     metrics.update(bridge_state)
     return metrics, current_run_id

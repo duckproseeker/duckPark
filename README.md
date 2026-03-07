@@ -24,7 +24,7 @@
 
 ## 当前未实现
 
-- 树莓派视频桥接（X1301 输入到 UVC 输出的稳定转发链）
+- 树莓派视频桥接的稳定性验证（脚本已提供，待实机持续验证）
 - HIL 时间同步
 - DUT 数据注入
 - 在线实时大屏/复杂前端
@@ -266,6 +266,15 @@ bash scripts/start_pi_gateway_agent.sh \
   --gateway-name bench-a
 ```
 
+3. 配置 HDMI 输入并启动桥接：
+
+```bash
+cd /opt/duckpark/carla_web_platform
+bash scripts/start_pi_hdmi_to_uvc_bridge.sh
+```
+
+如果脚本提示 `TMDS signal detected: no`，说明树莓派已经完成 EDID/HPD 配置，但 HDMI 源设备还没有真正输出视频，需要检查源端显示输出或重新插拔 HDMI。
+
 或者直接一条命令启动整套：
 
 ```bash
@@ -281,6 +290,7 @@ bash scripts/start_pi_gateway_stack.sh \
 
 模板文件：
 - `deploy/pi/duckpark-uvc-gadget.service`
+- `deploy/pi/duckpark-hdmi-bridge.service`
 - `deploy/pi/duckpark-gateway-agent.service`
 - `deploy/pi/gateway-agent.env.example`
 
@@ -290,9 +300,11 @@ bash scripts/start_pi_gateway_stack.sh \
 sudo mkdir -p /etc/duckpark
 sudo cp deploy/pi/gateway-agent.env.example /etc/duckpark/pi-gateway.env
 sudo cp deploy/pi/duckpark-uvc-gadget.service /etc/systemd/system/
+sudo cp deploy/pi/duckpark-hdmi-bridge.service /etc/systemd/system/
 sudo cp deploy/pi/duckpark-gateway-agent.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now duckpark-uvc-gadget.service
+sudo systemctl enable --now duckpark-hdmi-bridge.service
 sudo systemctl enable --now duckpark-gateway-agent.service
 ```
 
@@ -300,9 +312,18 @@ sudo systemctl enable --now duckpark-gateway-agent.service
 
 - `g_webcam` 可在 Pi 5 上成功绑定到 `1000480000.usb`
 - 绑定后会暴露 UVC 输出节点，例如 `/dev/video8`
+- `tc358743` 已验证可完成：
+  - 标准 EDID 下发
+  - HPD 打开
+  - `csi2:4 -> rp1-cfe-csi2_ch0` link 启用
+  - `RGB888_1X24` pad format 配置
 - agent 会上报：
   - `udc_state`
   - `host_connected`
+  - `hdmi_hotplug_enabled`
+  - `hdmi_tmds_signal_detected`
+  - `hdmi_stable_sync_signal`
+  - `capture_link_enabled`
   - 输入视频节点是否存在
   - gadget 视频节点是否存在
   - 输入 / gadget 的基础 V4L2 格式信息
