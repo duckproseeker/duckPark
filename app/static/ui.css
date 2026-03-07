@@ -271,6 +271,7 @@ button:disabled {
 }
 
 .run-cell,
+.gateway-cell,
 .status-cell,
 .stack-list {
   display: grid;
@@ -290,6 +291,7 @@ button:disabled {
 }
 
 .metric-group,
+.gateway-capabilities,
 .flag-row {
   display: flex;
   gap: 8px;

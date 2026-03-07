@@ -25,6 +25,14 @@ class EventLevel(str, Enum):
     ERROR = "ERROR"
 
 
+class GatewayStatus(str, Enum):
+    UNKNOWN = "UNKNOWN"
+    READY = "READY"
+    BUSY = "BUSY"
+    ERROR = "ERROR"
+    OFFLINE = "OFFLINE"
+
+
 class RunEvent(BaseModel):
     timestamp: datetime
     run_id: str
@@ -61,4 +69,21 @@ class RunRecord(BaseModel):
     scenario_name: str
     map_name: str
     descriptor: dict[str, Any]
+    hil_config: dict[str, Any] | None = None
+    evaluation_profile: dict[str, Any] | None = None
     artifact_dir: str
+
+
+class GatewayRecord(BaseModel):
+    gateway_id: str
+    name: str
+    status: GatewayStatus = GatewayStatus.UNKNOWN
+    capabilities: dict[str, Any] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    agent_version: str | None = None
+    address: str | None = None
+    current_run_id: str | None = None
+    last_heartbeat_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime

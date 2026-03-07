@@ -12,6 +12,7 @@ from app.core.models import RunRecord
 from app.orchestrator.queue import FileCommandQueue
 from app.orchestrator.run_manager import RunManager
 from app.storage.artifact_store import ArtifactStore
+from app.storage.gateway_store import GatewayStore
 from app.storage.run_store import RunStore
 from app.utils.time_utils import to_iso8601
 
@@ -25,6 +26,7 @@ def get_run_manager() -> RunManager:
         run_store=RunStore(settings.runs_root),
         artifact_store=ArtifactStore(settings.artifacts_root),
         command_queue=FileCommandQueue(settings.commands_root),
+        gateway_store=GatewayStore(settings.gateways_root),
     )
 
 
@@ -58,6 +60,8 @@ def run_to_payload(run: RunRecord) -> dict[str, Any]:
         "error_reason": run.error_reason,
         "stop_requested": run.stop_requested,
         "cancel_requested": run.cancel_requested,
+        "hil_config": run.hil_config,
+        "evaluation_profile": run.evaluation_profile,
         "artifact_dir": run.artifact_dir,
         "sim_time": metrics.get("sim_time"),
         "current_tick": metrics.get("current_tick"),
@@ -86,12 +90,27 @@ def raise_http_error(exc: AppError) -> NoReturn:
 def create_run(request: CreateRunRequest) -> ApiResponse:
     manager = get_run_manager()
     try:
-        run = manager.create_run(request.descriptor, request.descriptor_path)
+        run = manager.create_run(
+            request.descriptor,
+            request.descriptor_path,
+            request.hil_config.model_dump(mode="json")
+            if request.hil_config is not None
+            else None,
+            request.evaluation_profile.model_dump(mode="json")
+            if request.evaluation_profile is not None
+            else None,
+        )
     except AppError as exc:
         raise_http_error(exc)
 
     return ApiResponse(
-        success=True, data={"run_id": run.run_id, "status": run.status.value}
+        success=True,
+        data={
+            "run_id": run.run_id,
+            "status": run.status.value,
+            "hil_config": run.hil_config,
+            "evaluation_profile": run.evaluation_profile,
+        },
     )
 
 

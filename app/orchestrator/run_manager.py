@@ -12,6 +12,7 @@ from app.orchestrator.queue import FileCommandQueue
 from app.scenario.registry import BUILTIN_SCENARIOS
 from app.scenario.validators import load_descriptor_from_yaml, validate_descriptor
 from app.storage.artifact_store import ArtifactStore
+from app.storage.gateway_store import GatewayStore
 from app.storage.run_store import RunStore
 from app.utils.time_utils import now_utc
 
@@ -24,10 +25,12 @@ class RunManager:
         run_store: RunStore,
         artifact_store: ArtifactStore,
         command_queue: FileCommandQueue,
+        gateway_store: GatewayStore | None = None,
     ) -> None:
         self._run_store = run_store
         self._artifact_store = artifact_store
         self._command_queue = command_queue
+        self._gateway_store = gateway_store
 
     def _emit_event(
         self,
@@ -58,6 +61,8 @@ class RunManager:
         self,
         descriptor_payload: dict[str, Any] | None = None,
         descriptor_path: str | None = None,
+        hil_config: dict[str, Any] | None = None,
+        evaluation_profile: dict[str, Any] | None = None,
     ) -> RunRecord:
         if descriptor_payload is None and descriptor_path is None:
             raise ValidationError("必须提供 descriptor 或 descriptor_path")
@@ -77,6 +82,11 @@ class RunManager:
                 f"可用场景: {sorted(BUILTIN_SCENARIOS.keys())}"
             )
 
+        if hil_config and self._gateway_store is not None:
+            gateway_id = str(hil_config.get("gateway_id", "")).strip()
+            if gateway_id:
+                self._gateway_store.get(gateway_id)
+
         run_id = f"run_{now_utc().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
         artifact_dir = self._artifact_store.init_run(run_id)
 
@@ -88,10 +98,19 @@ class RunManager:
             scenario_name=descriptor.scenario_name,
             map_name=descriptor.map_name,
             descriptor=descriptor.to_dict(),
+            hil_config=hil_config,
+            evaluation_profile=evaluation_profile,
             artifact_dir=str(artifact_dir),
         )
         self._run_store.create(run)
-        self._artifact_store.write_config_snapshot(run_id, descriptor.to_dict())
+        self._artifact_store.write_config_snapshot(
+            run_id,
+            {
+                "descriptor": descriptor.to_dict(),
+                "hil_config": hil_config,
+                "evaluation_profile": evaluation_profile,
+            },
+        )
         self._persist_status(run)
 
         self._emit_event(
@@ -101,6 +120,8 @@ class RunManager:
             payload={
                 "scenario_name": descriptor.scenario_name,
                 "map_name": descriptor.map_name,
+                "gateway_id": (hil_config or {}).get("gateway_id"),
+                "evaluation_profile": (evaluation_profile or {}).get("profile_name"),
             },
         )
         return run

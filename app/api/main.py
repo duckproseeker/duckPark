@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.api.routes_gateways import router as gateways_router
 from app.api.routes_runs import router as runs_router
 from app.api.routes_scenarios import router as scenarios_router
 from app.api.routes_ui import router as ui_router
@@ -30,6 +31,7 @@ app.mount("/static", StaticFiles(directory=str(_app_root / "static")), name="sta
 app.include_router(ui_router)
 app.include_router(runs_router)
 app.include_router(scenarios_router)
+app.include_router(gateways_router)
 
 
 @app.get("/healthz", tags=["系统"])
