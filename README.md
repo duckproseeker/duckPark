@@ -79,6 +79,49 @@ carla_web_platform/
 
 ## 启动方式
 
+## 本地 Miniconda3 环境（macOS / Apple Silicon）
+
+适用目标：
+- 本地开发 Web 控制台、API、配置校验与测试
+- 远端 CARLA server 联调前的控制面验证
+
+创建环境：
+
+```bash
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+conda env create -f environment.web.yml
+conda activate duckpark-carla-web
+```
+
+准备本地配置：
+
+```bash
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+cp .env.local.example .env.local
+```
+
+说明：
+- `.env.local` 会在 `scripts/start_platform.sh` 启动时自动加载
+- 默认已预填 `CARLA_HOST=192.168.110.151`
+- 如只需启动 Web/API 界面，可将 `START_EXECUTOR=false`
+
+平台边界：
+- 当前仓库代码目标版本为 `CARLA 0.9.16`
+- 官方 `0.9.16` package 安装文档主要面向 `Ubuntu` / `Windows`
+- 在 `macOS Apple Silicon` 上，本项目已验证可运行 Web/API 与测试；完整 executor 更建议运行在带匹配 `carla` Python API 的 Ubuntu 节点或容器中
+
+远端联调前检查：
+
+```bash
+nc -G 2 -vz 192.168.110.151 2000
+nc -G 2 -vz 192.168.110.151 8010
+```
+
+若超时，通常表示：
+- CARLA server 未启动
+- Traffic Manager 未启动
+- 主机防火墙或交换网络未放通端口
+
 ### 1) 启动 carla-server
 
 ```bash
@@ -100,7 +143,20 @@ docker compose -f docker/docker-compose.yml up -d --build sim-executor
 ```bash
 cd /ros2_ws/src/carla_web_platform
 pip install -r requirements.txt
-CARLA_HOST=127.0.0.1 CARLA_PORT=2000 TRAFFIC_MANAGER_PORT=8010 bash run_platform.sh
+bash scripts/start_platform.sh --carla-host 127.0.0.1 --carla-port 2000 --traffic-manager-port 8010
+```
+
+本地 conda 运行示例：
+
+```bash
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+conda run -n duckpark-carla-web bash scripts/start_platform.sh --carla-host 192.168.110.151 --carla-port 2000 --traffic-manager-port 8010
+```
+
+只启动 Web/API：
+
+```bash
+bash scripts/start_platform.sh --carla-host 127.0.0.1 --carla-port 2000 --traffic-manager-port 8010 --no-executor
 ```
 
 ## 最小验证流程
