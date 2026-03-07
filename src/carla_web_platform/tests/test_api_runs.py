@@ -58,3 +58,50 @@ def test_create_start_stop_run() -> None:
     events_resp = client.get(f"/runs/{run_id}/events")
     assert events_resp.status_code == 200
     assert len(events_resp.json()["data"]) >= 2
+
+
+def test_create_run_with_hil_config_and_evaluation_profile() -> None:
+    client = TestClient(app)
+
+    register_resp = client.post(
+        "/gateways/register",
+        json={
+            "gateway_id": "rpi5-x1301-01",
+            "name": "bench-a",
+            "capabilities": {
+                "video_input_modes": ["hdmi_x1301", "frame_stream"],
+                "dut_output_modes": ["uvc_gadget"],
+            },
+        },
+    )
+    assert register_resp.status_code == 200
+
+    create_resp = client.post(
+        "/runs",
+        json={
+            "descriptor": VALID_DESCRIPTOR,
+            "hil_config": {
+                "mode": "camera_open_loop",
+                "gateway_id": "rpi5-x1301-01",
+                "video_source": "hdmi_x1301",
+                "dut_input_mode": "uvc_camera",
+                "result_ingest_mode": "http_push",
+            },
+            "evaluation_profile": {
+                "profile_name": "yolo_open_loop_v1",
+                "metrics": ["precision", "recall"],
+                "iou_threshold": 0.5,
+                "classes": ["car"],
+            },
+        },
+    )
+    assert create_resp.status_code == 200
+
+    run_id = create_resp.json()["data"]["run_id"]
+    get_resp = client.get(f"/runs/{run_id}")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["data"]["hil_config"]["gateway_id"] == "rpi5-x1301-01"
+    assert (
+        get_resp.json()["data"]["evaluation_profile"]["profile_name"]
+        == "yolo_open_loop_v1"
+    )

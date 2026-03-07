@@ -19,6 +19,7 @@ class Settings:
     runs_root: Path
     commands_root: Path
     artifacts_root: Path
+    gateways_root: Path
 
 
 @lru_cache(maxsize=1)
@@ -30,6 +31,7 @@ def get_settings() -> Settings:
         os.getenv("COMMANDS_ROOT", project_root / "run_data" / "commands")
     )
     artifacts_root = Path(os.getenv("ARTIFACTS_ROOT", project_root / "artifacts"))
+    gateways_root = Path(os.getenv("GATEWAYS_ROOT", project_root / "run_data" / "gateways"))
 
     return Settings(
         service_name=os.getenv("SERVICE_NAME", "carla-sim-control-mvp"),
@@ -45,4 +47,5 @@ def get_settings() -> Settings:
         runs_root=runs_root,
         commands_root=commands_root,
         artifacts_root=artifacts_root,
+        gateways_root=gateways_root,
     )

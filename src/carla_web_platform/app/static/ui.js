@@ -1,11 +1,15 @@
 const scenarioTableBody = document.querySelector("#scenario-table tbody");
+const gatewayTableBody = document.querySelector("#gateway-table tbody");
 const activeRunsTableBody = document.querySelector("#active-runs-table tbody");
 const historyRunsTableBody = document.querySelector("#history-runs-table tbody");
 const activeRunsCount = document.getElementById("active-runs-count");
 const historyRunsCount = document.getElementById("history-runs-count");
 const historyRunsPanel = document.getElementById("history-runs-panel");
 const scenarioSelect = document.getElementById("scenario-name");
+const gatewaySelect = document.getElementById("gateway-id");
 const mapSelect = document.getElementById("map-name");
+const videoSourceSelect = document.getElementById("video-source");
+const evaluationProfileSelect = document.getElementById("evaluation-profile");
 const mapFieldNote = document.getElementById("map-field-note");
 const timeoutInput = document.getElementById("timeout-seconds");
 const fixedDeltaInput = document.getElementById("fixed-delta");
@@ -13,6 +17,7 @@ const viewerFriendlyInput = document.getElementById("viewer-friendly");
 const createForm = document.getElementById("create-form");
 const createRunButton = document.getElementById("create-run-button");
 const createResult = document.getElementById("create-result");
+const refreshGatewaysButton = document.getElementById("refresh-gateways");
 const refreshRunsButton = document.getElementById("refresh-runs");
 
 const detailBackdrop = document.getElementById("detail-backdrop");
@@ -45,6 +50,8 @@ const TAB_NODES = {
 
 let scenarioTemplates = {};
 let availableMaps = [];
+let gatewayIndex = new Map();
+let evaluationProfileIndex = new Map();
 let runIndex = new Map();
 let eventCache = new Map();
 let selectedRunId = null;
@@ -175,6 +182,90 @@ function renderMapOptions(maps) {
   mapFieldNote.textContent = "仅显示当前 CARLA server 可加载的地图。";
 }
 
+function renderGatewayOptions(gateways) {
+  const previousValue = gatewaySelect.value;
+  gatewaySelect.innerHTML = '<option value="">未绑定网关（保留纯 CARLA 模式）</option>';
+
+  gateways.forEach((gateway) => {
+    const option = document.createElement("option");
+    option.value = gateway.gateway_id;
+    option.textContent = `${gateway.name} (${gateway.gateway_id})`;
+    gatewaySelect.appendChild(option);
+  });
+
+  if (previousValue && gatewayIndex.has(previousValue)) {
+    gatewaySelect.value = previousValue;
+  }
+}
+
+function renderGatewayTable(gateways) {
+  gatewayTableBody.innerHTML = "";
+  gatewayIndex = new Map(gateways.map((gateway) => [gateway.gateway_id, gateway]));
+  renderGatewayOptions(gateways);
+
+  if (!gateways.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td colspan="5" class="empty-state">当前还没有已注册的网关。</td>';
+    gatewayTableBody.appendChild(tr);
+    return;
+  }
+
+  gateways.forEach((gateway) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>
+        <div class="gateway-cell">
+          <strong>${escapeHtml(gateway.name)}</strong>
+          <code>${escapeHtml(gateway.gateway_id)}</code>
+          <span class="run-meta">${escapeHtml(formatValue(gateway.address))}</span>
+        </div>
+      </td>
+      <td>
+        <span class="status-badge tone-${getStatusTone(gateway.status)}">${escapeHtml(gateway.status)}</span>
+      </td>
+      <td>
+        <div class="gateway-capabilities">
+          <span class="metric-pill">输入 ${escapeHtml(formatValue(gateway.capabilities?.video_input_modes?.join(", ")))}</span>
+          <span class="metric-pill">输出 ${escapeHtml(formatValue(gateway.capabilities?.dut_output_modes?.join(", ")))}</span>
+        </div>
+      </td>
+      <td>
+        <div class="stack-list">
+          <span><strong>最近心跳</strong> ${escapeHtml(formatDateTime(gateway.last_heartbeat_at_utc))}</span>
+          <span><strong>更新时间</strong> ${escapeHtml(formatDateTime(gateway.updated_at_utc))}</span>
+        </div>
+      </td>
+      <td>
+        <div class="metric-group">
+          <span class="metric-pill">输入 FPS ${escapeHtml(formatNumber(gateway.metrics?.input_fps, 2))}</span>
+          <span class="metric-pill">输出 FPS ${escapeHtml(formatNumber(gateway.metrics?.output_fps, 2))}</span>
+          <span class="metric-pill">丢帧 ${escapeHtml(formatNumber(gateway.metrics?.frame_drop_rate, 4))}</span>
+        </div>
+      </td>
+    `;
+    gatewayTableBody.appendChild(tr);
+  });
+}
+
+function renderEvaluationProfiles(profiles) {
+  const previousValue = evaluationProfileSelect.value;
+  evaluationProfileIndex = new Map(profiles.map((profile) => [profile.profile_name, profile]));
+  evaluationProfileSelect.innerHTML = '<option value="">未绑定评测模板</option>';
+
+  profiles.forEach((profile) => {
+    const option = document.createElement("option");
+    option.value = profile.profile_name;
+    option.textContent = `${profile.display_name} (${profile.profile_name})`;
+    evaluationProfileSelect.appendChild(option);
+  });
+
+  if (previousValue && evaluationProfileIndex.has(previousValue)) {
+    evaluationProfileSelect.value = previousValue;
+  } else if (profiles.length > 0) {
+    evaluationProfileSelect.value = profiles[0].profile_name;
+  }
+}
+
 function selectMapOption(preferredMapName) {
   if (!availableMaps.length) {
     return;
@@ -243,6 +334,18 @@ function renderDetailOverview(run) {
   detailSummary.appendChild(createSummaryItem("状态", run.status, true));
   detailSummary.appendChild(createSummaryItem("场景", run.scenario_name));
   detailSummary.appendChild(createSummaryItem("地图", formatValue(run.map_name)));
+  detailSummary.appendChild(
+    createSummaryItem("网关", formatValue(run.hil_config?.gateway_id)),
+  );
+  detailSummary.appendChild(
+    createSummaryItem("视频源", formatValue(run.hil_config?.video_source)),
+  );
+  detailSummary.appendChild(
+    createSummaryItem(
+      "评测模板",
+      formatValue(run.evaluation_profile?.profile_name),
+    ),
+  );
   detailSummary.appendChild(createSummaryItem("开始时间", formatDateTime(run.started_at_utc)));
   detailSummary.appendChild(createSummaryItem("结束时间", formatDateTime(run.ended_at_utc)));
   detailSummary.appendChild(createSummaryItem("仿真时间", `${formatNumber(run.sim_time, 3)} s`));
@@ -366,11 +469,14 @@ function renderRunRow(run) {
   tr.dataset.runId = run.run_id;
 
   const runCell = document.createElement("td");
+  const gatewayLabel = run.hil_config?.gateway_id
+    ? ` · 网关：${escapeHtml(run.hil_config.gateway_id)}`
+    : "";
   runCell.innerHTML = `
     <div class="run-cell">
       <strong class="run-title">${escapeHtml(run.scenario_name)}</strong>
       <code class="run-id">${escapeHtml(run.run_id)}</code>
-      <span class="run-meta">地图：${escapeHtml(formatValue(run.map_name))}</span>
+      <span class="run-meta">地图：${escapeHtml(formatValue(run.map_name))}${gatewayLabel}</span>
     </div>
   `;
 
@@ -539,6 +645,16 @@ async function loadScenarios() {
   renderScenarioTable(data.builtins || []);
 }
 
+async function loadGateways() {
+  const data = await apiGet("/gateways");
+  renderGatewayTable(data.gateways || []);
+}
+
+async function loadEvaluationProfiles() {
+  const data = await apiGet("/evaluation-profiles");
+  renderEvaluationProfiles(data.profiles || []);
+}
+
 async function loadMaps() {
   try {
     const data = await apiGet("/maps");
@@ -617,12 +733,47 @@ function buildDescriptorFromForm() {
   return descriptor;
 }
 
+function buildHilConfigFromForm() {
+  if (!gatewaySelect.value) {
+    return null;
+  }
+
+  return {
+    mode: "camera_open_loop",
+    gateway_id: gatewaySelect.value,
+    video_source: videoSourceSelect.value,
+    dut_input_mode: "uvc_camera",
+    result_ingest_mode: "http_push",
+  };
+}
+
+function buildEvaluationProfileFromForm() {
+  if (!evaluationProfileSelect.value) {
+    return null;
+  }
+
+  const profile = evaluationProfileIndex.get(evaluationProfileSelect.value);
+  if (!profile) {
+    return null;
+  }
+  return JSON.parse(JSON.stringify(profile));
+}
+
 async function createRun(event) {
   event.preventDefault();
 
   try {
     const descriptor = buildDescriptorFromForm();
-    const run = await apiPost("/runs", { descriptor });
+    const hilConfig = buildHilConfigFromForm();
+    const evaluationProfile = buildEvaluationProfileFromForm();
+    const payload = { descriptor };
+    if (hilConfig) {
+      payload.hil_config = hilConfig;
+    }
+    if (evaluationProfile) {
+      payload.evaluation_profile = evaluationProfile;
+    }
+    const run = await apiPost("/runs", payload);
     createResult.textContent = `创建成功:\n${JSON.stringify(run, null, 2)}`;
     await loadRuns();
   } catch (error) {
@@ -663,6 +814,8 @@ async function bootstrap() {
   createRunButton.disabled = true;
   await loadScenarios();
   await loadMaps();
+  await loadEvaluationProfiles();
+  await loadGateways();
   await loadRuns();
 }
 
@@ -671,6 +824,11 @@ scenarioSelect.addEventListener("change", (event) => {
 });
 
 createForm.addEventListener("submit", createRun);
+refreshGatewaysButton.addEventListener("click", () => {
+  loadGateways().catch((error) => {
+    createResult.textContent = `读取网关失败: ${error.message}`;
+  });
+});
 refreshRunsButton.addEventListener("click", loadRuns);
 closeDetailButton.addEventListener("click", closeRunDetail);
 detailBackdrop.addEventListener("click", closeRunDetail);

@@ -56,12 +56,58 @@
             <input id="fixed-delta" type="number" min="0.01" max="0.2" step="0.01" required />
           </label>
           <label>
+            绑定网关
+            <select id="gateway-id">
+              <option value="">未绑定网关（保留纯 CARLA 模式）</option>
+            </select>
+            <span class="field-note">阶段二建议绑定网关；未绑定时保持当前纯 CARLA 执行链路。</span>
+          </label>
+          <label>
+            视频源模式
+            <select id="video-source">
+              <option value="hdmi_x1301">hdmi_x1301</option>
+              <option value="frame_stream">frame_stream</option>
+            </select>
+            <span class="field-note">`hdmi_x1301` 用于实物台架，`frame_stream` 预留给基准评测模式。</span>
+          </label>
+          <label>
+            评测模板
+            <select id="evaluation-profile">
+              <option value="">未绑定评测模板</option>
+            </select>
+            <span class="field-note">初版默认是 YOLO 开环评测模板，后续会扩展多模型配置。</span>
+          </label>
+          <label>
             <input id="viewer-friendly" type="checkbox" />
             启用调试友好模式（debug.viewer_friendly）
           </label>
           <button id="create-run-button" type="submit">创建运行</button>
         </form>
         <pre id="create-result" class="result"></pre>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <div>
+            <h2>网关概览</h2>
+            <p class="section-note">显示已注册的树莓派网关、最近心跳和当前能力。</p>
+          </div>
+        </div>
+        <div class="toolbar">
+          <button id="refresh-gateways">刷新网关列表</button>
+        </div>
+        <table id="gateway-table">
+          <thead>
+            <tr>
+              <th>网关</th>
+              <th>状态</th>
+              <th>能力</th>
+              <th>心跳</th>
+              <th>指标</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </section>
 
       <section>
