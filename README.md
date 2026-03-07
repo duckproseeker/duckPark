@@ -18,11 +18,13 @@
 - 极简中文 Web 控制台（`/` 或 `/ui`）
 - Swagger 调试页（`/docs`）
 - `debug.viewer_friendly` 调试友好模式（可选）
+- 阶段二最小网关注册/心跳 API
+- 树莓派 5 UVC gadget 启动脚本（`g_webcam`）
+- 树莓派网关 agent（注册、心跳、UVC/UDC 状态上报）
 
 ## 当前未实现
 
-- 树莓派网关与外设联动
-- USB 摄像头模拟
+- 树莓派视频桥接（X1301 输入到 UVC 输出的稳定转发链）
 - HIL 时间同步
 - DUT 数据注入
 - 在线实时大屏/复杂前端
@@ -217,6 +219,93 @@ python3 /ros2_ws/src/scripts/ego_viewer.py --host 127.0.0.1 --port 2000
 ## 调试友好模式示例
 
 示例文件：`configs/scenarios/sample_empty_drive_viewer_friendly.yaml`
+
+## 树莓派 5 网关（Pi 5 + X1301）最小接入
+
+当前阶段只做：
+- 树莓派以 UVC gadget 形式向 DUT 暴露摄像头
+- 树莓派 agent 定期向平台注册与上报心跳
+- Web 端展示网关状态与最近指标
+
+当前不做：
+- 多传感器时间同步
+- CAN / 串口 / 以太网协议转换
+- 闭环控制
+
+### 前提
+
+树莓派 5 需要独立供电，并在 `/boot/firmware/config.txt` 中启用：
+
+```text
+[pi5]
+dtoverlay=dwc2,dr_mode=peripheral
+```
+
+重启后应能看到：
+
+```bash
+ls /sys/class/udc
+```
+
+### 手动启动
+
+1. 启动 UVC gadget：
+
+```bash
+cd /opt/duckpark/carla_web_platform
+bash scripts/start_pi_uvc_gadget.sh
+```
+
+2. 启动树莓派网关 agent：
+
+```bash
+cd /opt/duckpark/carla_web_platform
+bash scripts/start_pi_gateway_agent.sh \
+  --api-base-url http://192.168.110.151:8000 \
+  --gateway-id rpi5-x1301-01 \
+  --gateway-name bench-a
+```
+
+或者直接一条命令启动整套：
+
+```bash
+cd /opt/duckpark/carla_web_platform
+bash scripts/start_pi_gateway_stack.sh \
+  --platform-host 192.168.110.151 \
+  --platform-port 8000 \
+  --gateway-id rpi5-x1301-01 \
+  --gateway-name bench-a
+```
+
+### systemd 模板
+
+模板文件：
+- `deploy/pi/duckpark-uvc-gadget.service`
+- `deploy/pi/duckpark-gateway-agent.service`
+- `deploy/pi/gateway-agent.env.example`
+
+建议部署路径：
+
+```bash
+sudo mkdir -p /etc/duckpark
+sudo cp deploy/pi/gateway-agent.env.example /etc/duckpark/pi-gateway.env
+sudo cp deploy/pi/duckpark-uvc-gadget.service /etc/systemd/system/
+sudo cp deploy/pi/duckpark-gateway-agent.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now duckpark-uvc-gadget.service
+sudo systemctl enable --now duckpark-gateway-agent.service
+```
+
+### 已验证的树莓派侧条件
+
+- `g_webcam` 可在 Pi 5 上成功绑定到 `1000480000.usb`
+- 绑定后会暴露 UVC 输出节点，例如 `/dev/video8`
+- agent 会上报：
+  - `udc_state`
+  - `host_connected`
+  - 输入视频节点是否存在
+  - gadget 视频节点是否存在
+  - 输入 / gadget 的基础 V4L2 格式信息
 
 核心字段：
 
