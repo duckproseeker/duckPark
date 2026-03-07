@@ -7,6 +7,7 @@ from app.hil.gateway_agent import (
     build_register_payload,
     determine_gateway_status,
     parse_csv,
+    parse_tc358743_status,
 )
 
 
@@ -18,6 +19,8 @@ def make_settings(tmp_path: Path) -> GatewayAgentSettings:
         gateway_id="rpi5-x1301-01",
         gateway_name="bench-a",
         input_video_device="/dev/video0",
+        media_device="/dev/media0",
+        hdmi_status_device="/dev/v4l-subdev2",
         heartbeat_interval_seconds=5.0,
         api_timeout_seconds=3.0,
         state_dir=state_dir,
@@ -71,3 +74,28 @@ def test_build_register_payload_contains_capabilities(tmp_path: Path) -> None:
     assert payload["capabilities"]["dut_output_modes"] == ["uvc_gadget"]
     assert payload["capabilities"]["result_ingest_modes"] == ["http_push"]
     assert payload["capabilities"]["gadget_driver"] == "g_webcam"
+
+
+def test_parse_tc358743_status_extracts_signal_flags() -> None:
+    status_output = """
+    tc358743 11-000f: Cable detected (+5V power): yes
+    tc358743 11-000f: DDC lines enabled: yes
+    tc358743 11-000f: Hotplug enabled: yes
+    tc358743 11-000f: TMDS signal detected: no
+    tc358743 11-000f: Stable sync signal: no
+    tc358743 11-000f: PHY PLL locked: no
+    tc358743 11-000f: PHY DE detected: no
+    tc358743 11-000f: No video detected
+    tc358743 11-000f: Configured format: 640x480p59.94 (800x525)
+    tc358743 11-000f: Input color space: RGB full range
+    """
+
+    metrics = parse_tc358743_status(status_output)
+
+    assert metrics["hdmi_cable_detected"] is True
+    assert metrics["hdmi_hotplug_enabled"] is True
+    assert metrics["hdmi_tmds_signal_detected"] is False
+    assert metrics["hdmi_stable_sync_signal"] is False
+    assert metrics["hdmi_video_detected"] is False
+    assert metrics["hdmi_configured_format"] == "640x480p59.94 (800x525)"
+    assert metrics["hdmi_input_color_space"] == "RGB full range"
