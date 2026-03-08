@@ -14,9 +14,12 @@ def test_scenario_catalog_and_environment_endpoints() -> None:
     catalog_resp = client.get("/scenarios/catalog")
     assert catalog_resp.status_code == 200
     items = catalog_resp.json()["data"]["items"]
-    assert any(item["execution_support"] == "native" for item in items)
+    native_items = [item for item in items if item["execution_support"] == "native"]
+    assert len(native_items) >= 10
     assert any(item["execution_support"] == "catalog_only" for item in items)
     assert any(item["scenario_id"] == "control_loss" for item in items)
+    assert any(item["scenario_id"] == "change_lane" for item in native_items)
+    assert any(item["scenario_id"] == "pedestrian_crossing" for item in native_items)
 
     env_resp = client.get("/scenarios/environment-presets")
     assert env_resp.status_code == 200

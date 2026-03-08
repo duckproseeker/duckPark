@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { listBenchmarkDefinitions } from '../../api/benchmarks';
 import { listProjects } from '../../api/projects';
-import { cancelRun, getRun, getRunEnvironment, getRunEvents, startRun, stopRun, updateRunEnvironment } from '../../api/runs';
+import { cancelRun, getRun, getRunEnvironment, getRunEvents, getRunViewer, startRun, stopRun, updateRunEnvironment } from '../../api/runs';
 import { listEnvironmentPresets } from '../../api/scenarios';
 import type { WeatherConfig } from '../../api/types';
 import { EmptyState } from '../../components/common/EmptyState';
@@ -16,7 +16,7 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { Panel } from '../../components/common/Panel';
 import { StatusPill } from '../../components/common/StatusPill';
 import { formatDateTime, formatRelativeDuration, terminalStatus } from '../../lib/format';
-import { deriveRunFps, findBenchmarkDefinition, findProjectRecord, getRunBenchmarkId, getRunChipId } from '../../lib/platform';
+import { deriveRunFps, findBenchmarkDefinition, findProjectRecord, getRunBenchmarkId, getRunDutModel, getRunProjectId } from '../../lib/platform';
 
 const defaultWeather: WeatherConfig = {
   preset: 'ClearNoon'
@@ -28,6 +28,8 @@ export function ExecutionDetailPage() {
 
   const [weatherDraft, setWeatherDraft] = useState<WeatherConfig>(defaultWeather);
   const [viewerFriendly, setViewerFriendly] = useState(false);
+  const [selectedViewerView, setSelectedViewerView] = useState('third_person');
+  const [viewerRefreshSeed, setViewerRefreshSeed] = useState(() => Date.now());
 
   const runQuery = useQuery({
     queryKey: ['runs', runId],
@@ -53,6 +55,13 @@ export function ExecutionDetailPage() {
     refetchInterval: 3000
   });
 
+  const viewerQuery = useQuery({
+    queryKey: ['runs', runId, 'viewer'],
+    queryFn: () => getRunViewer(runId),
+    enabled: Boolean(runId),
+    refetchInterval: 5000
+  });
+
   const environmentPresetsQuery = useQuery({
     queryKey: ['environment-presets'],
     queryFn: listEnvironmentPresets
@@ -66,6 +75,31 @@ export function ExecutionDetailPage() {
       setViewerFriendly(Boolean(environmentQuery.data.runtime_control.debug?.viewer_friendly ?? environmentQuery.data.descriptor_debug?.viewer_friendly));
     }
   }, [environmentQuery.data]);
+
+  useEffect(() => {
+    const nextView = viewerQuery.data?.views?.[0]?.view_id;
+    if (!nextView) {
+      return;
+    }
+    setSelectedViewerView((current) => {
+      if (viewerQuery.data?.views.some((item) => item.view_id === current)) {
+        return current;
+      }
+      return nextView;
+    });
+  }, [viewerQuery.data]);
+
+  useEffect(() => {
+    if (!viewerQuery.data?.available) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setViewerRefreshSeed(Date.now());
+    }, viewerQuery.data.refresh_interval_ms);
+
+    return () => window.clearInterval(intervalId);
+  }, [viewerQuery.data]);
 
   const stopMutation = useMutation({
     mutationFn: () => stopRun(runId),
@@ -105,22 +139,28 @@ export function ExecutionDetailPage() {
   });
 
   const run = runQuery.data;
-  const chip = run ? findProjectRecord(projectsQuery.data ?? [], getRunChipId(run)) : null;
+  const project = run ? findProjectRecord(projectsQuery.data ?? [], getRunProjectId(run)) : null;
   const benchmark = run ? findBenchmarkDefinition(benchmarkDefinitionsQuery.data ?? [], getRunBenchmarkId(run)) : null;
+  const dutModel = run ? getRunDutModel(run) : null;
   const fps = run ? deriveRunFps(run) : null;
   const events = eventsQuery.data ?? [];
+  const viewerSnapshotUrl =
+    viewerQuery.data?.snapshot_url && selectedViewerView
+      ? `${viewerQuery.data.snapshot_url}?view=${selectedViewerView}&ts=${viewerRefreshSeed}`
+      : null;
 
   const summaryItems = useMemo(() => {
     if (!run) {
       return [];
     }
 
-    return [
-      { label: '状态', value: <StatusPill status={run.status} /> },
-      { label: '执行 ID', value: run.run_id },
-      { label: '芯片项目', value: chip?.name ?? '未标记' },
-      { label: '基准任务', value: benchmark?.name ?? '未标记' },
-      { label: '场景', value: run.scenario_name },
+      return [
+        { label: '状态', value: <StatusPill status={run.status} /> },
+        { label: '执行 ID', value: run.run_id },
+        { label: '所属项目', value: project?.name ?? '未标记' },
+        { label: 'DUT 型号', value: dutModel ?? '未登记' },
+        { label: '基准任务', value: benchmark?.name ?? '未标记' },
+        { label: '场景', value: run.scenario_name },
       { label: '地图', value: run.map_name },
       { label: '绑定设备', value: run.hil_config?.gateway_id ?? '-' },
       { label: '天气预设', value: run.weather?.preset ?? '-' },
@@ -129,9 +169,9 @@ export function ExecutionDetailPage() {
       { label: '开始时间', value: formatDateTime(run.started_at_utc) },
       { label: '结束时间', value: formatDateTime(run.ended_at_utc) },
       { label: '运行时长', value: formatRelativeDuration(run.started_at_utc, run.ended_at_utc) },
-      { label: '失败原因', value: run.error_reason ?? '-' }
-    ];
-  }, [benchmark?.name, chip?.name, run]);
+        { label: '失败原因', value: run.error_reason ?? '-' }
+      ];
+  }, [benchmark?.name, dutModel, project?.name, run]);
 
   if (!runId) {
     return <EmptyState title="缺少执行 ID" description="路由参数里没有 run_id。" />;
@@ -225,6 +265,48 @@ export function ExecutionDetailPage() {
             </div>
 
             <div className="flex flex-col gap-5">
+              <Panel title="运行时画面" subtitle="使用只读 viewer 快照连接到当前 CARLA world，不参与 tick 控制。">
+                {!viewerQuery.data?.available ? (
+                  <EmptyState
+                    title="画面暂不可用"
+                    description={viewerQuery.data?.reason ?? '启动 run 后，这里会显示与 ego_viewer.py 类似的运行时画面。'}
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_140px]">
+                      <label className="field">
+                        <span>监视视角</span>
+                        <select value={selectedViewerView} onChange={(event) => setSelectedViewerView(event.target.value)}>
+                          {viewerQuery.data.views.map((item) => (
+                            <option key={item.view_id} value={item.view_id}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="field">
+                        <span>操作</span>
+                        <button className="horizon-button-secondary" onClick={() => setViewerRefreshSeed(Date.now())} type="button">
+                          刷新画面
+                        </button>
+                      </div>
+                    </div>
+
+                    {viewerSnapshotUrl && (
+                      <div className="overflow-hidden rounded-[24px] border border-secondaryGray-200 bg-secondaryGray-900">
+                        <img alt="CARLA 运行时画面" className="h-auto w-full object-cover" src={viewerSnapshotUrl} />
+                      </div>
+                    )}
+
+                    <div className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4 text-sm leading-6 text-secondaryGray-600">
+                      <p>1. 这是只读 viewer 快照，不会抢占 executor 的 tick 控制权。</p>
+                      <p>2. 视角支持第一视角和第三视角，行为与 `scripts/ego_viewer.py` 对齐。</p>
+                      <p>3. 若画面暂时空白，通常表示 run 还未进入运行态或当前 world 中尚未挂上 ego。</p>
+                    </div>
+                  </div>
+                )}
+              </Panel>
+
               <Panel title="运行环境热更新" subtitle="运行中可以调整天气和 viewer 模式，方便复现实验与观察。">
                 <div className="form-grid">
                   <label className="field">

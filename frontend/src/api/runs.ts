@@ -1,5 +1,5 @@
 import { apiRequest, postJson } from './client';
-import type { CreateRunPayload, RunEnvironmentState, RunEvent, RunRecord, WeatherConfig } from './types';
+import type { CreateRunPayload, RunEnvironmentState, RunEvent, RunRecord, RunViewerInfo, WeatherConfig } from './types';
 
 export function listRuns(status?: string) {
   return apiRequest<RunRecord[]>('/runs', {
@@ -45,4 +45,8 @@ export function updateRunEnvironment(
   }
 ) {
   return postJson<RunEnvironmentState>(`/runs/${runId}/environment`, payload);
+}
+
+export function getRunViewer(runId: string) {
+  return apiRequest<RunViewerInfo>(`/runs/${runId}/viewer`);
 }

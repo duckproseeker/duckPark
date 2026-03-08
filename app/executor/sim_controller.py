@@ -182,6 +182,8 @@ class SimController:
                 "EGO_SPAWNED",
                 "Ego 车辆生成成功",
                 payload={
+                    "actor_id": int(ego_vehicle.id),
+                    "role_name": ego_vehicle.attributes.get("role_name", ""),
                     "blueprint": descriptor.ego_vehicle.blueprint,
                     "spawn_source": ego_spawn.source,
                     "requested_spawn_point": ego_spawn.requested_spawn_point,

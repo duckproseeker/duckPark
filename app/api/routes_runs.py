@@ -3,12 +3,12 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, NoReturn
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.api.schemas import ApiResponse, CreateRunRequest, RunEnvironmentUpdateRequest
 from app.core.config import get_settings
 from app.core.errors import AppError, ConflictError, NotFoundError, ValidationError
-from app.core.models import RunRecord
+from app.core.models import RunRecord, RunStatus
 from app.orchestrator.queue import FileCommandQueue
 from app.orchestrator.run_manager import RunManager
 from app.storage.artifact_store import ArtifactStore
@@ -16,8 +16,19 @@ from app.storage.gateway_store import GatewayStore
 from app.storage.run_control_store import RunControlStore
 from app.storage.run_store import RunStore
 from app.utils.time_utils import to_iso8601
+from app.viewer.ego_snapshot import (
+    EgoSnapshotViewer,
+    EgoSnapshotViewerError,
+    list_viewer_views,
+)
 
 router = APIRouter(tags=["运行管理"])
+ACTIVE_VIEWER_STATUSES = {
+    RunStatus.STARTING,
+    RunStatus.RUNNING,
+    RunStatus.PAUSED,
+    RunStatus.STOPPING,
+}
 
 
 @lru_cache(maxsize=1)
@@ -90,6 +101,32 @@ def raise_http_error(exc: AppError) -> NoReturn:
     if isinstance(exc, ValidationError):
         raise HTTPException(status_code=422, detail=detail)
     raise HTTPException(status_code=500, detail=detail)
+
+
+def _viewer_preferred_actor_id(events: list[dict[str, Any]]) -> int | None:
+    for event in reversed(events):
+        if event.get("event_type") != "EGO_SPAWNED":
+            continue
+        payload = event.get("payload", {})
+        actor_id = payload.get("actor_id")
+        if isinstance(actor_id, int):
+            return actor_id
+    return None
+
+
+def _viewer_preferred_spawn_point(events: list[dict[str, Any]], run: RunRecord) -> dict[str, float] | None:
+    for event in reversed(events):
+        if event.get("event_type") != "EGO_SPAWNED":
+            continue
+        payload = event.get("payload", {})
+        resolved_spawn_point = payload.get("resolved_spawn_point")
+        if isinstance(resolved_spawn_point, dict):
+            return resolved_spawn_point
+
+    spawn_point = run.descriptor.get("ego_vehicle", {}).get("spawn_point")
+    if isinstance(spawn_point, dict):
+        return spawn_point
+    return None
 
 
 @router.post(
@@ -245,6 +282,85 @@ def get_run_environment(run_id: str) -> ApiResponse:
             "descriptor_debug": run.descriptor.get("debug", {}),
             "runtime_control": control_store.get(run_id),
         },
+    )
+
+
+@router.get(
+    "/runs/{run_id}/viewer",
+    response_model=ApiResponse,
+    summary="查询运行时 viewer 状态",
+    description="返回前端运行时显示界面所需的视角列表和当前可用性。",
+)
+def get_run_viewer(run_id: str) -> ApiResponse:
+    manager = get_run_manager()
+    try:
+        run = manager.get_run(run_id)
+    except AppError as exc:
+        raise_http_error(exc)
+
+    available = run.status in ACTIVE_VIEWER_STATUSES
+    reason = None
+    if not available:
+        reason = "viewer 仅在 STARTING / RUNNING / PAUSED / STOPPING 状态可用"
+
+    return ApiResponse(
+        success=True,
+        data={
+            "run_id": run_id,
+            "available": available,
+            "reason": reason,
+            "views": list_viewer_views(),
+            "snapshot_url": f"/runs/{run_id}/viewer/frame",
+            "refresh_interval_ms": 1200,
+        },
+    )
+
+
+@router.get(
+    "/runs/{run_id}/viewer/frame",
+    include_in_schema=False,
+    summary="获取运行时 viewer 单帧画面",
+)
+def get_run_viewer_frame(
+    run_id: str,
+    view: str = Query(default="third_person"),
+) -> Response:
+    manager = get_run_manager()
+    try:
+        run = manager.get_run(run_id)
+    except AppError as exc:
+        raise_http_error(exc)
+
+    if run.status not in ACTIVE_VIEWER_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RUN_VIEWER_NOT_AVAILABLE",
+                "message": "viewer 仅在运行中或即将停止的状态可用",
+            },
+        )
+
+    settings = get_settings()
+    events = manager.get_events(run_id)
+    viewer = EgoSnapshotViewer(
+        host=settings.carla_host,
+        port=settings.carla_port,
+        timeout_seconds=settings.carla_timeout_seconds,
+        preferred_actor_id=_viewer_preferred_actor_id(events),
+        preferred_spawn_point=_viewer_preferred_spawn_point(events, run),
+    )
+    try:
+        png_bytes = viewer.capture_png_bytes(view_id=view)
+    except EgoSnapshotViewerError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "RUN_VIEWER_UNAVAILABLE", "message": str(exc)},
+        ) from exc
+
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
 

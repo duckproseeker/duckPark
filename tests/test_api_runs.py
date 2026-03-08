@@ -132,3 +132,21 @@ def test_update_run_environment() -> None:
     assert get_resp.status_code == 200
     assert get_resp.json()["data"]["descriptor_weather"]["cloudiness"] == 72.0
     assert get_resp.json()["data"]["runtime_control"]["debug"]["viewer_friendly"] is True
+
+
+def test_run_viewer_info_on_created_run() -> None:
+    client = TestClient(app)
+
+    create_resp = client.post("/runs", json={"descriptor": VALID_DESCRIPTOR})
+    assert create_resp.status_code == 200
+    run_id = create_resp.json()["data"]["run_id"]
+
+    viewer_resp = client.get(f"/runs/{run_id}/viewer")
+    assert viewer_resp.status_code == 200
+    payload = viewer_resp.json()["data"]
+    assert payload["available"] is False
+    assert len(payload["views"]) >= 2
+    assert payload["snapshot_url"].endswith("/viewer/frame")
+
+    frame_resp = client.get(f"/runs/{run_id}/viewer/frame")
+    assert frame_resp.status_code == 409

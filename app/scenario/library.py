@@ -103,7 +103,8 @@ def list_scenario_catalog() -> list[dict[str, Any]]:
                 "description": spec.description,
                 "default_map_name": spec.default_map_name,
                 "execution_support": "native",
-                "source": {
+                "source": spec.source
+                or {
                     "provider": "duckpark",
                     "reference": spec.module.__name__,
                 },
@@ -117,6 +118,8 @@ def list_scenario_catalog() -> list[dict[str, Any]]:
         )
 
     for item in OFFICIAL_SCENARIO_ENTRIES:
+        if item.scenario_id in BUILTIN_SCENARIOS:
+            continue
         entries.append(
             {
                 "scenario_id": item.scenario_id,
