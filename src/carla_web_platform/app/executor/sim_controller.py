@@ -15,6 +15,7 @@ from app.executor.telemetry import TelemetryCollector
 from app.scenario.runtime import ScenarioRuntimeContext
 from app.scenario.validators import validate_descriptor
 from app.storage.artifact_store import ArtifactStore
+from app.storage.run_control_store import RunControlStore
 from app.storage.run_store import RunStore
 from app.utils.time_utils import now_utc
 
@@ -29,14 +30,39 @@ class SimController:
         settings: Settings,
         run_store: RunStore,
         artifact_store: ArtifactStore,
+        control_store: RunControlStore | None = None,
         client_factory: Callable[[str, int, float, int], CarlaClient] = CarlaClient,
     ) -> None:
         self._settings = settings
         self._run_store = run_store
         self._artifact_store = artifact_store
+        self._control_store = control_store or RunControlStore(settings.controls_root)
         self._client_factory = client_factory
         self._scenario_adapter = ScenarioAdapter()
         self._recorder = RecorderManager()
+
+    def _apply_environment_update(
+        self,
+        run_id: str,
+        carla_client: CarlaClient,
+        environment_state: dict[str, Any],
+    ) -> bool:
+        weather_payload = environment_state.get("weather")
+        if not isinstance(weather_payload, dict):
+            return False
+
+        preset_name = str(weather_payload.get("preset", "")).strip()
+        if not preset_name:
+            return False
+
+        carla_client.set_weather(preset_name, overrides=weather_payload)
+        self._emit_event(
+            run_id,
+            "ENVIRONMENT_UPDATED",
+            "运行环境参数已更新",
+            payload=environment_state,
+        )
+        return True
 
     def _emit_event(
         self,
@@ -97,6 +123,7 @@ class SimController:
         context: ScenarioRuntimeContext | None = None
         failure_reason: str | None = None
         final_status: RunStatus = RunStatus.COMPLETED
+        last_environment_signature: dict[str, Any] | None = None
 
         try:
             self._transition(run_id, RunStatus.STARTING)
@@ -116,15 +143,21 @@ class SimController:
             carla_client.connect()
             self._emit_event(run_id, "CARLA_CONNECTED", "已连接 CARLA")
 
-            carla_client.load_map(descriptor.map_name)
+            resolved_map_name = carla_client.load_map(descriptor.map_name)
             self._emit_event(
                 run_id,
                 "MAP_LOADED",
                 "地图加载完成",
-                payload={"map_name": descriptor.map_name},
+                payload={
+                    "requested_map_name": descriptor.map_name,
+                    "resolved_map_name": resolved_map_name,
+                },
             )
 
-            carla_client.set_weather(descriptor.weather.preset)
+            carla_client.set_weather(
+                descriptor.weather.preset,
+                overrides=descriptor.weather.to_runtime_payload(),
+            )
             carla_client.configure_world_sync(True, descriptor.sync.fixed_delta_seconds)
             self._emit_event(
                 run_id,
@@ -194,6 +227,19 @@ class SimController:
                     self._transition(run_id, RunStatus.STOPPING)
                     self._emit_event(run_id, "RUN_STOPPING", "运行进入 STOPPING")
                     break
+
+                environment_state = self._control_store.get(run_id)
+                if environment_state and environment_state != last_environment_signature:
+                    self._apply_environment_update(run_id, carla_client, environment_state)
+                    last_environment_signature = environment_state
+                    debug_state = environment_state.get("debug")
+                    if isinstance(debug_state, dict) and "viewer_friendly" in debug_state:
+                        viewer_friendly_enabled = bool(debug_state.get("viewer_friendly"))
+                        viewer_friendly_sleep = (
+                            max(0.0, min(descriptor.sync.fixed_delta_seconds * 0.5, 0.05))
+                            if viewer_friendly_enabled
+                            else 0.0
+                        )
 
                 tick_result = carla_client.tick()
                 telemetry.on_tick(tick_result.frame, tick_result.sim_time)

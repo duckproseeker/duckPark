@@ -33,6 +33,35 @@ class GatewayStatus(str, Enum):
     OFFLINE = "OFFLINE"
 
 
+class CaptureStatus(str, Enum):
+    CREATED = "CREATED"
+    RUNNING = "RUNNING"
+    STOPPED = "STOPPED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+
+
+class ProjectStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    PILOT = "PILOT"
+    ARCHIVED = "ARCHIVED"
+
+
+class BenchmarkTaskStatus(str, Enum):
+    CREATED = "CREATED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    PARTIAL_FAILED = "PARTIAL_FAILED"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+
+
+class ReportStatus(str, Enum):
+    READY = "READY"
+    FAILED = "FAILED"
+
+
 class RunEvent(BaseModel):
     timestamp: datetime
     run_id: str
@@ -85,5 +114,110 @@ class GatewayRecord(BaseModel):
     current_run_id: str | None = None
     last_heartbeat_at: datetime | None = None
     last_seen_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CaptureFrameRecord(BaseModel):
+    frame_index: int
+    captured_at_utc: datetime | None = None
+    relative_path: str
+    width: int | None = None
+    height: int | None = None
+    size_bytes: int | None = None
+
+
+class CaptureRecord(BaseModel):
+    capture_id: str
+    gateway_id: str
+    source: str
+    save_format: str
+    sample_fps: float
+    max_frames: int | None = None
+    save_dir: str
+    manifest_path: str
+    note: str | None = None
+    status: CaptureStatus
+    saved_frames: int = 0
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    error_reason: str | None = None
+
+
+class ProjectRecord(BaseModel):
+    project_id: str
+    name: str
+    vendor: str
+    processor: str
+    description: str
+    benchmark_focus: list[str] = Field(default_factory=list)
+    target_metrics: list[str] = Field(default_factory=list)
+    input_modes: list[str] = Field(default_factory=list)
+    status: ProjectStatus = ProjectStatus.ACTIVE
+    created_at: datetime
+    updated_at: datetime
+
+
+class BenchmarkDefinitionRecord(BaseModel):
+    benchmark_definition_id: str
+    name: str
+    description: str
+    focus_metrics: list[str] = Field(default_factory=list)
+    cadence: str
+    report_shape: str
+    project_ids: list[str] = Field(default_factory=list)
+    default_evaluation_profile_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BenchmarkTaskMatrixEntry(BaseModel):
+    scenario_id: str
+    scenario_name: str
+    scenario_display_name: str
+    requested_map_name: str
+    resolved_map_name: str
+    display_map_name: str
+    environment_preset_id: str
+    environment_name: str
+    sensor_profile_name: str
+
+
+class BenchmarkTaskRecord(BaseModel):
+    benchmark_task_id: str
+    project_id: str
+    project_name: str
+    dut_model: str | None = None
+    benchmark_definition_id: str
+    benchmark_name: str
+    status: BenchmarkTaskStatus = BenchmarkTaskStatus.CREATED
+    planned_run_count: int = 0
+    counts_by_status: dict[str, int] = Field(default_factory=dict)
+    run_ids: list[str] = Field(default_factory=list)
+    scenario_matrix: list[BenchmarkTaskMatrixEntry] = Field(default_factory=list)
+    hil_config: dict[str, Any] | None = None
+    evaluation_profile_name: str | None = None
+    auto_start: bool = False
+    summary: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+
+
+class ReportRecord(BaseModel):
+    report_id: str
+    benchmark_task_id: str
+    project_id: str
+    benchmark_definition_id: str
+    dut_model: str | None = None
+    title: str
+    status: ReportStatus = ReportStatus.READY
+    artifact_dir: str
+    json_path: str
+    markdown_path: str
+    summary: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime

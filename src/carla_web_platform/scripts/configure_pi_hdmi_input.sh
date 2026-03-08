@@ -6,7 +6,7 @@ PROJECT_ROOT=$(cd -- "${SCRIPT_DIR}/.." && pwd)
 STATE_DIR="${PI_GATEWAY_STATE_DIR:-${PROJECT_ROOT}/run_data/pi_gateway}"
 STATE_FILE="${STATE_DIR}/bridge_state.json"
 
-MEDIA_DEVICE="${PI_GATEWAY_MEDIA_DEVICE:-/dev/media0}"
+MEDIA_DEVICE="${PI_GATEWAY_MEDIA_DEVICE:-}"
 HDMI_STATUS_DEVICE="${PI_GATEWAY_HDMI_STATUS_DEVICE:-/dev/v4l-subdev2}"
 INPUT_VIDEO_DEVICE="${PI_GATEWAY_INPUT_VIDEO_DEVICE:-/dev/video0}"
 EDID_TYPE="${PI_GATEWAY_HDMI_EDID_TYPE:-hdmi}"
@@ -19,7 +19,7 @@ usage() {
   bash scripts/configure_pi_hdmi_input.sh [options]
 
 可选参数:
-  --media-device <path>         media device，默认 /dev/media0
+  --media-device <path>         media device，默认自动探测 rp1-cfe
   --hdmi-status-device <path>   tc358743 subdev，默认 /dev/v4l-subdev2
   --input-video-device <path>   采集节点，默认 /dev/video0
   --edid-type <type>            默认 hdmi
@@ -35,6 +35,18 @@ require_arg_value() {
     usage >&2
     exit 1
   fi
+}
+
+find_rp1_cfe_media_device() {
+  local dev
+  for dev in /dev/media*; do
+    [[ -e "${dev}" ]] || continue
+    if media-ctl -d "${dev}" -p 2>/dev/null | grep -qE '^(driver|model)[[:space:]]+rp1-cfe$'; then
+      printf '%s\n' "${dev}"
+      return 0
+    fi
+  done
+  return 1
 }
 
 while (($# > 0)); do
@@ -81,6 +93,15 @@ while (($# > 0)); do
   esac
 done
 
+if [[ -z "${MEDIA_DEVICE}" ]]; then
+  MEDIA_DEVICE="$(find_rp1_cfe_media_device || true)"
+fi
+
+if [[ -z "${MEDIA_DEVICE}" ]]; then
+  echo "未找到 rp1-cfe media device，请手动传入 --media-device" >&2
+  exit 1
+fi
+
 mkdir -p "${STATE_DIR}"
 
 if [[ ! -e "${MEDIA_DEVICE}" || ! -e "${HDMI_STATUS_DEVICE}" || ! -e "${INPUT_VIDEO_DEVICE}" ]]; then
@@ -90,6 +111,10 @@ fi
 
 v4l2-ctl -d "${HDMI_STATUS_DEVICE}" --set-edid "pad=0,type=${EDID_TYPE}"
 sleep 1
+
+# tc358743 在热插拔后可能只更新 detected timings，未同步到 current timings。
+# 主动执行一次 query sync，避免后续 capture node 卡死在错误时序上。
+v4l2-ctl -d "${HDMI_STATUS_DEVICE}" --set-dv-bt-timings query >/dev/null 2>&1 || true
 
 STATUS_LOG=$(v4l2-ctl -d "${HDMI_STATUS_DEVICE}" --log-status 2>&1 || true)
 if [[ -z "${WIDTH}" || -z "${HEIGHT}" ]]; then
@@ -142,6 +167,7 @@ payload = {
     "capture_height": int("${HEIGHT}"),
     "capture_pixel_format": "RGB3",
     "hdmi_edid_type": "${EDID_TYPE}",
+    "dv_timings_synced": True,
     "hdmi_hotplug_enabled": parse_bool("HOTPLUG_STATUS"),
     "hdmi_tmds_signal_detected": parse_bool("TMDS_STATUS"),
     "hdmi_stable_sync_signal": parse_bool("SYNC_STATUS"),

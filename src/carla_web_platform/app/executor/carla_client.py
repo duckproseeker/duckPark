@@ -5,6 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.scenario.maps import (
+    choose_preferred_available_map,
+    map_family_key,
+    normalize_map_tail,
+)
+
 
 @dataclass
 class CarlaTickResult:
@@ -76,24 +82,73 @@ class CarlaClient:
         self._world = self._client.get_world()
         self._tm = self._client.get_trafficmanager(self._traffic_manager_port)
 
-    def load_map(self, map_name: str) -> None:
+    def _normalize_map_name(self, map_name: str) -> str:
+        return normalize_map_tail(map_name)
+
+    def resolve_map_name(self, requested_map_name: str) -> str:
         if self._client is None:
             raise CarlaClientError("CARLA client is not connected")
-        self._world = self._client.load_world(map_name)
+
+        available_maps = self.get_available_maps()
+        requested_raw = str(requested_map_name).strip().rstrip("/")
+        requested_tail = self._normalize_map_name(requested_raw).lower()
+
+        for candidate in available_maps:
+            candidate_raw = str(candidate).strip().rstrip("/")
+            candidate_tail = self._normalize_map_name(candidate_raw).lower()
+            if candidate_raw == requested_raw or candidate_tail == requested_tail:
+                return candidate_raw
+
+        family_candidates = [
+            str(candidate).strip().rstrip("/")
+            for candidate in available_maps
+            if map_family_key(candidate) == map_family_key(requested_raw)
+        ]
+        if family_candidates:
+            return choose_preferred_available_map(family_candidates)
+
+        raise CarlaClientError(f"Map '{requested_map_name}' not found")
+
+    def load_map(self, map_name: str) -> str:
+        if self._client is None:
+            raise CarlaClientError("CARLA client is not connected")
+        resolved_map_name = self.resolve_map_name(map_name)
+        self._world = self._client.load_world(resolved_map_name)
+        return resolved_map_name
 
     def get_available_maps(self) -> list[str]:
         if self._client is None:
             raise CarlaClientError("CARLA client is not connected")
         return [str(name) for name in self._client.get_available_maps()]
 
-    def set_weather(self, preset_name: str) -> None:
+    def set_weather(self, preset_name: str, overrides: dict[str, Any] | None = None) -> None:
         if self._world is None or self._carla is None:
             raise CarlaClientError("CARLA world is not ready")
 
         weather = getattr(self._carla.WeatherParameters, preset_name, None)
         if weather is None:
             raise CarlaClientError(f"Unsupported weather preset: {preset_name}")
-        self._world.set_weather(weather)
+
+        runtime_weather = self._carla.WeatherParameters(
+            cloudiness=float(weather.cloudiness),
+            precipitation=float(weather.precipitation),
+            precipitation_deposits=float(weather.precipitation_deposits),
+            wind_intensity=float(weather.wind_intensity),
+            sun_azimuth_angle=float(weather.sun_azimuth_angle),
+            sun_altitude_angle=float(weather.sun_altitude_angle),
+            fog_density=float(weather.fog_density),
+            wetness=float(weather.wetness),
+        )
+
+        if overrides:
+            for key, value in overrides.items():
+                if key == "preset" or value is None:
+                    continue
+                if not hasattr(runtime_weather, key):
+                    raise CarlaClientError(f"Unsupported weather field: {key}")
+                setattr(runtime_weather, key, float(value))
+
+        self._world.set_weather(runtime_weather)
 
     def configure_world_sync(self, enabled: bool, fixed_delta_seconds: float) -> None:
         if self._world is None:

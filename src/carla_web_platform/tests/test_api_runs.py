@@ -105,3 +105,30 @@ def test_create_run_with_hil_config_and_evaluation_profile() -> None:
         get_resp.json()["data"]["evaluation_profile"]["profile_name"]
         == "yolo_open_loop_v1"
     )
+
+
+def test_update_run_environment() -> None:
+    client = TestClient(app)
+
+    create_resp = client.post("/runs", json={"descriptor": VALID_DESCRIPTOR})
+    assert create_resp.status_code == 200
+    run_id = create_resp.json()["data"]["run_id"]
+
+    update_resp = client.post(
+        f"/runs/{run_id}/environment",
+        json={
+            "weather": {
+                "preset": "CloudyNoon",
+                "cloudiness": 72.0,
+                "fog_density": 15.0,
+            },
+            "debug": {"viewer_friendly": True},
+        },
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["data"]["weather"]["preset"] == "CloudyNoon"
+
+    get_resp = client.get(f"/runs/{run_id}/environment")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["data"]["descriptor_weather"]["cloudiness"] == 72.0
+    assert get_resp.json()["data"]["runtime_control"]["debug"]["viewer_friendly"] is True

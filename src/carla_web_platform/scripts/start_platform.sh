@@ -26,6 +26,7 @@ usage() {
   --carla-host <host>              CARLA server 地址
   --carla-port <port>              CARLA RPC 端口
   --traffic-manager-port <port>    Traffic Manager 端口
+  --with-executor                  显式启动 executor，覆盖 .env.local 中的 START_EXECUTOR=false
   --no-executor                    仅启动 Web/API，不启动 executor
   --help                           输出帮助
 
@@ -72,6 +73,10 @@ while (($# > 0)); do
       ;;
     --no-executor)
       export START_EXECUTOR=false
+      shift
+      ;;
+    --with-executor)
+      export START_EXECUTOR=true
       shift
       ;;
     --help|-h)

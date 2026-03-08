@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 DEFAULT_EVALUATION_PROFILES: list[dict[str, Any]] = [
     {
         "profile_name": "yolo_open_loop_v1",

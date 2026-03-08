@@ -4,3 +4,5 @@ __pycache__/
 artifacts/
 run_data/
 .env.local
+frontend/node_modules/
+frontend/dist/

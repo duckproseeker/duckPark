@@ -42,6 +42,9 @@ class FileCommandQueue:
             json.dump(command.model_dump(mode="json"), handle, indent=2)
         return command
 
+    def count_pending(self) -> int:
+        return len(list(self._commands_root.glob("*.json")))
+
     def pop_next(self) -> RunCommand | None:
         candidates = sorted(self._commands_root.glob("*.json"))
         for path in candidates:
