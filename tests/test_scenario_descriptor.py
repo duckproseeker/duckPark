@@ -44,3 +44,37 @@ def test_descriptor_validation_failure() -> None:
     }
     with pytest.raises(PydanticValidationError):
         validate_descriptor(bad_payload)
+
+
+def test_descriptor_validation_with_custom_weather_and_sensors() -> None:
+    descriptor = validate_descriptor(
+        {
+            **VALID_DESCRIPTOR,
+            "weather": {
+                "preset": "CloudyNoon",
+                "cloudiness": 70.0,
+                "fog_density": 10.0,
+            },
+            "sensors": {
+                "enabled": True,
+                "profile_name": "front_rgb",
+                "sensors": [
+                    {
+                        "id": "FrontRGB",
+                        "type": "sensor.camera.rgb",
+                        "x": 1.5,
+                        "y": 0.0,
+                        "z": 1.7,
+                        "width": 1920,
+                        "height": 1080,
+                        "fov": 90.0,
+                    }
+                ],
+            },
+        }
+    )
+
+    assert descriptor.weather.cloudiness == 70.0
+    assert descriptor.sensors.enabled is True
+    assert descriptor.sensors.profile_name == "front_rgb"
+    assert descriptor.sensors.sensors[0].type == "sensor.camera.rgb"

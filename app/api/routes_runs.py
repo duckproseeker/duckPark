@@ -5,7 +5,7 @@ from typing import Any, NoReturn
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.api.schemas import ApiResponse, CreateRunRequest
+from app.api.schemas import ApiResponse, CreateRunRequest, RunEnvironmentUpdateRequest
 from app.core.config import get_settings
 from app.core.errors import AppError, ConflictError, NotFoundError, ValidationError
 from app.core.models import RunRecord
@@ -13,6 +13,7 @@ from app.orchestrator.queue import FileCommandQueue
 from app.orchestrator.run_manager import RunManager
 from app.storage.artifact_store import ArtifactStore
 from app.storage.gateway_store import GatewayStore
+from app.storage.run_control_store import RunControlStore
 from app.storage.run_store import RunStore
 from app.utils.time_utils import to_iso8601
 
@@ -34,6 +35,12 @@ def get_run_manager() -> RunManager:
 def get_artifact_store() -> ArtifactStore:
     settings = get_settings()
     return ArtifactStore(settings.artifacts_root)
+
+
+@lru_cache(maxsize=1)
+def get_control_store() -> RunControlStore:
+    settings = get_settings()
+    return RunControlStore(settings.controls_root)
 
 
 def run_to_payload(run: RunRecord) -> dict[str, Any]:
@@ -63,6 +70,10 @@ def run_to_payload(run: RunRecord) -> dict[str, Any]:
         "hil_config": run.hil_config,
         "evaluation_profile": run.evaluation_profile,
         "artifact_dir": run.artifact_dir,
+        "metadata": run.descriptor.get("metadata", {}),
+        "weather": run.descriptor.get("weather", {}),
+        "sensors": run.descriptor.get("sensors", {}),
+        "debug": run.descriptor.get("debug", {}),
         "sim_time": metrics.get("sim_time"),
         "current_tick": metrics.get("current_tick"),
         "wall_elapsed_seconds": metrics.get("wall_time"),
@@ -210,3 +221,68 @@ def get_run_events(run_id: str) -> ApiResponse:
         raise_http_error(exc)
 
     return ApiResponse(success=True, data=events)
+
+
+@router.get(
+    "/runs/{run_id}/environment",
+    response_model=ApiResponse,
+    summary="查询运行环境控制状态",
+    description="返回该 run 当前 descriptor 中的环境参数以及最近一次运行时环境控制值。",
+)
+def get_run_environment(run_id: str) -> ApiResponse:
+    manager = get_run_manager()
+    control_store = get_control_store()
+    try:
+        run = manager.get_run(run_id)
+    except AppError as exc:
+        raise_http_error(exc)
+
+    return ApiResponse(
+        success=True,
+        data={
+            "run_id": run_id,
+            "descriptor_weather": run.descriptor.get("weather", {}),
+            "descriptor_debug": run.descriptor.get("debug", {}),
+            "runtime_control": control_store.get(run_id),
+        },
+    )
+
+
+@router.post(
+    "/runs/{run_id}/environment",
+    response_model=ApiResponse,
+    summary="更新运行环境参数",
+    description="更新 run 的环境参数。运行中会由 executor 轮询并应用天气更新。",
+)
+def update_run_environment(run_id: str, request: RunEnvironmentUpdateRequest) -> ApiResponse:
+    settings = get_settings()
+    run_store = RunStore(settings.runs_root)
+    control_store = get_control_store()
+    try:
+        run = run_store.get(run_id)
+    except AppError as exc:
+        raise_http_error(exc)
+
+    updated_run = run_store.update_descriptor_sections(
+        run_id,
+        weather=request.weather.model_dump(mode="json", exclude_none=True),
+        debug=request.debug or run.descriptor.get("debug", {}),
+    )
+    control_state = control_store.save(
+        run_id,
+        {
+            "weather": request.weather.model_dump(mode="json", exclude_none=True),
+            "debug": request.debug or updated_run.descriptor.get("debug", {}),
+        },
+    )
+
+    return ApiResponse(
+        success=True,
+        data={
+            "run_id": run_id,
+            "descriptor_weather": updated_run.descriptor.get("weather", {}),
+            "descriptor_debug": updated_run.descriptor.get("debug", {}),
+            "weather": updated_run.descriptor.get("weather", {}),
+            "runtime_control": control_state,
+        },
+    )

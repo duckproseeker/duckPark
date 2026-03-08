@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from app.api.main import app
+from app.core.config import get_settings
+from app.orchestrator.queue import FileCommandQueue
+from app.storage.executor_store import ExecutorStore
+
+
+def test_system_status_reports_offline_executor_with_pending_queue() -> None:
+    client = TestClient(app)
+
+    run_response = client.post(
+        "/runs",
+        json={
+            "descriptor": {
+                "version": 1,
+                "scenario_name": "empty_drive",
+                "map_name": "Town01",
+                "weather": {"preset": "ClearNoon"},
+                "sync": {"enabled": True, "fixed_delta_seconds": 0.05},
+                "ego_vehicle": {
+                    "blueprint": "vehicle.tesla.model3",
+                    "spawn_point": {
+                        "x": 230.0,
+                        "y": 195.0,
+                        "z": 0.5,
+                        "roll": 0.0,
+                        "pitch": 0.0,
+                        "yaw": 90.0,
+                    },
+                },
+                "traffic": {"enabled": False, "num_vehicles": 0, "num_walkers": 0},
+                "sensors": {"enabled": False},
+                "termination": {"timeout_seconds": 20, "success_condition": "timeout"},
+                "recorder": {"enabled": False},
+                "metadata": {"author": "test", "tags": [], "description": "demo"},
+            }
+        },
+    )
+    run_id = run_response.json()["data"]["run_id"]
+    client.post(f"/runs/{run_id}/start")
+
+    response = client.get("/system/status")
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["executor"]["alive"] is False
+    assert payload["executor"]["pending_commands"] == 1
+    assert payload["counts"]["runs"]["QUEUED"] == 1
+
+
+def test_system_status_reports_live_executor_heartbeat() -> None:
+    settings = get_settings()
+    queue = FileCommandQueue(settings.commands_root)
+    ExecutorStore(settings.executor_root).write_heartbeat(
+        {
+            "status": "READY",
+            "active_run_id": None,
+            "last_command_run_id": "run_demo",
+            "updated_at_utc": "2026-03-07T00:00:00+00:00",
+            "pending_commands": queue.count_pending(),
+        }
+    )
+
+    client = TestClient(app)
+    response = client.get("/system/status")
+    assert response.status_code == 200
+    assert "executor" in response.json()["data"]

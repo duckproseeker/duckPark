@@ -6,6 +6,7 @@ from app.hil.gateway_agent import (
     GatewayAgentSettings,
     build_register_payload,
     determine_gateway_status,
+    parse_args,
     parse_csv,
     parse_tc358743_status,
 )
@@ -27,6 +28,7 @@ def make_settings(tmp_path: Path) -> GatewayAgentSettings:
         gadget_state_file=state_dir / "gadget_state.json",
         bridge_state_file=state_dir / "bridge_state.json",
         current_run_id_file=state_dir / "current_run_id",
+        capture_runtime_file=state_dir / "capture_runtime.json",
         agent_version="0.1.0",
         video_input_modes=("hdmi_x1301", "frame_stream"),
         dut_output_modes=("uvc_gadget",),
@@ -99,3 +101,15 @@ def test_parse_tc358743_status_extracts_signal_flags() -> None:
     assert metrics["hdmi_video_detected"] is False
     assert metrics["hdmi_configured_format"] == "640x480p59.94 (800x525)"
     assert metrics["hdmi_input_color_space"] == "RGB full range"
+
+
+def test_parse_args_auto_detects_media_device(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PI_GATEWAY_API_BASE_URL", "http://127.0.0.1:8000")
+    monkeypatch.setenv("PI_GATEWAY_ID", "rpi5-x1301-01")
+    monkeypatch.setenv("PI_GATEWAY_NAME", "bench-a")
+    monkeypatch.delenv("PI_GATEWAY_MEDIA_DEVICE", raising=False)
+    monkeypatch.setattr("app.hil.gateway_agent.find_media_device", lambda driver_name: "/dev/media3")
+
+    settings = parse_args(["--state-dir", str(tmp_path / "state"), "--once"])
+
+    assert settings.media_device == "/dev/media3"

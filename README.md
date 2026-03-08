@@ -1,93 +1,163 @@
-# CARLA 场景仿真控制层 MVP（0.9.16）
+# CARLA 芯片测评平台
 
-本项目是面向 **CARLA 0.9.16** 的“场景仿真控制层 MVP”。
+本项目是一个基于 **CARLA 0.9.16** 的芯片测评平台，用于给算法工程师和测试工程师提供统一的场景仿真、批量执行、设备接入、指标回传和报告导出能力。
 
-定位：
-- 打通仿真控制与任务编排闭环
-- 保持 API 层与 executor 层分离
-- 保证 synchronous mode 下只有一个 tick 控制方
-- 为后续 Web 扩展与 HIL 扩展保留清晰边界
+当前版本已经不再是“最小控制台 MVP”，而是围绕下面的业务链路组织：
 
-## 当前已实现
+`所属项目 -> 基准任务 -> 场景矩阵 -> 设备绑定 / DUT 登记 -> benchmark task -> 多个 runs -> 指标汇总 -> 报告导出`
 
-- run 生命周期管理（创建/启动/停止/取消/查询）
-- run state machine（CREATED/QUEUED/STARTING/RUNNING/PAUSED/STOPPING/COMPLETED/FAILED/CANCELED）
-- descriptor 场景配置（YAML/Pydantic 校验）
-- executor 控制 CARLA 生命周期（连接、加载地图、同步参数、tick 推进、资源清理）
-- 每个 run 的 artifact 输出（`config_snapshot.json`、`status.json`、`metrics.json`、`events.jsonl`、`run.log`）
-- 极简中文 Web 控制台（`/` 或 `/ui`）
-- Swagger 调试页（`/docs`）
-- `debug.viewer_friendly` 调试友好模式（可选）
-- 阶段二最小网关注册/心跳 API
-- 树莓派 5 UVC gadget 启动脚本（`g_webcam`）
-- 树莓派网关 agent（注册、心跳、UVC/UDC 状态上报）
+## 当前能力
 
-## 当前未实现
+- 后端一等模型：
+  - `projects`
+  - `benchmark-definitions`
+  - `benchmark-tasks`
+  - `reports`
+  - `runs`
+- 前端主导航：
+  - `项目`
+  - `基准任务`
+  - `场景集`
+  - `执行中心`
+  - `报告中心`
+  - `设备中心`
+- 批量测评任务创建：
+  - 一个 `benchmark task` 可展开为多个 `run`
+  - 同时支持多场景、多地图、多天气、多传感器组合
+- 地图归一化：
+  - UI 把 `TownXX` 与 `TownXX_Opt` 视为同一张地图
+  - 后端统一优先使用优化后的 `TownXX_Opt`
+- 报告导出：
+  - 当前支持 `JSON` 和 `Markdown`
+- DUT 录入规则：
+  - DUT 型号不在首页和项目页写死
+  - 由测试人员在创建任务时录入
+  - 任务与报告会显式带出 DUT 型号
 
-- 树莓派视频桥接的稳定性验证（脚本已提供，待实机持续验证）
-- HIL 时间同步
-- DUT 数据注入
-- 在线实时大屏/复杂前端
-- 分布式调度
-- 完整 ScenarioRunner / Leaderboard 深度集成
+## 技术栈
 
-## 关于 ScenarioRunner/Leaderboard 的真实状态
+- 前端：`React 19` + `TypeScript` + `Vite` + `React Router` + `TanStack Query` + `TailwindCSS`
+- 后端：`FastAPI` + `Pydantic v2`
+- 测试：`pytest`
+- 代码质量：`ruff` + `black` + `isort`
+- 运行方式：Docker 或本地 Python/Conda
 
-当前版本是**自定义最小 CARLA executor MVP**：
-- 已实现基础场景编排与执行闭环
-- **尚未**实现完整 ScenarioRunner 编排链路
-- **尚未**实现 Leaderboard 评测流
-- 相关目录仅作为后续适配扩展基础，不代表已深度接入
-
-## 页面入口说明
-
-- `/docs`：开发调试接口页（Swagger/OpenAPI），用于接口联调，不是正式控制台
-- `/` 或 `/ui`：正式最小中文控制台（浏览器操作入口）
-
-## 时间语义（重点）
-
-- `started_at_utc` / `ended_at_utc`：系统 UTC 时间（控制层时间）
-- `sim_time`：CARLA 仿真时间（由 world tick 推进）
-- `wall_elapsed_seconds`：墙钟耗时（本机真实运行时间）
-- `timeout_seconds`：**按仿真时间**判定，不等于墙钟运行时长
-
-说明：
-- 正式模式下 executor 会尽快推进仿真，run 可能在墙钟上很快结束
-- 如果你需要人工观察（例如 pygame viewer），建议启用 `debug.viewer_friendly=true` 或提高 timeout
-
-## 项目结构
+## 目录结构
 
 ```text
 carla_web_platform/
   app/
-    api/
-    core/
-    orchestrator/
-    executor/
-    scenario/
-    storage/
-    templates/
-      ui.html
-    static/
-      ui.js
-      ui.css
-  configs/scenarios/
-  scripts/
-  docker/
-  tests/
-  artifacts/
-  run_data/
+    api/                  # FastAPI 路由与响应封装
+    core/                 # 配置、模型、错误定义
+    executor/             # CARLA 执行器
+    orchestrator/         # run manager / command queue
+    platform/             # project / benchmark / report 业务服务
+    scenario/             # 场景目录、地图归一化、天气与传感器模板
+    storage/              # 文件型持久化
+  frontend/
+    src/
+      api/                # REST client
+      components/         # 公共 UI 组件
+      pages/              # 页面级功能
+      lib/                # 指标与格式化辅助
+  configs/                # 场景、传感器等配置
+  scripts/                # 启动与运维脚本
+  docker/                 # Docker 构建与 compose
+  tests/                  # 后端 API 与行为测试
 ```
 
-## 启动方式
+## 关键数据模型
 
-## 本地 Miniconda3 环境（macOS / Apple Silicon）
+### Project
 
-适用目标：
-- 本地开发 Web 控制台、API、配置校验与测试
-- 远端 CARLA server 联调前的控制面验证
+项目不等于芯片型号。它表示一个测评业务容器，例如：
 
-创建环境：
+- `基线验证项目`
+- `矩阵回归项目`
+- `热稳压测项目`
+
+### Benchmark Definition
+
+定义“测什么”，包括：
+
+- 关注指标
+- 执行节奏
+- 报告形态
+- 默认评测协议
+
+### Benchmark Task
+
+一次实际创建的测评任务，包含：
+
+- 所属项目
+- DUT 型号
+- 场景矩阵
+- 设备绑定信息
+- 评测协议
+- 自动启动开关
+- 展开的多个 `run_ids`
+
+### Report
+
+由 `benchmark task` 导出的报告资产，当前落地为：
+
+- `report.json`
+- `report.md`
+
+## 关键接口
+
+### 项目与模板
+
+- `GET /projects`
+- `GET /benchmark-definitions`
+
+### 测评任务
+
+- `GET /benchmark-tasks`
+- `GET /benchmark-tasks/{benchmark_task_id}`
+- `POST /benchmark-tasks`
+
+请求示例：
+
+```json
+{
+  "project_id": "baseline-validation",
+  "benchmark_definition_id": "perception-baseline",
+  "dut_model": "演示开发板",
+  "scenario_matrix": [
+    {
+      "scenario_id": "empty_drive",
+      "map_name": "Town01",
+      "environment_preset_id": "clear_day",
+      "sensor_profile_name": "front_rgb"
+    }
+  ],
+  "hil_config": {
+    "mode": "camera_open_loop",
+    "gateway_id": "pi-gateway-01",
+    "video_source": "hdmi_x1301",
+    "dut_input_mode": "uvc_camera",
+    "result_ingest_mode": "http_push"
+  },
+  "evaluation_profile_name": "yolo_open_loop_v1",
+  "auto_start": false
+}
+```
+
+### 运行与报告
+
+- `GET /runs`
+- `POST /runs/{run_id}/start`
+- `POST /runs/{run_id}/stop`
+- `POST /runs/{run_id}/cancel`
+- `GET /reports`
+- `POST /reports/export`
+- `GET /reports/{report_id}/download?format=json`
+- `GET /reports/{report_id}/download?format=markdown`
+
+## 本地开发
+
+### Python 环境
 
 ```bash
 cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
@@ -95,269 +165,75 @@ conda env create -f environment.web.yml
 conda activate duckpark-carla-web
 ```
 
-准备本地配置：
+### 启动后端
 
 ```bash
 cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
-cp .env.local.example .env.local
-```
-
-说明：
-- `.env.local` 会在 `scripts/start_platform.sh` 启动时自动加载
-- 默认已预填 `CARLA_HOST=192.168.110.151`
-- 如只需启动 Web/API 界面，可将 `START_EXECUTOR=false`
-
-平台边界：
-- 当前仓库代码目标版本为 `CARLA 0.9.16`
-- 官方 `0.9.16` package 安装文档主要面向 `Ubuntu` / `Windows`
-- 在 `macOS Apple Silicon` 上，本项目已验证可运行 Web/API 与测试；完整 executor 更建议运行在带匹配 `carla` Python API 的 Ubuntu 节点或容器中
-
-远端联调前检查：
-
-```bash
-nc -G 2 -vz 192.168.110.151 2000
-nc -G 2 -vz 192.168.110.151 8010
-```
-
-若超时，通常表示：
-- CARLA server 未启动
-- Traffic Manager 未启动
-- 主机防火墙或交换网络未放通端口
-
-### 1) 启动 carla-server
-
-```bash
-docker compose -f docker/docker-compose.yml up -d carla-server
-```
-
-### 2) 启动 sim-executor（内含 API + executor）
-
-```bash
-docker compose -f docker/docker-compose.yml up -d --build sim-executor
-```
-
-默认访问：
-- 控制台：`http://127.0.0.1:8000/`
-- Swagger：`http://127.0.0.1:8000/docs`
-
-### 3) 本地直接运行（不走 Docker）
-
-```bash
-cd /ros2_ws/src/carla_web_platform
-pip install -r requirements.txt
 bash scripts/start_platform.sh --carla-host 127.0.0.1 --carla-port 2000 --traffic-manager-port 8010
 ```
 
-本地 conda 运行示例：
+只启动 Web/API、不启动 executor：
 
 ```bash
 cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
-conda run -n duckpark-carla-web bash scripts/start_platform.sh --carla-host 192.168.110.151 --carla-port 2000 --traffic-manager-port 8010
+bash scripts/start_platform.sh --api-host 0.0.0.0 --api-port 8000 --no-executor --carla-host 127.0.0.1
 ```
 
-只启动 Web/API：
+### 启动前端开发服务器
 
 ```bash
-bash scripts/start_platform.sh --carla-host 127.0.0.1 --carla-port 2000 --traffic-manager-port 8010 --no-executor
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform/frontend
+npm install
+npm run dev -- --host 0.0.0.0
 ```
 
-## 最小验证流程
+如果仍然采用一体化部署，则后端会直接托管 `frontend/dist` 到 `/ui`。
 
-1. 打开 `http://127.0.0.1:8000/`，进入中文控制台
-2. 在“创建运行”中选择场景，设置 `map_name`、`timeout_seconds`、`fixed_delta_seconds`
-3. 如需便于观察勾选 `debug.viewer_friendly`
-4. 点击“创建运行”
-5. 在“运行列表”点击“启动”
-6. 观察状态变化（QUEUED -> STARTING -> RUNNING -> COMPLETED/FAILED）
-7. 点击“查看事件”检查事件流
-8. 到 artifact 目录查看结果
-
-artifact 默认目录：
-
-```text
-artifacts/<run_id>/
-  config_snapshot.json
-  status.json
-  metrics.json
-  events.jsonl
-  run.log
-  recorder/
-  outputs/
-```
-
-## 无头模式下如何确认场景在执行
-
-`/docs` 和最小 Web 控制台展示的是控制面/状态面，不是实时 3D 画面。可通过以下方式确认场景执行：
-
-1. run 状态流转是否正常（CREATED -> QUEUED -> STARTING -> RUNNING -> COMPLETED/FAILED）
-2. `events.jsonl` 是否持续写入（如 `RUN_STARTING`、`WORLD_SYNC_ENABLED`、`SCENARIO_STARTED`）
-3. `metrics.json` 是否更新 `sim_time` / `current_tick` / `wall_time`
-4. 使用 pygame `ego_viewer.py` 观察 ego 视角
-
-viewer 局限：
-- 仅用于本地调试观察，不参与控制
-- 不调用 tick，不影响单一 tick 控制权
-- 场景切图/重载 world 时需自动重绑（脚本已支持）
-
-## pygame ego viewer（本地观察工具）
-
-脚本路径：`/ros2_ws/src/scripts/ego_viewer.py`
-
-运行示例：
+## Docker 启动
 
 ```bash
-python3 /ros2_ws/src/scripts/ego_viewer.py --host 127.0.0.1 --port 2000
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
-你会在终端看到：
-- 当前 map
-- 当前 vehicle 总数
-- role_name 摘要
-- world/map 是否切换
-- 命中 ego 后的 id/role_name/位置/速度
+默认入口：
 
-## 调试友好模式示例
+- 平台 UI：`http://127.0.0.1:8000/ui`
+- Swagger：`http://127.0.0.1:8000/docs`
 
-示例文件：`configs/scenarios/sample_empty_drive_viewer_friendly.yaml`
+## 常用命令
 
-## 树莓派 5 网关（Pi 5 + X1301）最小接入
-
-当前阶段只做：
-- 树莓派以 UVC gadget 形式向 DUT 暴露摄像头
-- 树莓派 agent 定期向平台注册与上报心跳
-- Web 端展示网关状态与最近指标
-
-当前不做：
-- 多传感器时间同步
-- CAN / 串口 / 以太网协议转换
-- 闭环控制
-
-### 前提
-
-树莓派 5 需要独立供电，并在 `/boot/firmware/config.txt` 中启用：
-
-```text
-[pi5]
-dtoverlay=dwc2,dr_mode=peripheral
-```
-
-重启后应能看到：
+### 后端
 
 ```bash
-ls /sys/class/udc
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+make test
+make lint
+make format
 ```
 
-### 手动启动
-
-1. 启动 UVC gadget：
+### 前端
 
 ```bash
-cd /opt/duckpark/carla_web_platform
-bash scripts/start_pi_uvc_gadget.sh
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform/frontend
+npm run check-types
+npm run build
 ```
 
-2. 启动树莓派网关 agent：
+## 最小联调流程
 
-```bash
-cd /opt/duckpark/carla_web_platform
-bash scripts/start_pi_gateway_agent.sh \
-  --api-base-url http://192.168.110.151:8000 \
-  --gateway-id rpi5-x1301-01 \
-  --gateway-name bench-a
-```
+1. 启动平台后端和 executor。
+2. 打开 `/ui/executions`。
+3. 选择所属项目、基准任务模板。
+4. 通过下拉多选选择场景、地图、天气和传感器模板。
+5. 绑定设备并录入 DUT 型号。
+6. 创建 benchmark task。
+7. 在执行列表观察 `CREATED -> QUEUED -> RUNNING -> COMPLETED/FAILED`。
+8. 在 `/ui/reports` 导出最新任务报告。
 
-3. 配置 HDMI 输入并启动桥接：
+## 已知约束
 
-```bash
-cd /opt/duckpark/carla_web_platform
-bash scripts/start_pi_hdmi_to_uvc_bridge.sh
-```
-
-如果脚本提示 `TMDS signal detected: no`，说明树莓派已经完成 EDID/HPD 配置，但 HDMI 源设备还没有真正输出视频，需要检查源端显示输出或重新插拔 HDMI。
-
-或者直接一条命令启动整套：
-
-```bash
-cd /opt/duckpark/carla_web_platform
-bash scripts/start_pi_gateway_stack.sh \
-  --platform-host 192.168.110.151 \
-  --platform-port 8000 \
-  --gateway-id rpi5-x1301-01 \
-  --gateway-name bench-a
-```
-
-### systemd 模板
-
-模板文件：
-- `deploy/pi/duckpark-uvc-gadget.service`
-- `deploy/pi/duckpark-hdmi-bridge.service`
-- `deploy/pi/duckpark-gateway-agent.service`
-- `deploy/pi/gateway-agent.env.example`
-
-建议部署路径：
-
-```bash
-sudo mkdir -p /etc/duckpark
-sudo cp deploy/pi/gateway-agent.env.example /etc/duckpark/pi-gateway.env
-sudo cp deploy/pi/duckpark-uvc-gadget.service /etc/systemd/system/
-sudo cp deploy/pi/duckpark-hdmi-bridge.service /etc/systemd/system/
-sudo cp deploy/pi/duckpark-gateway-agent.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now duckpark-uvc-gadget.service
-sudo systemctl enable --now duckpark-hdmi-bridge.service
-sudo systemctl enable --now duckpark-gateway-agent.service
-```
-
-### 已验证的树莓派侧条件
-
-- `g_webcam` 可在 Pi 5 上成功绑定到 `1000480000.usb`
-- 绑定后会暴露 UVC 输出节点，例如 `/dev/video8`
-- `tc358743` 已验证可完成：
-  - 标准 EDID 下发
-  - HPD 打开
-  - `csi2:4 -> rp1-cfe-csi2_ch0` link 启用
-  - `RGB888_1X24` pad format 配置
-- agent 会上报：
-  - `udc_state`
-  - `host_connected`
-  - `hdmi_hotplug_enabled`
-  - `hdmi_tmds_signal_detected`
-  - `hdmi_stable_sync_signal`
-  - `capture_link_enabled`
-  - 输入视频节点是否存在
-  - gadget 视频节点是否存在
-  - 输入 / gadget 的基础 V4L2 格式信息
-
-核心字段：
-
-```yaml
-debug:
-  viewer_friendly: true
-```
-
-开启后 executor 会在每 tick 插入非常小的 sleep（默认逻辑仍是尽快推进仿真）。
-
-## 接口概览
-
-- `POST /runs`：创建 run
-- `POST /runs/{run_id}/start`：启动 run
-- `POST /runs/{run_id}/stop`：停止 run
-- `POST /runs/{run_id}/cancel`：取消 run
-- `GET /runs/{run_id}`：查询 run（含 UTC 时间 + sim/wall 指标字段）
-- `GET /runs`：查询列表
-- `GET /runs/{run_id}/events`：查询事件
-- `GET /scenarios`：查询内置场景与模板
-
-## 测试
-
-```bash
-pytest -q
-```
-
-当前包含：
-- run 状态机转移测试
-- descriptor 校验测试
-- API 创建/启动/停止流程测试
-- executor 异常转 FAILED 测试
-- artifact 目录生成测试
-- UI 页面路由冒烟测试
+- 前端开发态若与后端跨域分离运行，当前需要通过 Vite 代理或后端补充 CORS。
+- 功耗、温度、mAP、延迟等指标依赖网关或评测侧真实回传；未接入时前端会显示“待接入”。
+- 报告导出当前仅提供 `JSON` / `Markdown`，尚未提供 PDF。
+- `make lint` 可能受仓库内既有 Ruff 存量问题影响，提交前应先区分新增问题与历史问题。

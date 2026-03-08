@@ -95,3 +95,24 @@ class RunStore:
             return run
 
         return self.update(run_id, _mark)
+
+    def update_descriptor_sections(
+        self,
+        run_id: str,
+        weather: dict[str, object] | None = None,
+        debug: dict[str, object] | None = None,
+        sensors: dict[str, object] | None = None,
+    ) -> RunRecord:
+        def _update(run: RunRecord) -> RunRecord:
+            descriptor = dict(run.descriptor)
+            if weather is not None:
+                descriptor["weather"] = weather
+                run.map_name = str(descriptor.get("map_name", run.map_name))
+            if debug is not None:
+                descriptor["debug"] = debug
+            if sensors is not None:
+                descriptor["sensors"] = sensors
+            run.descriptor = descriptor
+            return run
+
+        return self.update(run_id, _update)

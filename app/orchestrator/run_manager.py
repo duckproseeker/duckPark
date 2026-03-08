@@ -9,6 +9,7 @@ from pydantic import ValidationError as PydanticValidationError
 from app.core.errors import ConflictError, ValidationError
 from app.core.models import EventLevel, RunEvent, RunRecord, RunStatus
 from app.orchestrator.queue import FileCommandQueue
+from app.scenario.maps import prefer_optimized_map_request
 from app.scenario.registry import BUILTIN_SCENARIOS
 from app.scenario.validators import load_descriptor_from_yaml, validate_descriptor
 from app.storage.artifact_store import ArtifactStore
@@ -75,6 +76,8 @@ class RunManager:
                 descriptor = validate_descriptor(descriptor_payload)
         except (ValueError, PydanticValidationError) as exc:
             raise ValidationError(f"场景描述校验失败: {exc}") from exc
+
+        descriptor.map_name = prefer_optimized_map_request(descriptor.map_name)
 
         if descriptor.scenario_name not in BUILTIN_SCENARIOS:
             raise ValidationError(

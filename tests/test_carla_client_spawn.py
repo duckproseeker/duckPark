@@ -11,14 +11,14 @@ class FakeLocation:
         self.y = y
         self.z = z
 
-    def distance(self, other: "FakeLocation") -> float:
+    def distance(self, other: FakeLocation) -> float:
         return math.sqrt(
             (self.x - other.x) ** 2
             + (self.y - other.y) ** 2
             + (self.z - other.z) ** 2
         )
 
-    def __add__(self, other: "FakeLocation") -> "FakeLocation":
+    def __add__(self, other: FakeLocation) -> FakeLocation:
         return FakeLocation(self.x + other.x, self.y + other.y, self.z + other.z)
 
 
@@ -50,7 +50,7 @@ class FakeWaypoint:
     def __init__(self, transform: FakeTransform) -> None:
         self.transform = transform
 
-    def next(self, distance_m: float) -> list["FakeWaypoint"]:
+    def next(self, distance_m: float) -> list[FakeWaypoint]:
         forward = self.transform.get_forward_vector()
         next_location = FakeLocation(
             self.transform.location.x + forward.x * distance_m,
@@ -151,6 +151,19 @@ class FakeWorld:
         return FakeActor(transform)
 
 
+class FakeClientForMaps:
+    def __init__(self, available_maps: list[str]) -> None:
+        self._available_maps = available_maps
+        self.loaded_map_name: str | None = None
+
+    def get_available_maps(self) -> list[str]:
+        return list(self._available_maps)
+
+    def load_world(self, map_name: str) -> dict[str, str]:
+        self.loaded_map_name = map_name
+        return {"map_name": map_name}
+
+
 def build_client(
     projected_transform: FakeTransform,
     spawn_points: list[FakeTransform],
@@ -240,3 +253,29 @@ def test_spawn_ego_vehicle_tries_next_fallback_when_first_spawn_point_is_blocked
 
     assert result.source == "map_spawn_point_fallback"
     assert result.resolved_spawn_point["x"] == 25.0
+
+
+def test_load_map_resolves_exact_tail_name() -> None:
+    client = CarlaClient("127.0.0.1", 2000, 10.0, 8010)
+    fake_client = FakeClientForMaps(
+        ["/Game/Carla/Maps/Town01", "/Game/Carla/Maps/Town10HD_Opt"]
+    )
+    client._client = fake_client
+
+    resolved = client.load_map("Town01")
+
+    assert resolved == "/Game/Carla/Maps/Town01"
+    assert fake_client.loaded_map_name == "/Game/Carla/Maps/Town01"
+
+
+def test_load_map_resolves_known_town10_alias_to_town10hd() -> None:
+    client = CarlaClient("127.0.0.1", 2000, 10.0, 8010)
+    fake_client = FakeClientForMaps(
+        ["/Game/Carla/Maps/Town01", "/Game/Carla/Maps/Town10HD"]
+    )
+    client._client = fake_client
+
+    resolved = client.load_map("Town10")
+
+    assert resolved == "/Game/Carla/Maps/Town10HD"
+    assert fake_client.loaded_map_name == "/Game/Carla/Maps/Town10HD"

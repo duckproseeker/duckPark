@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.api.main import app
 from app.api import routes_scenarios
+from app.api.main import app
 
 
 def test_list_maps_success(monkeypatch) -> None:

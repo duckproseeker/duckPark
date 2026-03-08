@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Plus Jakarta Sans', 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  }
+
+  body {
+    @apply bg-[#f4f7fe] text-navy-900 antialiased;
+    background-image:
+      radial-gradient(circle at 12% 10%, rgba(65, 114, 255, 0.14), transparent 22%),
+      radial-gradient(circle at 88% 14%, rgba(122, 97, 255, 0.12), transparent 22%),
+      radial-gradient(circle at 82% 80%, rgba(0, 198, 255, 0.12), transparent 18%);
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .horizon-card {
+    @apply rounded-[24px] border border-white/80 bg-white shadow-card;
+  }
+
+  .horizon-subtle-card {
+    @apply rounded-[20px] border border-secondaryGray-200 bg-white/90 shadow-card backdrop-blur;
+  }
+
+  .horizon-chip {
+    @apply inline-flex items-center rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-xs font-bold tracking-[0.08em] text-brand-700;
+  }
+
+  .horizon-button {
+    @apply inline-flex min-h-11 items-center justify-center rounded-2xl bg-brand-500 px-4 py-3 text-sm font-bold text-white shadow-glow transition hover:-translate-y-0.5 hover:bg-brand-600;
+  }
+
+  .horizon-button-secondary {
+    @apply inline-flex min-h-11 items-center justify-center rounded-2xl border border-secondaryGray-200 bg-white px-4 py-3 text-sm font-bold text-navy-900 shadow-card transition hover:-translate-y-0.5;
+  }
+}
