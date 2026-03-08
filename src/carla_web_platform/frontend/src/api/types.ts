@@ -448,6 +448,18 @@ export interface RunEnvironmentState {
   };
 }
 
+export interface RunViewerInfo {
+  run_id: string;
+  available: boolean;
+  reason: string | null;
+  views: Array<{
+    view_id: string;
+    label: string;
+  }>;
+  snapshot_url: string;
+  refresh_interval_ms: number;
+}
+
 export interface CreateCapturePayload {
   gateway_id: string;
   source: string;
