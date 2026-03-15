@@ -19,13 +19,13 @@ const accentClasses: Record<NonNullable<MetricCardProps['accent']>, string> = {
 
 export function MetricCard({ label, value, hint, accent = 'blue' }: MetricCardProps) {
   return (
-    <div className="horizon-card relative overflow-hidden rounded-[24px] px-5 py-5">
+    <div className="horizon-card relative overflow-hidden rounded-[14px] px-4 py-4">
       <div className={clsx('absolute inset-x-0 top-0 h-1 bg-gradient-to-r', accentClasses[accent])} />
-      <p className="text-sm font-semibold text-secondaryGray-500">{label}</p>
-      <strong className="mt-3 block text-[32px] font-extrabold leading-none tracking-[-0.04em] text-navy-900">
+      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-400">{label}</p>
+      <strong className="mt-2 block text-[28px] font-extrabold leading-none tracking-[-0.04em] text-slate-100">
         {value}
       </strong>
-      {hint && <span className="mt-3 block text-sm text-secondaryGray-600">{hint}</span>}
+      {hint && <span className="mt-2 block text-xs text-slate-400">{hint}</span>}
     </div>
   );
 }

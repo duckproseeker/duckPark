@@ -6,6 +6,66 @@ from functools import lru_cache
 from pathlib import Path
 
 
+def _resolve_path(value: str | Path, *, base_dir: Path | None = None) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute() and base_dir is not None:
+        path = base_dir / path
+    return path
+
+
+def _existing_path(value: str | None, *, base_dir: Path | None = None) -> Path | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    path = _resolve_path(normalized, base_dir=base_dir)
+    return path if path.exists() else None
+
+
+def _first_existing_path(*candidates: Path) -> Path | None:
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _path_from_env(name: str, default: Path, *, base_dir: Path) -> Path:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return _resolve_path(raw.strip(), base_dir=base_dir)
+
+
+def _normalize_env_value(value: str) -> str:
+    normalized = value.strip()
+    if len(normalized) >= 2 and normalized[0] == normalized[-1] and normalized[0] in {'"', "'"}:
+        return normalized[1:-1]
+    if " #" in normalized:
+        return normalized.split(" #", 1)[0].rstrip()
+    return normalized
+
+
+def _load_env_file(env_file: Path) -> None:
+    if not env_file.exists():
+        return
+
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        os.environ.setdefault(key, _normalize_env_value(value))
+
+
 @dataclass(frozen=True)
 class Settings:
     project_root: Path
@@ -30,44 +90,92 @@ class Settings:
     benchmark_tasks_root: Path
     reports_root: Path
     report_artifacts_root: Path
+    scenario_builds_root: Path
     sensor_profiles_root: Path
+    scenario_runner_root: Path | None
+    scenario_runner_carla_root: Path | None
+    scenario_runner_python: str
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    project_root = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
+    default_project_root = Path(__file__).resolve().parents[2]
+    project_root = _resolve_path(
+        os.getenv("PROJECT_ROOT", str(default_project_root)),
+        base_dir=Path.cwd(),
+    )
+    _load_env_file(project_root / ".env.local")
+    project_root = _resolve_path(
+        os.getenv("PROJECT_ROOT", str(default_project_root)),
+        base_dir=Path.cwd(),
+    )
 
-    runs_root = Path(os.getenv("RUNS_ROOT", project_root / "run_data" / "runs"))
-    captures_root = Path(os.getenv("CAPTURES_ROOT", project_root / "run_data" / "captures"))
-    commands_root = Path(
-        os.getenv("COMMANDS_ROOT", project_root / "run_data" / "commands")
+    runs_root = _path_from_env("RUNS_ROOT", project_root / "run_data" / "runs", base_dir=project_root)
+    captures_root = _path_from_env(
+        "CAPTURES_ROOT", project_root / "run_data" / "captures", base_dir=project_root
     )
-    executor_root = Path(os.getenv("EXECUTOR_ROOT", project_root / "run_data" / "executor"))
-    controls_root = Path(os.getenv("CONTROLS_ROOT", project_root / "run_data" / "controls"))
-    artifacts_root = Path(os.getenv("ARTIFACTS_ROOT", project_root / "artifacts"))
-    capture_artifacts_root = Path(
-        os.getenv("CAPTURE_ARTIFACTS_ROOT", artifacts_root / "captures")
+    commands_root = _path_from_env(
+        "COMMANDS_ROOT", project_root / "run_data" / "commands", base_dir=project_root
     )
-    gateways_root = Path(os.getenv("GATEWAYS_ROOT", project_root / "run_data" / "gateways"))
-    projects_root = Path(os.getenv("PROJECTS_ROOT", project_root / "run_data" / "projects"))
-    benchmark_definitions_root = Path(
-        os.getenv(
-            "BENCHMARK_DEFINITIONS_ROOT",
-            project_root / "run_data" / "benchmark_definitions",
+    executor_root = _path_from_env(
+        "EXECUTOR_ROOT", project_root / "run_data" / "executor", base_dir=project_root
+    )
+    controls_root = _path_from_env(
+        "CONTROLS_ROOT", project_root / "run_data" / "controls", base_dir=project_root
+    )
+    artifacts_root = _path_from_env(
+        "ARTIFACTS_ROOT", project_root / "artifacts", base_dir=project_root
+    )
+    capture_artifacts_root = _path_from_env(
+        "CAPTURE_ARTIFACTS_ROOT", artifacts_root / "captures", base_dir=project_root
+    )
+    gateways_root = _path_from_env(
+        "GATEWAYS_ROOT", project_root / "run_data" / "gateways", base_dir=project_root
+    )
+    projects_root = _path_from_env(
+        "PROJECTS_ROOT", project_root / "run_data" / "projects", base_dir=project_root
+    )
+    benchmark_definitions_root = _path_from_env(
+        "BENCHMARK_DEFINITIONS_ROOT",
+        project_root / "run_data" / "benchmark_definitions",
+        base_dir=project_root,
+    )
+    benchmark_tasks_root = _path_from_env(
+        "BENCHMARK_TASKS_ROOT",
+        project_root / "run_data" / "benchmark_tasks",
+        base_dir=project_root,
+    )
+    reports_root = _path_from_env(
+        "REPORTS_ROOT", project_root / "run_data" / "reports", base_dir=project_root
+    )
+    report_artifacts_root = _path_from_env(
+        "REPORT_ARTIFACTS_ROOT", artifacts_root / "reports", base_dir=project_root
+    )
+    scenario_builds_root = _path_from_env(
+        "SCENARIO_BUILDS_ROOT",
+        project_root / "run_data" / "scenario_builds",
+        base_dir=project_root,
+    )
+    sensor_profiles_root = _path_from_env(
+        "SENSOR_PROFILES_ROOT", project_root / "configs" / "sensors", base_dir=project_root
+    )
+    scenario_runner_root = _existing_path(
+        os.getenv("SCENARIO_RUNNER_ROOT"), base_dir=project_root
+    ) or _first_existing_path(
+        project_root / "external" / "scenario_runner",
+        Path("/ros2_ws/carla_workspace/scenario_runner"),
+        Path("/workspace/scenario_runner"),
+    )
+    scenario_runner_carla_root = _existing_path(
+        os.getenv("SCENARIO_RUNNER_CARLA_ROOT"),
+        base_dir=project_root,
+    )
+    if scenario_runner_carla_root is None and scenario_runner_root is not None:
+        scenario_runner_carla_root = _first_existing_path(
+            scenario_runner_root.parent / "carla",
+            Path("/ros2_ws/carla_workspace/carla"),
+            Path("/workspace/carla"),
         )
-    )
-    benchmark_tasks_root = Path(
-        os.getenv(
-            "BENCHMARK_TASKS_ROOT", project_root / "run_data" / "benchmark_tasks"
-        )
-    )
-    reports_root = Path(os.getenv("REPORTS_ROOT", project_root / "run_data" / "reports"))
-    report_artifacts_root = Path(
-        os.getenv("REPORT_ARTIFACTS_ROOT", artifacts_root / "reports")
-    )
-    sensor_profiles_root = Path(
-        os.getenv("SENSOR_PROFILES_ROOT", project_root / "configs" / "sensors")
-    )
 
     return Settings(
         project_root=project_root,
@@ -94,5 +202,9 @@ def get_settings() -> Settings:
         benchmark_tasks_root=benchmark_tasks_root,
         reports_root=reports_root,
         report_artifacts_root=report_artifacts_root,
+        scenario_builds_root=scenario_builds_root,
         sensor_profiles_root=sensor_profiles_root,
+        scenario_runner_root=scenario_runner_root,
+        scenario_runner_carla_root=scenario_runner_carla_root,
+        scenario_runner_python=os.getenv("SCENARIO_RUNNER_PYTHON", "python3"),
     )

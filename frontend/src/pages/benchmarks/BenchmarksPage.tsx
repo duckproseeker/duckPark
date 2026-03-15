@@ -1,150 +1,955 @@
-import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 
-import { listBenchmarkDefinitions, listBenchmarkTasks } from '../../api/benchmarks';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate } from 'react-router-dom';
+
+import { createBenchmarkTask, listBenchmarkDefinitions, listBenchmarkTasks } from '../../api/benchmarks';
+import { listGateways } from '../../api/gateways';
 import { listProjects } from '../../api/projects';
 import { listEvaluationProfiles, listScenarioCatalog } from '../../api/scenarios';
+import type { BenchmarkDefinition, ScenarioCatalogItem } from '../../api/types';
 import { EmptyState } from '../../components/common/EmptyState';
-import { MetricCard } from '../../components/common/MetricCard';
-import { PageHeader } from '../../components/common/PageHeader';
-import { Panel } from '../../components/common/Panel';
+import { SelectionList } from '../../components/common/SelectionList';
 import { StatusPill } from '../../components/common/StatusPill';
+import { setWorkflowSelection, useWorkflowSelection } from '../../features/workflow/state';
+import { formatDateTime } from '../../lib/format';
+import { findBenchmarkDefinition, findProjectRecord } from '../../lib/platform';
+
+interface PlannedScenarioRow {
+  scenario_id: string;
+  display_name: string;
+  execution_backend: string;
+  map_name: string;
+  timeout_seconds: number;
+}
+
+function planningModeLabel(mode: BenchmarkDefinition['planning_mode']) {
+  if (mode === 'single_scenario') {
+    return '单场景';
+  }
+  if (mode === 'timed_single_scenario') {
+    return '长时单场景';
+  }
+  if (mode === 'all_runnable') {
+    return '全量回归';
+  }
+  return '自定义批量';
+}
+
+function planningModeHint(mode: BenchmarkDefinition['planning_mode']) {
+  if (mode === 'single_scenario') {
+    return '从下拉列表选择 1 个场景直接进入本次测试。';
+  }
+  if (mode === 'timed_single_scenario') {
+    return '选择 1 个高负载场景，并指定本轮仿真时长。';
+  }
+  if (mode === 'all_runnable') {
+    return '自动把当前全部可执行场景加入本轮批量任务。';
+  }
+  return '点击加号打开场景目录，逐个加入当前测试。';
+}
+
+function formatDurationLabel(timeoutSeconds: number) {
+  if (timeoutSeconds % 60 === 0) {
+    return `${timeoutSeconds / 60} min`;
+  }
+  return `${timeoutSeconds} s`;
+}
+
+function deriveCandidateScenarios(
+  definition: BenchmarkDefinition | null,
+  runnableScenarios: ScenarioCatalogItem[]
+) {
+  if (!definition) {
+    return [];
+  }
+
+  if (definition.candidate_scenario_ids.length === 0) {
+    return runnableScenarios;
+  }
+
+  const catalogIndex = new Map(runnableScenarios.map((item) => [item.scenario_id, item]));
+  return definition.candidate_scenario_ids
+    .map((scenarioId) => catalogIndex.get(scenarioId) ?? null)
+    .filter((item): item is ScenarioCatalogItem => item !== null);
+}
+
+function buildPlannedScenarioRows(
+  definition: BenchmarkDefinition | null,
+  candidateScenarios: ScenarioCatalogItem[],
+  selectedScenarioIds: string[],
+  runDurationMinutes: string
+): PlannedScenarioRow[] {
+  if (!definition) {
+    return [];
+  }
+
+  const scenarioIndex = new Map(candidateScenarios.map((item) => [item.scenario_id, item]));
+  const requestedDurationSeconds = Math.max(1, Number.parseInt(runDurationMinutes || '0', 10) || 0) * 60;
+
+  const toRow = (scenario: ScenarioCatalogItem, timeoutSeconds?: number): PlannedScenarioRow => ({
+    scenario_id: scenario.scenario_id,
+    display_name: scenario.display_name,
+    execution_backend: scenario.execution_backend ?? scenario.execution_support,
+    map_name: scenario.preset.locked_map_name,
+    timeout_seconds:
+      timeoutSeconds ?? Number(scenario.descriptor_template.termination.timeout_seconds ?? 30)
+  });
+
+  if (definition.planning_mode === 'all_runnable') {
+    return candidateScenarios.map((scenario) => toRow(scenario));
+  }
+
+  if (definition.planning_mode === 'single_scenario') {
+    const selectedScenario = scenarioIndex.get(selectedScenarioIds[0] ?? '');
+    return selectedScenario ? [toRow(selectedScenario)] : [];
+  }
+
+  if (definition.planning_mode === 'timed_single_scenario') {
+    const selectedScenario = scenarioIndex.get(selectedScenarioIds[0] ?? '');
+    return selectedScenario
+      ? [
+          toRow(
+            selectedScenario,
+            requestedDurationSeconds || definition.default_duration_seconds || 1800
+          )
+        ]
+      : [];
+  }
+
+  return selectedScenarioIds
+    .map((scenarioId) => scenarioIndex.get(scenarioId) ?? null)
+    .filter((scenario): scenario is ScenarioCatalogItem => scenario !== null)
+    .map((scenario) => toRow(scenario));
+}
 
 export function BenchmarksPage() {
-  const definitionsQuery = useQuery({ queryKey: ['benchmark-definitions'], queryFn: listBenchmarkDefinitions });
-  const tasksQuery = useQuery({ queryKey: ['benchmark-tasks'], queryFn: () => listBenchmarkTasks(), refetchInterval: 5000 });
+  const workflow = useWorkflowSelection();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
+  const [runDurationMinutes, setRunDurationMinutes] = useState('30');
+  const [dutModel, setDutModel] = useState('');
+  const [selectedGatewayId, setSelectedGatewayId] = useState(workflow.gatewayId ?? '');
+  const [evaluationProfileName, setEvaluationProfileName] = useState('');
+  const [scenarioDrawerOpen, setScenarioDrawerOpen] = useState(false);
+  const [pendingScenarioId, setPendingScenarioId] = useState<string | null>(null);
+
+  const definitionsQuery = useQuery({
+    queryKey: ['benchmark-definitions'],
+    queryFn: listBenchmarkDefinitions
+  });
+  const tasksQuery = useQuery({
+    queryKey: ['benchmark-tasks'],
+    queryFn: () => listBenchmarkTasks(),
+    refetchInterval: 5000
+  });
   const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: listProjects });
   const catalogQuery = useQuery({ queryKey: ['scenario-catalog'], queryFn: listScenarioCatalog });
-  const profilesQuery = useQuery({ queryKey: ['evaluation-profiles'], queryFn: listEvaluationProfiles });
+  const gatewaysQuery = useQuery({
+    queryKey: ['gateways'],
+    queryFn: listGateways,
+    refetchInterval: 5000
+  });
+  const profilesQuery = useQuery({
+    queryKey: ['evaluation-profiles'],
+    queryFn: listEvaluationProfiles
+  });
 
   const definitions = definitionsQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
   const projects = projectsQuery.data ?? [];
-  const activeProjectIds = new Set(projects.map((item) => item.project_id));
-  const tasks = (tasksQuery.data ?? []).filter((task) => activeProjectIds.has(task.project_id));
-  const catalogItems = catalogQuery.data ?? [];
-  const profiles = profilesQuery.data ?? [];
-  const activeTasks = tasks.filter((task) => task.status === 'RUNNING').length;
-  const nativeScenarioCount = catalogItems.filter((item) => item.execution_support === 'native').length;
+  const gateways = gatewaysQuery.data ?? [];
+  const evaluationProfiles = profilesQuery.data ?? [];
+  const runnableScenarios = (catalogQuery.data ?? []).filter(
+    (item) => item.execution_support === 'scenario_runner'
+  );
+
+  const selectedDefinition = workflow.benchmarkDefinitionId
+    ? findBenchmarkDefinition(definitions, workflow.benchmarkDefinitionId)
+    : null;
+
+  const selectedProject = selectedDefinition?.default_project_id
+    ? findProjectRecord(projects, selectedDefinition.default_project_id)
+    : null;
+
+  const candidateScenarios = useMemo(
+    () => deriveCandidateScenarios(selectedDefinition, runnableScenarios),
+    [runnableScenarios, selectedDefinition]
+  );
+
+  const plannedScenarios = useMemo(
+    () =>
+      buildPlannedScenarioRows(
+        selectedDefinition,
+        candidateScenarios,
+        selectedScenarioIds,
+        runDurationMinutes
+      ),
+    [candidateScenarios, runDurationMinutes, selectedDefinition, selectedScenarioIds]
+  );
+
+  const availableCustomScenarios = useMemo(
+    () =>
+      candidateScenarios.filter((scenario) => !selectedScenarioIds.includes(scenario.scenario_id)),
+    [candidateScenarios, selectedScenarioIds]
+  );
+
+  const selectedDefinitionTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          (!selectedDefinition ||
+            task.benchmark_definition_id === selectedDefinition.benchmark_definition_id) &&
+          (!selectedProject || task.project_id === selectedProject.project_id)
+      ),
+    [selectedDefinition, selectedProject, tasks]
+  );
+
+  useEffect(() => {
+    if (!selectedDefinition && definitions[0]) {
+      setWorkflowSelection({ benchmarkDefinitionId: definitions[0].benchmark_definition_id });
+    }
+  }, [definitions, selectedDefinition]);
+
+  useEffect(() => {
+    if (selectedProject && selectedProject.project_id !== workflow.projectId) {
+      setWorkflowSelection({ projectId: selectedProject.project_id });
+    }
+  }, [selectedProject?.project_id, workflow.projectId]);
+
+  useEffect(() => {
+    if (!selectedDefinition) {
+      setSelectedScenarioIds([]);
+      return;
+    }
+
+    const candidateIds = candidateScenarios.map((item) => item.scenario_id);
+
+    if (selectedDefinition.planning_mode === 'all_runnable') {
+      setSelectedScenarioIds(candidateIds);
+      setWorkflowSelection({ scenarioId: candidateIds[0] ?? null });
+      return;
+    }
+
+    if (
+      selectedDefinition.planning_mode === 'single_scenario' ||
+      selectedDefinition.planning_mode === 'timed_single_scenario'
+    ) {
+      const fallbackScenarioId = candidateIds[0] ?? '';
+      const nextScenarioId = candidateIds.includes(selectedScenarioIds[0] ?? '')
+        ? selectedScenarioIds[0]
+        : fallbackScenarioId;
+      setSelectedScenarioIds(nextScenarioId ? [nextScenarioId] : []);
+      setWorkflowSelection({ scenarioId: nextScenarioId || null });
+      return;
+    }
+
+    setSelectedScenarioIds((current) => current.filter((scenarioId) => candidateIds.includes(scenarioId)));
+  }, [candidateScenarios, selectedDefinition]);
+
+  useEffect(() => {
+    if (selectedDefinition?.planning_mode === 'custom_multi_scenario') {
+      setWorkflowSelection({ scenarioId: selectedScenarioIds[0] ?? null });
+    }
+  }, [selectedDefinition?.planning_mode, selectedScenarioIds]);
+
+  useEffect(() => {
+    if (selectedDefinition?.planning_mode !== 'custom_multi_scenario') {
+      setScenarioDrawerOpen(false);
+    }
+  }, [selectedDefinition?.planning_mode]);
+
+  useEffect(() => {
+    if (!selectedDefinition?.supports_duration_seconds) {
+      return;
+    }
+    const nextMinutes = Math.max(
+      1,
+      Math.round((selectedDefinition.default_duration_seconds ?? 1800) / 60)
+    );
+    setRunDurationMinutes(`${nextMinutes}`);
+  }, [selectedDefinition?.benchmark_definition_id]);
+
+  useEffect(() => {
+    if (!selectedDefinition) {
+      return;
+    }
+    setEvaluationProfileName(
+      selectedDefinition.default_evaluation_profile_name ?? evaluationProfiles[0]?.profile_name ?? ''
+    );
+  }, [evaluationProfiles, selectedDefinition?.benchmark_definition_id]);
+
+  useEffect(() => {
+    if (!scenarioDrawerOpen) {
+      return;
+    }
+    setPendingScenarioId(availableCustomScenarios[0]?.scenario_id ?? null);
+  }, [availableCustomScenarios, scenarioDrawerOpen]);
+
+  const createTaskMutation = useMutation({
+    mutationFn: async (autoStart: boolean) => {
+      if (!selectedDefinition) {
+        throw new Error('请先选择基准模板');
+      }
+      if (!selectedProject) {
+        throw new Error('当前模板没有默认归档项目');
+      }
+      if (plannedScenarios.length === 0) {
+        throw new Error(
+          selectedDefinition.planning_mode === 'custom_multi_scenario'
+            ? '请先增加至少 1 个场景测试'
+            : '当前模板还没有形成可执行测试场景'
+        );
+      }
+
+      return createBenchmarkTask({
+        benchmark_definition_id: selectedDefinition.benchmark_definition_id,
+        dut_model: dutModel.trim() || undefined,
+        selected_scenario_ids:
+          selectedDefinition.planning_mode === 'all_runnable'
+            ? undefined
+            : plannedScenarios.map((item) => item.scenario_id),
+        run_duration_seconds: selectedDefinition.supports_duration_seconds
+          ? plannedScenarios[0]?.timeout_seconds
+          : undefined,
+        hil_config: selectedGatewayId
+          ? {
+              mode: 'camera_open_loop',
+              gateway_id: selectedGatewayId,
+              video_source: 'hdmi_x1301',
+              dut_input_mode: 'uvc_camera',
+              result_ingest_mode: 'http_push'
+            }
+          : undefined,
+        evaluation_profile_name: evaluationProfileName || undefined,
+        auto_start: autoStart
+      });
+    },
+    onSuccess: (task, autoStart) => {
+      setScenarioDrawerOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ['benchmark-tasks'] });
+      void queryClient.invalidateQueries({ queryKey: ['runs'] });
+      setWorkflowSelection({
+        runId: null,
+        scenarioId: plannedScenarios[0]?.scenario_id ?? null
+      });
+
+      if (autoStart) {
+        navigate(`/executions?task=${task.benchmark_task_id}`);
+      }
+    }
+  });
+
+  function removeCustomScenario(scenarioId: string) {
+    setSelectedScenarioIds((current) => current.filter((item) => item !== scenarioId));
+  }
+
+  function addPendingScenario() {
+    if (!pendingScenarioId) {
+      return;
+    }
+    setSelectedScenarioIds((current) => Array.from(new Set([...current, pendingScenarioId])));
+    setScenarioDrawerOpen(false);
+  }
+
+  function renderCurrentScenarioList(options: {
+    allowRemove: boolean;
+    emptyTitle: string;
+    emptyDescription: string;
+  }) {
+    if (plannedScenarios.length === 0) {
+      return (
+        <EmptyState description={options.emptyDescription} title={options.emptyTitle} />
+      );
+    }
+
+    return (
+      <div className="project-console__queue-list">
+        {plannedScenarios.map((scenario) => (
+          <div
+            className="project-console__queue-item"
+            key={`${scenario.scenario_id}-${scenario.timeout_seconds}`}
+          >
+            <div className="project-console__queue-copy">
+              <strong>{scenario.display_name}</strong>
+              <small>
+                {scenario.execution_backend} / {scenario.map_name} /{' '}
+                {formatDurationLabel(scenario.timeout_seconds)}
+              </small>
+            </div>
+
+            {options.allowRemove && (
+              <button
+                className="project-console__queue-remove"
+                onClick={() => removeCustomScenario(scenario.scenario_id)}
+                type="button"
+              >
+                移除
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function renderPlannerContent() {
+    if (!selectedDefinition) {
+      return (
+        <section className="project-console__card project-console__card--empty">
+          <EmptyState description="先选择一个基准模板，再增加测试场景。" title="尚未选择模板" />
+        </section>
+      );
+    }
+
+    const durationLabel =
+      selectedDefinition.supports_duration_seconds && plannedScenarios[0]
+        ? formatDurationLabel(plannedScenarios[0].timeout_seconds)
+        : selectedDefinition.supports_duration_seconds
+          ? `${runDurationMinutes || '0'} min`
+          : '模板默认';
+
+    return (
+      <section className="project-console__card">
+        <header className="project-console__card-header">
+          <div>
+            <span className="project-console__section-label">场景编排</span>
+            <strong>{selectedDefinition.name}</strong>
+          </div>
+
+          <div className="project-console__toggle">
+            <span className="project-console__toggle-item project-console__toggle-item--active">
+              {planningModeLabel(selectedDefinition.planning_mode)}
+            </span>
+          </div>
+        </header>
+
+        <div className="project-console__summary-grid">
+          <div className="project-console__summary-item">
+            <span>模板规则</span>
+            <strong>{planningModeLabel(selectedDefinition.planning_mode)}</strong>
+            <small>{selectedDefinition.queue_note ?? planningModeHint(selectedDefinition.planning_mode)}</small>
+          </div>
+          <div className="project-console__summary-item">
+            <span>自动归档</span>
+            <strong>{selectedProject?.name ?? '未自动匹配'}</strong>
+            <small>归档项目由模板固定决定，不再作为主输入。</small>
+          </div>
+          <div className="project-console__summary-item">
+            <span>当前测试场景</span>
+            <strong>{plannedScenarios.length}</strong>
+            <small>增加完成后会直接显示在下方，不再单独做队列预览。</small>
+          </div>
+          <div className="project-console__summary-item">
+            <span>运行时长</span>
+            <strong>{durationLabel}</strong>
+            <small>仅长稳模板支持手动调整。</small>
+          </div>
+        </div>
+
+        {selectedDefinition.planning_mode === 'custom_multi_scenario' && (
+          <div className="project-console__planner-stack">
+            <div className="project-console__queue-toolbar">
+              <div className="project-console__picker-copy">
+                <strong>增加场景测试</strong>
+                <p>点击右侧加号，从场景目录里逐个加入当前测试任务。</p>
+              </div>
+
+              <div className="project-console__picker-actions">
+                <button
+                  className="project-console__picker-button"
+                  onClick={() => setScenarioDrawerOpen(true)}
+                  type="button"
+                >
+                  + 增加场景测试
+                </button>
+              </div>
+            </div>
+
+            {renderCurrentScenarioList({
+              allowRemove: true,
+              emptyTitle: '还没有加入测试场景',
+              emptyDescription: '点击上方加号，从场景目录里选择要加入的测试场景。'
+            })}
+          </div>
+        )}
+
+        {selectedDefinition.planning_mode === 'single_scenario' && (
+          <div className="project-console__planner-stack">
+            <div className="project-console__picker-copy">
+              <strong>增加场景测试</strong>
+              <p>当前模板一次只运行 1 个场景，选择后会直接显示在下方。</p>
+            </div>
+
+            <div className="project-console__form-stack">
+              <label className="field">
+                <span>选择运行场景</span>
+                <select
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setSelectedScenarioIds(value ? [value] : []);
+                    setWorkflowSelection({ scenarioId: value || null });
+                  }}
+                  value={selectedScenarioIds[0] ?? ''}
+                >
+                  <option value="">请选择场景</option>
+                  {candidateScenarios.map((scenario) => (
+                    <option key={scenario.scenario_id} value={scenario.scenario_id}>
+                      {scenario.display_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {renderCurrentScenarioList({
+              allowRemove: false,
+              emptyTitle: '尚未选择场景',
+              emptyDescription: '从上方下拉列表选择 1 个场景作为本次基线评测输入。'
+            })}
+          </div>
+        )}
+
+        {selectedDefinition.planning_mode === 'timed_single_scenario' && (
+          <div className="project-console__planner-stack">
+            <div className="project-console__picker-copy">
+              <strong>增加场景测试</strong>
+              <p>选择 1 个高负载场景，并指定这一轮仿真的持续时长。</p>
+            </div>
+
+            <div className="project-console__inline-form project-console__inline-form--compact">
+              <label className="field project-console__inline-field">
+                <span>选择运行场景</span>
+                <select
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setSelectedScenarioIds(value ? [value] : []);
+                    setWorkflowSelection({ scenarioId: value || null });
+                  }}
+                  value={selectedScenarioIds[0] ?? ''}
+                >
+                  <option value="">请选择场景</option>
+                  {candidateScenarios.map((scenario) => (
+                    <option key={scenario.scenario_id} value={scenario.scenario_id}>
+                      {scenario.display_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field project-console__inline-field">
+                <span>运行时长（分钟）</span>
+                <input
+                  min={1}
+                  onChange={(event) => setRunDurationMinutes(event.target.value)}
+                  type="number"
+                  value={runDurationMinutes}
+                />
+              </label>
+            </div>
+
+            {renderCurrentScenarioList({
+              allowRemove: false,
+              emptyTitle: '尚未选择场景',
+              emptyDescription: '先选择一个高负载场景，页面会直接显示当前这轮长稳测试输入。'
+            })}
+          </div>
+        )}
+
+        {selectedDefinition.planning_mode === 'all_runnable' && (
+          <div className="project-console__planner-stack">
+            <div className="project-console__summary-stack">
+              <p>这个模板会自动把当前全部可执行场景各跑一遍，不需要手动增加场景。</p>
+              <small>如果后续要裁剪覆盖范围，再调整模板的候选场景集合。</small>
+            </div>
+
+            {renderCurrentScenarioList({
+              allowRemove: false,
+              emptyTitle: '没有可执行场景',
+              emptyDescription: '当前环境里没有可用于回归的场景。'
+            })}
+          </div>
+        )}
+
+        <div className="project-console__actions">
+          <button
+            className="horizon-button-secondary"
+            disabled={
+              createTaskMutation.isPending || !selectedProject || plannedScenarios.length === 0
+            }
+            onClick={() => createTaskMutation.mutate(false)}
+            type="button"
+          >
+            仅创建任务
+          </button>
+          <button
+            className="horizon-button"
+            disabled={
+              createTaskMutation.isPending || !selectedProject || plannedScenarios.length === 0
+            }
+            onClick={() => createTaskMutation.mutate(true)}
+            type="button"
+          >
+            创建并立即执行
+          </button>
+        </div>
+
+        {createTaskMutation.isError && (
+          <div className="project-console__feedback project-console__feedback--error">
+            {createTaskMutation.error instanceof Error
+              ? createTaskMutation.error.message
+              : '任务创建失败'}
+          </div>
+        )}
+
+        {!selectedProject && selectedDefinition && (
+          <div className="project-console__feedback project-console__feedback--error">
+            当前模板没有配置默认归档项目，暂时无法创建任务。
+          </div>
+        )}
+
+        {createTaskMutation.isSuccess && (
+          <div className="project-console__feedback">
+            已生成批量任务，当前模板对应的 run 队列已经写入后端。
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
     <div className="page-stack">
-      <PageHeader
-        title="基准任务"
-        eyebrow="Benchmarks / Templates"
-        chips={['指标协议', '任务模板', '覆盖矩阵']}
-        description="基准任务定义的是要跑什么、关注什么指标、最后产出什么报告。它不是单个 run，而是面向测评项目的业务级模板。"
-        actions={
-          <Link className="horizon-button" to="/executions">
-            去执行中心排程
-          </Link>
-        }
-      />
+      <section className="project-console">
+        <header className="project-console__header">
+          <div>
+            <span className="project-console__eyebrow">场景控制层 / 基准任务编排</span>
+            <h1>基准任务台</h1>
+            <p>先选基准模板，再按模板规则把场景加入当前测试。项目只作为后台归档字段，不再在这里手动选择。</p>
+          </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard accent="blue" label="任务定义" value={definitions.length} hint="后端基准定义模型" />
-        <MetricCard accent="violet" label="评测协议" value={profiles.length} hint="后端 evaluation profiles" />
-        <MetricCard accent="teal" label="可用场景" value={nativeScenarioCount} hint="当前可直接执行的 native 场景" />
-        <MetricCard accent="orange" label="运行中任务" value={activeTasks} hint="正在执行中的基准任务" />
-      </div>
+          <div className="project-console__header-actions">
+            <Link className="horizon-button-secondary" to="/projects" viewTransition>
+              返回项目页
+            </Link>
+            <Link className="horizon-button" to="/executions" viewTransition>
+              查看执行中心
+            </Link>
+          </div>
+        </header>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_420px]">
-        <Panel title="测评模板库" subtitle="模板定义业务意图，执行中心负责把模板展开成多个 run。">
-          {definitions.length === 0 ? (
-            <EmptyState title="没有基准定义" description="后端还没有返回基准任务定义。" />
-          ) : (
-            <div className="grid gap-4 xl:grid-cols-2">
-              {definitions.map((definition) => {
-                const definitionTasks = tasks.filter((task) => task.benchmark_definition_id === definition.benchmark_definition_id);
+        <div className="project-console__layout project-console__layout--benchmark-builder">
+          <div className="project-console__main">
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">模板入口</span>
+                  <strong>基准模板</strong>
+                </div>
+              </header>
 
-                return (
-                  <div key={definition.benchmark_definition_id} className="rounded-[26px] border border-secondaryGray-200 bg-secondaryGray-50/60 p-5 shadow-card">
-                    <div className="flex items-start justify-between gap-3">
+              {definitionsQuery.isLoading ? (
+                <EmptyState description="正在同步模板目录。" title="模板加载中" />
+              ) : definitionsQuery.isError ? (
+                <EmptyState
+                  description={
+                    definitionsQuery.error instanceof Error
+                      ? definitionsQuery.error.message
+                      : '模板接口异常。'
+                  }
+                  title="模板加载失败"
+                />
+              ) : definitions.length === 0 ? (
+                <EmptyState description="当前环境没有可用基准模板。" title="没有模板" />
+              ) : (
+                <div className="project-console__definition-grid">
+                  {definitions.map((definition) => {
+                    const active =
+                      selectedDefinition?.benchmark_definition_id ===
+                      definition.benchmark_definition_id;
+                    const archiveProject = definition.default_project_id
+                      ? findProjectRecord(projects, definition.default_project_id)
+                      : null;
+
+                    return (
+                      <button
+                        key={definition.benchmark_definition_id}
+                        className={
+                          active
+                            ? 'project-console__definition-card project-console__definition-card--active'
+                            : 'project-console__definition-card'
+                        }
+                        onClick={() =>
+                          setWorkflowSelection({
+                            benchmarkDefinitionId: definition.benchmark_definition_id
+                          })
+                        }
+                        type="button"
+                      >
+                        <span className="project-console__section-label">
+                          {planningModeLabel(definition.planning_mode)}
+                        </span>
+                        <strong>{definition.name}</strong>
+                        <p>{definition.description}</p>
+                        <small>
+                          自动归档到 {archiveProject?.name ?? '未配置项目'}。
+                          {definition.queue_note ?? planningModeHint(definition.planning_mode)}
+                        </small>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {renderPlannerContent()}
+
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">运行附加项</span>
+                  <strong>统一附加配置</strong>
+                </div>
+              </header>
+
+              <div className="project-console__summary-grid">
+                <div className="project-console__summary-item">
+                  <span>自动归档</span>
+                  <strong>{selectedProject?.name ?? '未自动匹配'}</strong>
+                  <small>只作为任务和报告归档字段，不需要手动切项目。</small>
+                </div>
+                <div className="project-console__summary-item">
+                  <span>默认协议</span>
+                  <strong>{selectedDefinition?.default_evaluation_profile_name ?? '未绑定'}</strong>
+                  <small>{selectedDefinition?.cadence ?? '等待模板选择'}</small>
+                </div>
+                <div className="project-console__summary-item">
+                  <span>绑定设备</span>
+                  <strong>{selectedGatewayId || '未绑定'}</strong>
+                  <small>创建批量任务时统一写入所有 run。</small>
+                </div>
+              </div>
+
+              <div className="project-console__inline-form">
+                <label className="field project-console__inline-field">
+                  <span>DUT 型号</span>
+                  <input
+                    onChange={(event) => setDutModel(event.target.value)}
+                    placeholder="可选，例如 Orin NX / RK3588"
+                    value={dutModel}
+                  />
+                </label>
+
+                <label className="field project-console__inline-field">
+                  <span>评测协议</span>
+                  <select
+                    onChange={(event) => setEvaluationProfileName(event.target.value)}
+                    value={evaluationProfileName}
+                  >
+                    <option value="">不绑定</option>
+                    {evaluationProfiles.map((profile) => (
+                      <option key={profile.profile_name} value={profile.profile_name}>
+                        {profile.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field project-console__inline-field">
+                  <span>绑定设备</span>
+                  <select
+                    onChange={(event) => {
+                      setSelectedGatewayId(event.target.value);
+                      setWorkflowSelection({ gatewayId: event.target.value || null });
+                    }}
+                    value={selectedGatewayId}
+                  >
+                    <option value="">不绑定网关</option>
+                    {gateways.map((gateway) => (
+                      <option key={gateway.gateway_id} value={gateway.gateway_id}>
+                        {gateway.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">最近批量任务</span>
+                  <strong>任务历史</strong>
+                </div>
+              </header>
+
+              {tasksQuery.isLoading ? (
+                <EmptyState description="正在同步批量任务记录。" title="任务加载中" />
+              ) : tasksQuery.isError ? (
+                <EmptyState
+                  description={
+                    tasksQuery.error instanceof Error
+                      ? tasksQuery.error.message
+                      : '任务接口异常。'
+                  }
+                  title="任务加载失败"
+                />
+              ) : selectedDefinitionTasks.length === 0 ? (
+                <EmptyState description="创建任务后，最近记录会出现在这里。" title="暂无批量任务" />
+              ) : (
+                <div className="project-console__table">
+                  {selectedDefinitionTasks.slice(0, 8).map((task) => (
+                    <div className="project-console__table-row" key={task.benchmark_task_id}>
                       <div>
-                        <strong className="block text-xl font-extrabold tracking-[-0.03em] text-navy-900">{definition.name}</strong>
-                        <p className="mt-2 text-sm leading-6 text-secondaryGray-600">{definition.description}</p>
+                        <span>{task.benchmark_name}</span>
+                        <strong>{task.project_name}</strong>
                       </div>
-                      <StatusPill status={definitionTasks.length > 0 ? 'ACTIVE' : 'READY'} />
+                      <StatusPill canonical status={task.status} />
+                      <small>
+                        {task.planned_run_count} runs / {formatDateTime(task.updated_at_utc)}
+                      </small>
                     </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
 
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[18px] border border-white/80 bg-white px-4 py-3">
-                        <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">节奏</span>
-                        <strong className="mt-2 block text-sm text-navy-900">{definition.cadence}</strong>
-                      </div>
-                      <div className="rounded-[18px] border border-white/80 bg-white px-4 py-3">
-                        <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">任务实例</span>
-                        <strong className="mt-2 block text-sm text-navy-900">{definitionTasks.length}</strong>
-                      </div>
-                    </div>
+          <aside className="project-console__summary">
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">当前摘要</span>
+                  <strong>批量编排说明</strong>
+                </div>
+                {selectedDefinition && <StatusPill canonical status="READY" />}
+              </header>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {definition.focus_metrics.map((metric) => (
-                        <span key={metric} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-secondaryGray-600">
-                          {metric}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {definition.project_ids.map((projectId) => (
-                        <span key={projectId} className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
-                          {projects.find((item) => item.project_id === projectId)?.name ?? projectId}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Panel>
-
-        <div className="flex flex-col gap-5">
-          <Panel title="评测协议" subtitle="这里直接映射后端 evaluation profiles。">
-            {profiles.length === 0 ? (
-              <EmptyState title="暂无协议" description="后端还没有返回 evaluation profile。" />
-            ) : (
-              <div className="flex flex-col gap-4">
-                {profiles.map((profile) => (
-                  <div key={profile.profile_name} className="rounded-[20px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
-                    <strong className="block text-base font-extrabold text-navy-900">{profile.display_name}</strong>
-                    <p className="mt-1 text-sm text-secondaryGray-600">{profile.description}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {profile.metrics.map((metric) => (
-                        <span key={metric} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-secondaryGray-600">
-                          {metric}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+              <div className="project-console__summary-stack">
+                <p>模板: {selectedDefinition?.name ?? '未选择模板'}</p>
+                <p>模式: {selectedDefinition ? planningModeLabel(selectedDefinition.planning_mode) : '未选择'}</p>
+                <p>归档: {selectedProject?.name ?? '等待模板自动关联'}</p>
+                <small>{selectedDefinition?.queue_note ?? '先选模板，再把场景加入当前测试。'}</small>
               </div>
-            )}
-          </Panel>
 
-          <Panel title="最近任务样例" subtitle="这里只展示任务摘要，不直接暴露一整块原始 JSON。">
-            {tasks.length === 0 ? (
-              <EmptyState title="暂无基准任务" description="去执行中心创建第一批测评任务后，这里会显示最近任务摘要。" />
-            ) : (
-              <div className="flex flex-col gap-3">
-                {tasks.slice(0, 4).map((task) => (
-                  <div key={task.benchmark_task_id} className="rounded-[20px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <strong className="block truncate text-sm font-bold text-navy-900">{task.project_name}</strong>
-                        <p className="mt-1 truncate text-xs text-secondaryGray-500">
-                          {task.benchmark_name} / {task.dut_model ?? '未登记 DUT'}
-                        </p>
-                      </div>
-                      <StatusPill status={task.status} />
-                    </div>
-                  </div>
-                ))}
+              {selectedDefinition && selectedDefinition.focus_metrics.length > 0 && (
+                <div className="project-console__chips">
+                  {selectedDefinition.focus_metrics.map((metric) => (
+                    <span className="project-console__chip" key={metric}>
+                      {metric}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">自动上下文</span>
+                  <strong>模板关联结果</strong>
+                </div>
+              </header>
+
+              <div className="project-console__summary-grid">
+                <div className="project-console__summary-item">
+                  <span>项目厂商</span>
+                  <strong>{selectedProject?.vendor ?? '--'}</strong>
+                  <small>{selectedProject?.processor ?? '等待模板绑定项目'}</small>
+                </div>
+                <div className="project-console__summary-item">
+                  <span>候选场景</span>
+                  <strong>{candidateScenarios.length}</strong>
+                  <small>当前模板允许加入的场景范围。</small>
+                </div>
+                <div className="project-console__summary-item">
+                  <span>当前测试场景</span>
+                  <strong>{plannedScenarios.length}</strong>
+                  <small>这次会进入批量任务的 run 数量。</small>
+                </div>
               </div>
-            )}
-          </Panel>
+            </section>
+          </aside>
         </div>
-      </div>
+
+        {scenarioDrawerOpen && selectedDefinition?.planning_mode === 'custom_multi_scenario' && (
+          <button
+            aria-label="关闭场景选择抽屉"
+            className="project-console__drawer-backdrop"
+            onClick={() => setScenarioDrawerOpen(false)}
+            type="button"
+          />
+        )}
+
+        {selectedDefinition?.planning_mode === 'custom_multi_scenario' && (
+          <aside
+            aria-hidden={!scenarioDrawerOpen}
+            className={
+              scenarioDrawerOpen
+                ? 'project-console__drawer project-console__drawer--open'
+                : 'project-console__drawer'
+            }
+          >
+            <header className="project-console__drawer-header">
+              <div>
+                <span className="project-console__section-label">增加场景测试</span>
+                <strong>场景目录</strong>
+              </div>
+              <button
+                className="project-console__drawer-close"
+                onClick={() => setScenarioDrawerOpen(false)}
+                type="button"
+              >
+                关闭
+              </button>
+            </header>
+
+            <div className="project-console__drawer-copy">
+              <p>从目录里逐个选择场景加入当前测试，不再使用复选框勾选。</p>
+            </div>
+
+            {availableCustomScenarios.length === 0 ? (
+              <EmptyState description="候选场景已经全部加入当前测试。" title="没有可加入场景" />
+            ) : (
+              <SelectionList
+                emptyDescription="当前模板没有可加入场景。"
+                emptyTitle="场景为空"
+                expandLabel="展开目录"
+                items={availableCustomScenarios.map((scenario) => ({
+                  id: scenario.scenario_id,
+                  title: scenario.display_name,
+                  subtitle: scenario.description,
+                  meta: `${scenario.execution_backend ?? scenario.execution_support} / ${scenario.preset.locked_map_name}`,
+                  status: 'READY',
+                  hint: scenario.scenario_id
+                }))}
+                maxVisible={8}
+                onSelect={(id) => setPendingScenarioId(id)}
+                selectedId={pendingScenarioId}
+              />
+            )}
+
+            <div className="project-console__actions">
+              <button
+                className="horizon-button-secondary"
+                onClick={() => setScenarioDrawerOpen(false)}
+                type="button"
+              >
+                取消
+              </button>
+              <button
+                className="horizon-button"
+                disabled={!pendingScenarioId}
+                onClick={addPendingScenario}
+                type="button"
+              >
+                加入当前场景
+              </button>
+            </div>
+          </aside>
+        )}
+      </section>
     </div>
   );
 }

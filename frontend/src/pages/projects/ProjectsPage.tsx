@@ -1,177 +1,591 @@
+import { useMemo, useState } from 'react';
+
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
-import { listProjects } from '../../api/projects';
-import { listGateways } from '../../api/gateways';
-import { listRuns } from '../../api/runs';
+import { getProjectWorkspace, listProjects } from '../../api/projects';
+import { listReports } from '../../api/reports';
 import { getSystemStatus } from '../../api/system';
 import { EmptyState } from '../../components/common/EmptyState';
-import { MetricCard } from '../../components/common/MetricCard';
-import { PageHeader } from '../../components/common/PageHeader';
-import { Panel } from '../../components/common/Panel';
+import { SelectionList } from '../../components/common/SelectionList';
 import { StatusPill } from '../../components/common/StatusPill';
-import { formatDateTime, sortByActivity } from '../../lib/format';
-import { deriveBenchmarkSummary, formatMetric, getRunProjectId } from '../../lib/platform';
+import { setWorkflowSelection, useWorkflowSelection } from '../../features/workflow/state';
+import { formatDateTime, truncateMiddle } from '../../lib/format';
+import { findProjectRecord } from '../../lib/platform';
+
+type ProjectViewMode = 'overview' | 'reports' | 'runtime';
+
+function planningModeLabel(mode: string) {
+  if (mode === 'single_scenario') {
+    return '单场景';
+  }
+  if (mode === 'timed_single_scenario') {
+    return '长时单场景';
+  }
+  if (mode === 'all_runnable') {
+    return '全量回归';
+  }
+  return '自定义批量';
+}
+
+function canArchiveReport(status: string) {
+  return ['COMPLETED', 'PARTIAL_FAILED', 'FAILED', 'CANCELED'].includes(status);
+}
+
+function isActiveTask(status: string) {
+  return ['CREATED', 'RUNNING'].includes(status);
+}
 
 export function ProjectsPage() {
+  const workflow = useWorkflowSelection();
+  const [viewMode, setViewMode] = useState<ProjectViewMode>('overview');
+
   const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: listProjects });
-  const runsQuery = useQuery({ queryKey: ['runs'], queryFn: () => listRuns(), refetchInterval: 5000 });
-  const gatewaysQuery = useQuery({ queryKey: ['gateways'], queryFn: listGateways, refetchInterval: 5000 });
-  const systemQuery = useQuery({ queryKey: ['system-status'], queryFn: getSystemStatus, refetchInterval: 3000 });
+  const systemQuery = useQuery({
+    queryKey: ['system-status'],
+    queryFn: getSystemStatus,
+    refetchInterval: 3000
+  });
 
   const projects = projectsQuery.data ?? [];
-  const runs = sortByActivity(runsQuery.data ?? []);
-  const gateways = sortByActivity(gatewaysQuery.data ?? []);
-  const summary = deriveBenchmarkSummary(runs, gateways);
-  const activeRuns = runs.filter((run) => ['CREATED', 'QUEUED', 'STARTING', 'RUNNING', 'STOPPING'].includes(run.status)).length;
-  const onlineDevices = gateways.filter((gateway) => ['READY', 'BUSY'].includes(gateway.status)).length;
-  const latestRuns = runs.slice(0, 5);
+  const selectedProject = workflow.projectId ? findProjectRecord(projects, workflow.projectId) : null;
+
+  const workspaceQuery = useQuery({
+    queryKey: ['projects', workflow.projectId, 'workspace'],
+    queryFn: () => getProjectWorkspace(workflow.projectId ?? ''),
+    enabled: Boolean(workflow.projectId)
+  });
+  const reportsQuery = useQuery({
+    queryKey: ['reports', workflow.projectId],
+    queryFn: () => listReports({ projectId: workflow.projectId ?? '' }),
+    enabled: Boolean(workflow.projectId),
+    refetchInterval: 5000
+  });
+
+  const workspace = workspaceQuery.data;
+  const reports = reportsQuery.data ?? [];
+  const reportedTaskIds = useMemo(
+    () => new Set(reports.map((report) => report.benchmark_task_id)),
+    [reports]
+  );
+
+  const latestReport = reports[0] ?? null;
+  const latestTask = workspace?.benchmark_tasks[0] ?? null;
+  const latestRun = workspace?.recent_runs[0] ?? null;
+  const activeTaskCount = workspace?.benchmark_tasks.filter((task) => isActiveTask(task.status)).length ?? 0;
+  const archivableTaskCount =
+    workspace?.benchmark_tasks.filter((task) => canArchiveReport(task.status)).length ?? 0;
+  const pendingReportTasks =
+    workspace?.benchmark_tasks.filter(
+      (task) => canArchiveReport(task.status) && !reportedTaskIds.has(task.benchmark_task_id)
+    ) ?? [];
 
   return (
     <div className="page-stack">
-      <PageHeader
-        title="芯片测评平台"
-        eyebrow="Projects / Dashboard"
-        chips={['项目总览', '批量测评', '运营看板']}
-        description="围绕芯片项目、场景矩阵、批量执行和测评报告组织工作流。首页优先暴露吞吐、延迟、精度、功耗、温度和场景通过率，底层网关与采集链路下沉到设备中心。"
-        actions={
-          <div className="flex flex-wrap gap-3">
-            <Link className="horizon-button" to="/executions">
-              发起测评任务
+      <section className="project-console">
+        <header className="project-console__header">
+          <div>
+            <span className="project-console__eyebrow">场景控制层 / 项目工作台</span>
+            <h1>项目归档台</h1>
+            <p>项目页只负责项目总览、报告归档和运行态汇总，不再重复展开基准任务编排和场景模板参数。</p>
+          </div>
+
+          <div className="project-console__header-actions">
+            <Link className="horizon-button-secondary" to="/reports" viewTransition>
+              打开报告中心
             </Link>
-            <Link className="horizon-button-secondary" to="/reports">
-              查看报告中心
+            <Link className="horizon-button" to="/benchmarks" viewTransition>
+              去创建基准任务
             </Link>
           </div>
-        }
-      />
+        </header>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <MetricCard accent="blue" label="FPS" value={formatMetric(summary.fps, 1)} hint="由 run tick/wall time 与网关 FPS 推导" />
-        <MetricCard accent="violet" label="延迟" value={formatMetric(summary.latencyMs, 1, ' ms')} hint="等待 avg_latency_ms 等指标持续回传" />
-        <MetricCard accent="teal" label="mAP" value={formatMetric(summary.map, 2)} hint="当前优先读取网关或评测侧回传值" />
-        <MetricCard accent="orange" label="功耗" value={formatMetric(summary.powerW, 1, ' W')} hint="未接入时显示待接入" />
-        <MetricCard accent="rose" label="温度" value={formatMetric(summary.temperatureC, 1, '°C')} hint="未接入时显示待接入" />
-        <MetricCard accent="blue" label="场景通过率" value={formatMetric(summary.passRate, 1, '%')} hint="COMPLETED / 终态 run" />
-      </div>
+        <div className="project-console__layout">
+          <aside className="project-console__rail">
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">项目入口</span>
+                  <strong>项目列表</strong>
+                </div>
+              </header>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_420px]">
-        <Panel title="测评项目" subtitle="项目页只呈现业务项目语义，不直接展示具体 DUT 型号。">
-          {projects.length === 0 ? (
-            <EmptyState title="没有项目目录" description="后端项目模型还没有返回任何数据。" />
-          ) : (
-            <div className="grid gap-4 xl:grid-cols-3">
-              {projects.map((project) => {
-                const projectRuns = runs.filter((run) => getRunProjectId(run) === project.project_id);
-                const latestRun = projectRuns[0] ?? null;
+              {projectsQuery.isLoading ? (
+                <EmptyState description="正在同步项目目录。" title="项目加载中" />
+              ) : projectsQuery.isError ? (
+                <EmptyState
+                  description={
+                    projectsQuery.error instanceof Error ? projectsQuery.error.message : '项目接口异常。'
+                  }
+                  title="项目加载失败"
+                />
+              ) : (
+                <SelectionList
+                  emptyDescription="后端暂未返回项目记录。"
+                  emptyTitle="没有项目"
+                  expandLabel="展开项目"
+                  maxVisible={6}
+                  items={projects.map((project) => ({
+                    id: project.project_id,
+                    title: project.name,
+                    subtitle: project.description,
+                    meta: `${project.vendor} / ${project.processor}`,
+                    status: project.status,
+                    hint: project.project_id
+                  }))}
+                  onSelect={(id) =>
+                    setWorkflowSelection({
+                      projectId: id,
+                      benchmarkDefinitionId: null,
+                      scenarioId: null
+                    })
+                  }
+                  selectedId={selectedProject?.project_id ?? null}
+                />
+              )}
+            </section>
+          </aside>
 
-                return (
-                  <div key={project.project_id} className="rounded-[26px] border border-secondaryGray-200 bg-secondaryGray-50/60 p-5 shadow-card">
-                    <div className="flex items-start justify-between gap-3">
+          <div className="project-console__main">
+            {!selectedProject ? (
+              <section className="project-console__card project-console__card--empty">
+                <EmptyState description="先从左侧选择一个项目，再查看该项目的归档结果和运行态。" title="未选择项目" />
+              </section>
+            ) : workspaceQuery.isLoading ? (
+              <section className="project-console__card project-console__card--empty">
+                <EmptyState description="正在加载项目工作台接口。" title="项目工作台加载中" />
+              </section>
+            ) : workspaceQuery.isError || !workspace ? (
+              <section className="project-console__card project-console__card--empty">
+                <EmptyState
+                  description={
+                    workspaceQuery.error instanceof Error ? workspaceQuery.error.message : '工作台接口异常。'
+                  }
+                  title="项目工作台加载失败"
+                />
+              </section>
+            ) : (
+              <section className="project-console__card">
+                <header className="project-console__card-header">
+                  <div>
+                    <span className="project-console__section-label">项目只读结果</span>
+                    <strong>{workspace.project.name}</strong>
+                  </div>
+                  <div className="project-console__toggle">
+                    <button
+                      className={
+                        viewMode === 'overview'
+                          ? 'project-console__toggle-item project-console__toggle-item--active'
+                          : 'project-console__toggle-item'
+                      }
+                      onClick={() => setViewMode('overview')}
+                      type="button"
+                    >
+                      总览
+                    </button>
+                    <button
+                      className={
+                        viewMode === 'reports'
+                          ? 'project-console__toggle-item project-console__toggle-item--active'
+                          : 'project-console__toggle-item'
+                      }
+                      onClick={() => setViewMode('reports')}
+                      type="button"
+                    >
+                      报告归档
+                    </button>
+                    <button
+                      className={
+                        viewMode === 'runtime'
+                          ? 'project-console__toggle-item project-console__toggle-item--active'
+                          : 'project-console__toggle-item'
+                      }
+                      onClick={() => setViewMode('runtime')}
+                      type="button"
+                    >
+                      运行态
+                    </button>
+                  </div>
+                </header>
+
+                {viewMode === 'overview' && (
+                  <div className="project-console__section-stack">
+                    <div className="project-console__kv-grid">
+                      <div className="project-console__kv">
+                        <span>厂商 / 平台</span>
+                        <strong>{workspace.project.vendor}</strong>
+                        <small>{workspace.project.processor}</small>
+                      </div>
+                      <div className="project-console__kv">
+                        <span>适用模板</span>
+                        <strong>{workspace.summary.benchmark_definition_count}</strong>
+                        <small>只保留摘要，不在这里展开编排。</small>
+                      </div>
+                      <div className="project-console__kv">
+                        <span>归档报告</span>
+                        <strong>{reports.length}</strong>
+                        <small>{latestReport ? `最新 ${formatDateTime(latestReport.updated_at_utc)}` : '尚无报告'}</small>
+                      </div>
+                      <div className="project-console__kv">
+                        <span>活跃任务</span>
+                        <strong>{activeTaskCount}</strong>
+                        <small>{workspace.summary.active_run_count} 个运行仍在更新</small>
+                      </div>
+                    </div>
+
+                    <div className="project-console__chip-block">
+                      <div className="project-console__summary-item">
+                        <span>项目说明</span>
+                        <strong>{workspace.project.name}</strong>
+                        <small>{workspace.project.description}</small>
+                      </div>
+                      <div className="project-console__summary-item">
+                        <span>评测关注</span>
+                        <div className="project-console__chips">
+                          {workspace.project.benchmark_focus.map((item) => (
+                            <span className="project-console__chip" key={item}>
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="project-console__summary-item">
+                        <span>目标指标</span>
+                        <div className="project-console__chips">
+                          {workspace.project.target_metrics.map((item) => (
+                            <span className="project-console__chip project-console__chip--muted" key={item}>
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="project-console__table-split">
                       <div>
-                        <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-secondaryGray-500">
-                          {project.vendor}
-                        </p>
-                        <strong className="mt-2 block text-2xl font-extrabold tracking-[-0.04em] text-navy-900">
-                          {project.name}
-                        </strong>
-                        <p className="mt-2 text-sm leading-6 text-secondaryGray-600">{project.description}</p>
+                        <div className="project-console__table-title">适用模板摘要</div>
+                        <div className="project-console__table">
+                          {workspace.benchmark_definitions.map((definition) => (
+                            <div className="project-console__table-row" key={definition.benchmark_definition_id}>
+                              <div>
+                                <span>{definition.name}</span>
+                                <strong>{definition.report_shape}</strong>
+                                <small>
+                                  {planningModeLabel(definition.planning_mode)} / {definition.cadence}
+                                </small>
+                              </div>
+                              <small>{definition.default_project_id ?? workspace.project.project_id}</small>
+                              <Link
+                                className="horizon-button-secondary"
+                                onClick={() =>
+                                  setWorkflowSelection({
+                                    benchmarkDefinitionId: definition.benchmark_definition_id
+                                  })
+                                }
+                                to="/benchmarks"
+                                viewTransition
+                              >
+                                去编排
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <StatusPill status={project.status} />
-                    </div>
 
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[18px] border border-white/80 bg-white px-4 py-3">
-                        <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">适用范围</span>
-                        <strong className="mt-2 block text-sm text-navy-900">{project.processor}</strong>
+                      <div>
+                        <div className="project-console__table-title">最新归档</div>
+                        <div className="project-console__table">
+                          {reports.length === 0 ? (
+                            <div className="project-console__table-empty">当前项目还没有导出的报告资产。</div>
+                          ) : (
+                            reports.slice(0, 4).map((report) => (
+                              <div className="project-console__table-row" key={report.report_id}>
+                                <div>
+                                  <span>{report.title}</span>
+                                  <strong>{report.benchmark_definition_id}</strong>
+                                  <small>{formatDateTime(report.updated_at_utc)}</small>
+                                </div>
+                                <StatusPill canonical status={report.status} />
+                                <div className="project-console__report-actions">
+                                  <a
+                                    className="horizon-button-secondary"
+                                    href={`/reports/${report.report_id}/download?format=json`}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    JSON
+                                  </a>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
                       </div>
-                      <div className="rounded-[18px] border border-white/80 bg-white px-4 py-3">
-                        <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">已标记执行</span>
-                        <strong className="mt-2 block text-sm text-navy-900">{projectRuns.length}</strong>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {project.target_metrics.map((metric) => (
-                        <span key={metric} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-secondaryGray-600">
-                          {metric}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="mt-5 rounded-[20px] border border-white/80 bg-white px-4 py-4">
-                      <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">最近状态</span>
-                      {latestRun ? (
-                        <>
-                          <div className="mt-3 flex items-center gap-3">
-                            <StatusPill status={latestRun.status} />
-                            <span className="text-sm font-bold text-brand-600">{project.name}</span>
-                          </div>
-                          <p className="mt-3 text-sm text-secondaryGray-600">
-                            {latestRun.scenario_name} / {latestRun.map_name}
-                          </p>
-                          <p className="mt-1 text-xs text-secondaryGray-500">{formatDateTime(latestRun.updated_at_utc)}</p>
-                        </>
-                      ) : (
-                        <p className="mt-3 text-sm leading-6 text-secondaryGray-600">
-                          当前项目还没有写入 `project:{project.project_id}` 标签的执行记录。执行中心新建测评任务后会自动附带项目标签。
-                        </p>
-                      )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </Panel>
+                )}
 
-        <div className="flex flex-col gap-5">
-          <Panel title="平台运行态" subtitle="把执行器、设备和报告入口放在一起，避免首页沦为运维面板。">
-            <div className="grid gap-3">
-              <div className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
-                <span className="block text-sm text-secondaryGray-500">执行器状态</span>
-                <strong className="mt-2 block text-2xl font-extrabold tracking-[-0.04em] text-navy-900">
-                  {systemQuery.data?.executor.status ?? 'UNKNOWN'}
-                </strong>
-              </div>
-              <div className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
-                <span className="block text-sm text-secondaryGray-500">运行中执行</span>
-                <strong className="mt-2 block text-2xl font-extrabold tracking-[-0.04em] text-navy-900">{activeRuns}</strong>
-              </div>
-              <div className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
-                <span className="block text-sm text-secondaryGray-500">在线设备</span>
-                <strong className="mt-2 block text-2xl font-extrabold tracking-[-0.04em] text-navy-900">{onlineDevices}</strong>
-              </div>
-            </div>
-          </Panel>
-
-          <Panel title="最近执行" subtitle="首页只保留业务上最需要追踪的最近执行摘要。">
-            {latestRuns.length === 0 ? (
-              <EmptyState title="暂无执行记录" description="去执行中心创建第一批测评任务，平台就会开始沉淀项目级数据。" />
-            ) : (
-              <div className="flex flex-col gap-3">
-                {latestRuns.map((run) => (
-                  <Link
-                    key={run.run_id}
-                    className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4 transition hover:-translate-y-0.5 hover:shadow-card"
-                    to={`/executions/${run.run_id}`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <strong className="block truncate text-sm font-bold text-navy-900">
-                          {run.scenario_name} / {run.map_name}
-                        </strong>
-                        <p className="mt-1 truncate text-xs text-secondaryGray-500">{run.run_id}</p>
+                {viewMode === 'reports' && (
+                  <div className="project-console__section-stack">
+                    <div className="project-console__summary-grid">
+                      <div className="project-console__summary-item">
+                        <span>报告总数</span>
+                        <strong>{reports.length}</strong>
+                        <small>按更新时间倒序归档。</small>
                       </div>
-                      <StatusPill status={run.status} />
+                      <div className="project-console__summary-item">
+                        <span>待补报告任务</span>
+                        <strong>{pendingReportTasks.length}</strong>
+                        <small>{archivableTaskCount} 个任务已具备归档条件。</small>
+                      </div>
+                      <div className="project-console__summary-item">
+                        <span>最新报告</span>
+                        <strong>{latestReport?.status ?? 'NONE'}</strong>
+                        <small>{latestReport ? latestReport.title : '还没有报告资产'}</small>
+                      </div>
+                      <div className="project-console__summary-item">
+                        <span>最近导出时间</span>
+                        <strong>{latestReport ? formatDateTime(latestReport.updated_at_utc) : '--'}</strong>
+                        <small>报告页负责完整分析，这里只做归档入口。</small>
+                      </div>
                     </div>
-                  </Link>
-                ))}
-              </div>
+
+                    <div className="project-console__table-split">
+                      <div>
+                        <div className="project-console__table-title">项目报告</div>
+                        {reportsQuery.isLoading ? (
+                          <EmptyState description="正在同步当前项目的报告资产。" title="报告加载中" />
+                        ) : reports.length === 0 ? (
+                          <EmptyState description="执行完成并导出后，当前项目的报告会汇总到这里。" title="暂无报告" />
+                        ) : (
+                          <div className="project-console__table">
+                            {reports.map((report) => (
+                              <div className="project-console__table-row" key={report.report_id}>
+                                <div>
+                                  <span>{report.title}</span>
+                                  <strong>{report.benchmark_definition_id}</strong>
+                                  <small>{formatDateTime(report.updated_at_utc)}</small>
+                                </div>
+                                <StatusPill canonical status={report.status} />
+                                <div className="project-console__report-actions">
+                                  <a
+                                    className="horizon-button-secondary"
+                                    href={`/reports/${report.report_id}/download?format=json`}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    JSON
+                                  </a>
+                                  <a
+                                    className="horizon-button-secondary"
+                                    href={`/reports/${report.report_id}/download?format=markdown`}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    MD
+                                  </a>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="project-console__table-title">待补归档</div>
+                        <div className="project-console__table">
+                          {pendingReportTasks.length === 0 ? (
+                            <div className="project-console__table-empty">当前终态任务都已经有报告，或者还没有可归档任务。</div>
+                          ) : (
+                            pendingReportTasks.map((task) => (
+                              <div className="project-console__table-row" key={task.benchmark_task_id}>
+                                <div>
+                                  <span>{task.benchmark_name}</span>
+                                  <strong>{task.status}</strong>
+                                  <small>{formatDateTime(task.updated_at_utc)}</small>
+                                </div>
+                                <small>{task.planned_run_count} runs</small>
+                                <Link className="horizon-button-secondary" to="/reports" viewTransition>
+                                  去归档
+                                </Link>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {viewMode === 'runtime' && (
+                  <div className="project-console__section-stack">
+                    <div className="project-console__summary-grid">
+                      <div className="project-console__summary-item">
+                        <span>Executor</span>
+                        <strong>{systemQuery.data?.executor.status ?? 'UNKNOWN'}</strong>
+                        <small>{systemQuery.data?.executor.warning ?? '无额外警告'}</small>
+                      </div>
+                      <div className="project-console__summary-item">
+                        <span>在线设备</span>
+                        <strong>{workspace.summary.online_gateway_count}</strong>
+                        <small>总计 {workspace.summary.total_gateway_count}</small>
+                      </div>
+                      <div className="project-console__summary-item">
+                        <span>最近运行</span>
+                        <strong>{workspace.summary.recent_run_count}</strong>
+                        <small>{latestRun ? latestRun.scenario_name : '暂无运行'}</small>
+                      </div>
+                      <div className="project-console__summary-item">
+                        <span>最近任务</span>
+                        <strong>{workspace.summary.benchmark_task_count}</strong>
+                        <small>{latestTask ? latestTask.benchmark_name : '暂无任务'}</small>
+                      </div>
+                    </div>
+
+                    <div className="project-console__table-split">
+                      <div>
+                        <div className="project-console__table-title">最近运行</div>
+                        <div className="project-console__table">
+                          {workspace.recent_runs.length === 0 ? (
+                            <div className="project-console__table-empty">当前项目暂无运行记录。</div>
+                          ) : (
+                            workspace.recent_runs.slice(0, 6).map((run) => (
+                              <div className="project-console__table-row" key={run.run_id}>
+                                <div>
+                                  <span>{run.scenario_name}</span>
+                                  <strong>{run.status}</strong>
+                                  <small>{truncateMiddle(run.run_id, 18)}</small>
+                                </div>
+                                <small>{run.execution_backend}</small>
+                                <Link className="horizon-button-secondary" to="/executions" viewTransition>
+                                  去查看
+                                </Link>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="project-console__table-title">设备状态</div>
+                        <div className="project-console__table">
+                          {workspace.gateways.length === 0 ? (
+                            <div className="project-console__table-empty">当前没有设备状态。</div>
+                          ) : (
+                            workspace.gateways.map((gateway) => (
+                              <div className="project-console__table-row" key={gateway.gateway_id}>
+                                <div>
+                                  <span>{gateway.name}</span>
+                                  <strong>{gateway.status}</strong>
+                                  <small>{gateway.address ?? gateway.gateway_id}</small>
+                                </div>
+                                <small>{gateway.current_run_id ? 'BUSY' : 'IDLE'}</small>
+                                <Link className="horizon-button-secondary" to="/devices" viewTransition>
+                                  去设备页
+                                </Link>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </section>
             )}
-          </Panel>
+          </div>
+
+          <aside className="project-console__summary">
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">当前项目</span>
+                  <strong>项目定位</strong>
+                </div>
+              </header>
+
+              {workspace ? (
+                <div className="project-console__summary-stack">
+                  <p>项目: {workspace.project.name}</p>
+                  <p>厂商: {workspace.project.vendor}</p>
+                  <p>平台: {workspace.project.processor}</p>
+                  <small>项目页只看归档与运行态，不再在这里展开模板和场景配置细节。</small>
+                </div>
+              ) : (
+                <EmptyState description="选择项目后显示项目定位。" title="没有项目定位" />
+              )}
+            </section>
+
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">快速跳转</span>
+                  <strong>下一步入口</strong>
+                </div>
+              </header>
+
+              <div className="project-console__action-grid">
+                <Link className="horizon-button project-console__action-link" to="/benchmarks" viewTransition>
+                  基准任务
+                </Link>
+                <Link className="horizon-button-secondary project-console__action-link" to="/reports" viewTransition>
+                  报告中心
+                </Link>
+                <Link className="horizon-button-secondary project-console__action-link" to="/executions" viewTransition>
+                  执行中心
+                </Link>
+                <Link className="horizon-button-secondary project-console__action-link" to="/scenario-sets" viewTransition>
+                  场景集
+                </Link>
+              </div>
+            </section>
+
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">最近归档</span>
+                  <strong>最新资产</strong>
+                </div>
+              </header>
+
+              {latestReport ? (
+                <div className="project-console__summary-stack">
+                  <p>报告: {latestReport.title}</p>
+                  <p>状态: {latestReport.status}</p>
+                  <p>时间: {formatDateTime(latestReport.updated_at_utc)}</p>
+                  <div className="project-console__report-actions">
+                    <a
+                      className="horizon-button-secondary"
+                      href={`/reports/${latestReport.report_id}/download?format=json`}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      JSON
+                    </a>
+                    <a
+                      className="horizon-button-secondary"
+                      href={`/reports/${latestReport.report_id}/download?format=markdown`}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Markdown
+                    </a>
+                  </div>
+                </div>
+              ) : latestTask ? (
+                <div className="project-console__summary-stack">
+                  <p>最近任务: {latestTask.benchmark_name}</p>
+                  <p>状态: {latestTask.status}</p>
+                  <p>时间: {formatDateTime(latestTask.updated_at_utc)}</p>
+                  <small>当前还没有导出报告，可以到报告中心继续归档。</small>
+                </div>
+              ) : (
+                <EmptyState description="当前项目还没有任务或报告资产。" title="没有归档内容" />
+              )}
+            </section>
+          </aside>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

@@ -1,17 +1,17 @@
-import { apiRequest } from './client';
+import { apiRequest, postJson } from './client';
 import type {
-  BuiltinScenario,
   EnvironmentPreset,
   EvaluationProfile,
   HealthStatus,
   MapOption,
   ScenarioCatalogItem,
+  ScenarioLaunchPayload,
+  RunRecord,
   SensorProfile
 } from './types';
 
 export function listScenarios() {
   return apiRequest<{
-    builtins: BuiltinScenario[];
     catalog: ScenarioCatalogItem[];
     environment_presets: EnvironmentPreset[];
     sensor_profiles: SensorProfile[];
@@ -35,6 +35,10 @@ export function listSensorProfiles() {
 
 export function listMaps() {
   return apiRequest<{ maps: MapOption[] }>('/maps').then((data) => data.maps);
+}
+
+export function launchScenario(payload: ScenarioLaunchPayload) {
+  return postJson<RunRecord>('/scenarios/launch', payload);
 }
 
 export function listEvaluationProfiles() {

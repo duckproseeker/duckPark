@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 
 import type { ApexOptions } from 'apexcharts';
+import { useTheme } from '../../features/theme/state';
 
 const Chart = lazy(() => import('react-apexcharts'));
 
@@ -17,16 +18,21 @@ interface DonutStatusChartProps {
 }
 
 export function DonutStatusChart({ title, subtitle, items }: DonutStatusChartProps) {
+  const { resolvedTheme } = useTheme();
   const filteredItems = items.filter((item) => item.value > 0);
   const labels = filteredItems.map((item) => item.label);
   const series = filteredItems.map((item) => item.value);
   const colors = filteredItems.map((item) => item.color);
   const total = series.reduce((sum, value) => sum + value, 0);
 
+  const subtleColor = resolvedTheme === 'dark' ? '#9db0c8' : '#4f647f';
+  const strongColor = resolvedTheme === 'dark' ? '#e2e8f0' : '#0f172a';
+
   const options: ApexOptions = {
     chart: {
       toolbar: { show: false },
-      sparkline: { enabled: true }
+      sparkline: { enabled: true },
+      foreColor: subtleColor
     },
     stroke: {
       width: 0
@@ -48,14 +54,14 @@ export function DonutStatusChart({ title, subtitle, items }: DonutStatusChartPro
             name: {
               show: true,
               offsetY: 18,
-              color: '#A3AED0',
+              color: subtleColor,
               fontSize: '12px',
               fontWeight: 700
             },
             value: {
               show: true,
               offsetY: -16,
-              color: '#1B2559',
+              color: strongColor,
               fontSize: '28px',
               fontWeight: 800,
               formatter: (value) => `${Math.round(Number(value))}`
@@ -64,7 +70,7 @@ export function DonutStatusChart({ title, subtitle, items }: DonutStatusChartPro
               show: true,
               showAlways: true,
               label: 'Total',
-              color: '#A3AED0',
+              color: subtleColor,
               fontSize: '12px',
               fontWeight: 700,
               formatter: () => `${total}`
@@ -74,7 +80,7 @@ export function DonutStatusChart({ title, subtitle, items }: DonutStatusChartPro
       }
     },
     tooltip: {
-      theme: 'light',
+      theme: resolvedTheme,
       y: {
         formatter: (value) => `${value}`
       }
@@ -84,14 +90,23 @@ export function DonutStatusChart({ title, subtitle, items }: DonutStatusChartPro
   return (
     <div className="flex h-full flex-col gap-4">
       <div>
-        <h3 className="text-lg font-extrabold tracking-[-0.02em] text-navy-900">{title}</h3>
-        {subtitle && <p className="mt-1 text-sm text-secondaryGray-600">{subtitle}</p>}
+        <h3 className="text-lg font-extrabold tracking-[-0.02em]" style={{ color: 'var(--text)' }}>
+          {title}
+        </h3>
+        {subtitle && (
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-soft)' }}>
+            {subtitle}
+          </p>
+        )}
       </div>
       <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
         <div className="mx-auto w-full max-w-[220px]">
           <Suspense
             fallback={
-              <div className="flex h-[220px] items-center justify-center rounded-[24px] border border-secondaryGray-200 bg-secondaryGray-50/70 text-sm text-secondaryGray-500">
+              <div
+                className="flex h-[220px] items-center justify-center rounded-[24px] border text-sm"
+                style={{ borderColor: 'var(--border)', background: 'var(--surface-subtle)', color: 'var(--text-soft)' }}
+              >
                 加载图表...
               </div>
             }
@@ -101,20 +116,28 @@ export function DonutStatusChart({ title, subtitle, items }: DonutStatusChartPro
         </div>
         <div className="flex flex-col gap-3">
           {filteredItems.length === 0 ? (
-            <div className="rounded-[20px] border border-secondaryGray-200 bg-secondaryGray-50/70 p-4 text-sm text-secondaryGray-600">
+            <div
+              className="rounded-[20px] border p-4 text-sm"
+              style={{ borderColor: 'var(--border)', background: 'var(--surface-subtle)', color: 'var(--text-soft)' }}
+            >
               暂无状态数据
             </div>
           ) : (
             filteredItems.map((item) => (
               <div
                 key={item.label}
-                className="flex items-center justify-between rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-3"
+                className="flex items-center justify-between rounded-[18px] border px-4 py-3"
+                style={{ borderColor: 'var(--border)', background: 'var(--surface-subtle)' }}
               >
                 <div className="flex items-center gap-3">
                   <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-sm font-semibold text-secondaryGray-700">{item.label}</span>
+                  <span className="text-sm font-semibold" style={{ color: 'var(--text-soft)' }}>
+                    {item.label}
+                  </span>
                 </div>
-                <strong className="text-base font-extrabold text-navy-900">{item.value}</strong>
+                <strong className="text-base font-extrabold" style={{ color: 'var(--text)' }}>
+                  {item.value}
+                </strong>
               </div>
             ))
           )}

@@ -48,6 +48,13 @@ class ProjectStatus(str, Enum):
     ARCHIVED = "ARCHIVED"
 
 
+class BenchmarkPlanningMode(str, Enum):
+    SINGLE_SCENARIO = "single_scenario"
+    TIMED_SINGLE_SCENARIO = "timed_single_scenario"
+    ALL_RUNNABLE = "all_runnable"
+    CUSTOM_MULTI_SCENARIO = "custom_multi_scenario"
+
+
 class BenchmarkTaskStatus(str, Enum):
     CREATED = "CREATED"
     RUNNING = "RUNNING"
@@ -81,6 +88,9 @@ class RunMetrics(BaseModel):
     failure_reason: str | None = None
     current_tick: int | None = None
     sim_time: float | None = None
+    executed_tick_count: int | None = None
+    sim_elapsed_seconds: float | None = None
+    achieved_tick_rate_hz: float | None = None
     wall_time: float | None = None
     spawned_actors_count: int = 0
 
@@ -101,6 +111,8 @@ class RunRecord(BaseModel):
     hil_config: dict[str, Any] | None = None
     evaluation_profile: dict[str, Any] | None = None
     artifact_dir: str
+    execution_backend: str = "scenario_runner"
+    scenario_source: dict[str, Any] | None = None
 
 
 class GatewayRecord(BaseModel):
@@ -168,7 +180,13 @@ class BenchmarkDefinitionRecord(BaseModel):
     cadence: str
     report_shape: str
     project_ids: list[str] = Field(default_factory=list)
+    default_project_id: str | None = None
     default_evaluation_profile_name: str | None = None
+    planning_mode: BenchmarkPlanningMode = BenchmarkPlanningMode.CUSTOM_MULTI_SCENARIO
+    candidate_scenario_ids: list[str] = Field(default_factory=list)
+    supports_duration_seconds: bool = False
+    default_duration_seconds: int | None = None
+    queue_note: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -177,12 +195,15 @@ class BenchmarkTaskMatrixEntry(BaseModel):
     scenario_id: str
     scenario_name: str
     scenario_display_name: str
+    execution_backend: str = "scenario_runner"
     requested_map_name: str
     resolved_map_name: str
     display_map_name: str
     environment_preset_id: str
     environment_name: str
     sensor_profile_name: str
+    requested_timeout_seconds: int | None = None
+    resolved_timeout_seconds: int = 30
 
 
 class BenchmarkTaskRecord(BaseModel):
@@ -197,6 +218,9 @@ class BenchmarkTaskRecord(BaseModel):
     counts_by_status: dict[str, int] = Field(default_factory=dict)
     run_ids: list[str] = Field(default_factory=list)
     scenario_matrix: list[BenchmarkTaskMatrixEntry] = Field(default_factory=list)
+    planning_mode: BenchmarkPlanningMode = BenchmarkPlanningMode.CUSTOM_MULTI_SCENARIO
+    selected_scenario_ids: list[str] = Field(default_factory=list)
+    requested_duration_seconds: int | None = None
     hil_config: dict[str, Any] | None = None
     evaluation_profile_name: str | None = None
     auto_start: bool = False

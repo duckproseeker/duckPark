@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from app.core.models import BenchmarkDefinitionRecord, ProjectRecord, ProjectStatus
+from app.core.models import (
+    BenchmarkDefinitionRecord,
+    BenchmarkPlanningMode,
+    ProjectRecord,
+    ProjectStatus,
+)
 from app.utils.time_utils import now_utc
 
 
@@ -51,7 +56,6 @@ def build_default_projects() -> list[ProjectRecord]:
 
 def build_default_benchmark_definitions() -> list[BenchmarkDefinitionRecord]:
     now = now_utc()
-    project_ids = ["baseline-validation", "matrix-regression", "thermal-soak"]
     return [
         BenchmarkDefinitionRecord(
             benchmark_definition_id="perception-baseline",
@@ -60,8 +64,11 @@ def build_default_benchmark_definitions() -> list[BenchmarkDefinitionRecord]:
             focus_metrics=["FPS", "avg_latency_ms", "mAP", "Recall", "场景通过率"],
             cadence="每次版本切换必跑",
             report_shape="运营总览 + 工程分析",
-            project_ids=project_ids,
+            project_ids=["baseline-validation"],
+            default_project_id="baseline-validation",
             default_evaluation_profile_name="yolo_open_loop_v1",
+            planning_mode=BenchmarkPlanningMode.SINGLE_SCENARIO,
+            queue_note="选择 1 个代表性场景进入队列，适合版本首跑、链路验收和单场景基线对比。",
             created_at=now,
             updated_at=now,
         ),
@@ -72,8 +79,11 @@ def build_default_benchmark_definitions() -> list[BenchmarkDefinitionRecord]:
             focus_metrics=["FPS", "frame_drop_rate", "异常率", "场景通过率"],
             cadence="每日回归 / 发布前加严",
             report_shape="矩阵看板 + 失败清单",
-            project_ids=project_ids,
+            project_ids=["matrix-regression"],
+            default_project_id="matrix-regression",
             default_evaluation_profile_name="yolo_open_loop_v1",
+            planning_mode=BenchmarkPlanningMode.ALL_RUNNABLE,
+            queue_note="自动把当前所有可执行场景各跑一遍，用于多场景压力回归和回归覆盖。",
             created_at=now,
             updated_at=now,
         ),
@@ -84,8 +94,35 @@ def build_default_benchmark_definitions() -> list[BenchmarkDefinitionRecord]:
             focus_metrics=["功耗", "温度", "FPS", "异常率", "稳定性"],
             cadence="夜间长跑",
             report_shape="趋势报告 + 风险摘要",
-            project_ids=project_ids,
+            project_ids=["thermal-soak"],
+            default_project_id="thermal-soak",
             default_evaluation_profile_name="yolo_open_loop_v1",
+            planning_mode=BenchmarkPlanningMode.TIMED_SINGLE_SCENARIO,
+            candidate_scenario_ids=[
+                "osc_follow_leading_vehicle",
+                "osc_lane_change_simple",
+                "osc_sync_arrival_intersection",
+                "osc_intersection_collision_avoidance",
+                "osc_pedestrian_crossing_front",
+            ],
+            supports_duration_seconds=True,
+            default_duration_seconds=1800,
+            queue_note="选择高负载场景并指定运行时长，适合持续压测功耗、温度和掉帧趋势。",
+            created_at=now,
+            updated_at=now,
+        ),
+        BenchmarkDefinitionRecord(
+            benchmark_definition_id="custom-suite",
+            name="自定义测试项目",
+            description="由测试工程手动加入要入队的场景组合，适合问题复现、专项回归和临时验证。",
+            focus_metrics=["场景通过率", "异常率", "FPS", "功耗", "温度"],
+            cadence="按需",
+            report_shape="任务清单 + 结果汇总",
+            project_ids=["matrix-regression"],
+            default_project_id="matrix-regression",
+            default_evaluation_profile_name="yolo_open_loop_v1",
+            planning_mode=BenchmarkPlanningMode.CUSTOM_MULTI_SCENARIO,
+            queue_note="手动选择一个或多个场景进入队列，按当前顺序批量创建 run。",
             created_at=now,
             updated_at=now,
         ),

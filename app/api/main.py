@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes_benchmarks import router as benchmarks_router
 from app.api.routes_captures import router as captures_router
+from app.api.routes_devices import router as devices_router
 from app.api.routes_gateways import router as gateways_router
 from app.api.routes_projects import router as projects_router
 from app.api.routes_reports import router as reports_router
@@ -44,6 +45,7 @@ app.include_router(projects_router)
 app.include_router(benchmarks_router)
 app.include_router(scenarios_router)
 app.include_router(gateways_router)
+app.include_router(devices_router)
 app.include_router(captures_router)
 app.include_router(reports_router)
 app.include_router(system_router)

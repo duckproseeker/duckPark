@@ -1,11 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { listBenchmarkDefinitions } from '../../api/benchmarks';
 import { listProjects } from '../../api/projects';
-import { cancelRun, getRun, getRunEnvironment, getRunEvents, getRunViewer, startRun, stopRun, updateRunEnvironment } from '../../api/runs';
+import {
+  cancelRun,
+  getRun,
+  getRunEnvironment,
+  getRunEvents,
+  getRunViewer,
+  startRun,
+  stopRun,
+  updateRunEnvironment
+} from '../../api/runs';
 import { listEnvironmentPresets } from '../../api/scenarios';
 import type { WeatherConfig } from '../../api/types';
 import { EmptyState } from '../../components/common/EmptyState';
@@ -16,7 +25,15 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { Panel } from '../../components/common/Panel';
 import { StatusPill } from '../../components/common/StatusPill';
 import { formatDateTime, formatRelativeDuration, terminalStatus } from '../../lib/format';
-import { deriveRunFps, findBenchmarkDefinition, findProjectRecord, getRunBenchmarkId, getRunDutModel, getRunProjectId } from '../../lib/platform';
+import {
+  deriveRunFps,
+  findBenchmarkDefinition,
+  findProjectRecord,
+  getRunBenchmarkId,
+  getRunDutModel,
+  getRunProjectId
+} from '../../lib/platform';
+import { buildViewerSocketUrl } from '../../lib/viewer';
 
 const defaultWeather: WeatherConfig = {
   preset: 'ClearNoon'
@@ -24,12 +41,21 @@ const defaultWeather: WeatherConfig = {
 
 export function ExecutionDetailPage() {
   const { runId = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const monitorMode = searchParams.get('mode') === 'monitor';
   const queryClient = useQueryClient();
 
   const [weatherDraft, setWeatherDraft] = useState<WeatherConfig>(defaultWeather);
   const [viewerFriendly, setViewerFriendly] = useState(false);
   const [selectedViewerView, setSelectedViewerView] = useState('third_person');
-  const [viewerRefreshSeed, setViewerRefreshSeed] = useState(() => Date.now());
+  const [viewerSnapshotSeed, setViewerSnapshotSeed] = useState(() => Date.now());
+  const [streamFrameUrl, setStreamFrameUrl] = useState<string | null>(null);
+  const [streamMessage, setStreamMessage] = useState<string | null>(null);
+  const [streamConnected, setStreamConnected] = useState(false);
+  const [streamBufferDepth, setStreamBufferDepth] = useState(0);
+  const [streamBuffering, setStreamBuffering] = useState(false);
+  const streamFrameQueueRef = useRef<string[]>([]);
+  const streamPlaybackPrimedRef = useRef(false);
 
   const runQuery = useQuery({
     queryKey: ['runs', runId],
@@ -67,12 +93,23 @@ export function ExecutionDetailPage() {
     queryFn: listEnvironmentPresets
   });
   const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: listProjects });
-  const benchmarkDefinitionsQuery = useQuery({ queryKey: ['benchmark-definitions'], queryFn: listBenchmarkDefinitions });
+  const benchmarkDefinitionsQuery = useQuery({
+    queryKey: ['benchmark-definitions'],
+    queryFn: listBenchmarkDefinitions
+  });
 
   useEffect(() => {
     if (environmentQuery.data?.descriptor_weather) {
-      setWeatherDraft(environmentQuery.data.runtime_control.weather ?? environmentQuery.data.descriptor_weather);
-      setViewerFriendly(Boolean(environmentQuery.data.runtime_control.debug?.viewer_friendly ?? environmentQuery.data.descriptor_debug?.viewer_friendly));
+      setWeatherDraft(
+        environmentQuery.data.runtime_control.weather ??
+          environmentQuery.data.descriptor_weather
+      );
+      setViewerFriendly(
+        Boolean(
+          environmentQuery.data.runtime_control.debug?.viewer_friendly ??
+            environmentQuery.data.descriptor_debug?.viewer_friendly
+        )
+      );
     }
   }, [environmentQuery.data]);
 
@@ -90,16 +127,121 @@ export function ExecutionDetailPage() {
   }, [viewerQuery.data]);
 
   useEffect(() => {
-    if (!viewerQuery.data?.available) {
+    streamFrameQueueRef.current = [];
+    streamPlaybackPrimedRef.current = false;
+    setStreamFrameUrl(null);
+    setStreamMessage(null);
+    setStreamConnected(false);
+    setStreamBufferDepth(0);
+    setStreamBuffering(false);
+
+    if (!viewerQuery.data?.available || !viewerQuery.data.stream_ws_path) {
       return undefined;
     }
 
-    const intervalId = window.setInterval(() => {
-      setViewerRefreshSeed(Date.now());
-    }, viewerQuery.data.refresh_interval_ms);
+    const playbackIntervalMs = Math.max(
+      viewerQuery.data.playback_interval_ms ?? viewerQuery.data.stream_interval_ms,
+      80
+    );
+    const streamBufferMinFrames = Math.max(
+      1,
+      viewerQuery.data.stream_buffer_min_frames ?? 2
+    );
+    const streamBufferMaxFrames = Math.max(
+      streamBufferMinFrames + 1,
+      viewerQuery.data.stream_buffer_max_frames ?? 8
+    );
+    const playbackTimer = window.setInterval(() => {
+      const queue = streamFrameQueueRef.current;
+      if (!streamPlaybackPrimedRef.current) {
+        setStreamBuffering(true);
+        setStreamBufferDepth(queue.length);
+        if (queue.length < streamBufferMinFrames) {
+          return;
+        }
+        streamPlaybackPrimedRef.current = true;
+      }
 
-    return () => window.clearInterval(intervalId);
-  }, [viewerQuery.data]);
+      const nextFrameUrl = queue.shift();
+      if (!nextFrameUrl) {
+        streamPlaybackPrimedRef.current = false;
+        setStreamBuffering(true);
+        setStreamBufferDepth(0);
+        return;
+      }
+
+      setStreamFrameUrl(nextFrameUrl);
+      setStreamBufferDepth(queue.length);
+      setStreamBuffering(queue.length < streamBufferMinFrames);
+    }, playbackIntervalMs);
+
+    const socket = new WebSocket(
+      buildViewerSocketUrl(viewerQuery.data.stream_ws_path, selectedViewerView)
+    );
+
+    socket.onopen = () => {
+      setStreamConnected(true);
+      setStreamMessage(null);
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as
+          | {
+              type: 'frame';
+              mime: string;
+              image_base64: string;
+            }
+          | {
+              type: 'unavailable' | 'error';
+              reason?: string;
+              message?: string;
+            };
+
+        if (payload.type === 'frame') {
+          const queue = streamFrameQueueRef.current;
+          queue.push(`data:${payload.mime};base64,${payload.image_base64}`);
+          while (queue.length > streamBufferMaxFrames) {
+            queue.shift();
+          }
+          setStreamBufferDepth(queue.length);
+          setStreamMessage(null);
+          return;
+        }
+
+        streamPlaybackPrimedRef.current = false;
+        setStreamMessage(payload.reason ?? payload.message ?? '流式画面暂不可用');
+      } catch {
+        streamPlaybackPrimedRef.current = false;
+        setStreamMessage('流式画面消息解析失败');
+      }
+    };
+
+    socket.onerror = () => {
+      streamPlaybackPrimedRef.current = false;
+      setStreamMessage('流式画面连接失败');
+    };
+
+    socket.onclose = () => {
+      setStreamConnected(false);
+    };
+
+    return () => {
+      window.clearInterval(playbackTimer);
+      streamFrameQueueRef.current = [];
+      streamPlaybackPrimedRef.current = false;
+      socket.close();
+    };
+  }, [
+    runId,
+    selectedViewerView,
+    viewerQuery.data?.available,
+    viewerQuery.data?.stream_ws_path,
+    viewerQuery.data?.playback_interval_ms,
+    viewerQuery.data?.stream_buffer_max_frames,
+    viewerQuery.data?.stream_buffer_min_frames,
+    viewerQuery.data?.stream_interval_ms
+  ]);
 
   const stopMutation = useMutation({
     mutationFn: () => stopRun(runId),
@@ -135,42 +277,64 @@ export function ExecutionDetailPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['runs', runId, 'environment'] });
       void queryClient.invalidateQueries({ queryKey: ['runs', runId] });
+      setViewerSnapshotSeed(Date.now());
     }
   });
 
   const run = runQuery.data;
   const project = run ? findProjectRecord(projectsQuery.data ?? [], getRunProjectId(run)) : null;
-  const benchmark = run ? findBenchmarkDefinition(benchmarkDefinitionsQuery.data ?? [], getRunBenchmarkId(run)) : null;
+  const benchmark = run
+    ? findBenchmarkDefinition(
+        benchmarkDefinitionsQuery.data ?? [],
+        getRunBenchmarkId(run)
+      )
+    : null;
   const dutModel = run ? getRunDutModel(run) : null;
   const fps = run ? deriveRunFps(run) : null;
   const events = eventsQuery.data ?? [];
+
   const viewerSnapshotUrl =
     viewerQuery.data?.snapshot_url && selectedViewerView
-      ? `${viewerQuery.data.snapshot_url}?view=${selectedViewerView}&ts=${viewerRefreshSeed}`
+      ? `${viewerQuery.data.snapshot_url}?view=${selectedViewerView}&ts=${viewerSnapshotSeed}`
       : null;
+  const viewerImageUrl = streamFrameUrl ?? viewerSnapshotUrl;
+  const streamStatusLabel = streamBuffering
+    ? '预览缓冲中'
+    : streamConnected
+      ? '流式连接中'
+      : '等待画面';
+  const streamHealthLabel =
+    streamMessage ??
+    (streamBuffering
+      ? `缓冲 ${streamBufferDepth}/${viewerQuery.data?.stream_buffer_min_frames ?? 0} 帧`
+      : '画面正常');
 
   const summaryItems = useMemo(() => {
     if (!run) {
       return [];
     }
 
-      return [
-        { label: '状态', value: <StatusPill status={run.status} /> },
-        { label: '执行 ID', value: run.run_id },
-        { label: '所属项目', value: project?.name ?? '未标记' },
-        { label: 'DUT 型号', value: dutModel ?? '未登记' },
-        { label: '基准任务', value: benchmark?.name ?? '未标记' },
-        { label: '场景', value: run.scenario_name },
+    return [
+      { label: '状态', value: <StatusPill status={run.status} /> },
+      { label: '执行 ID', value: run.run_id },
+      { label: '所属项目', value: project?.name ?? '未标记' },
+      { label: 'DUT 型号', value: dutModel ?? '未登记' },
+      { label: '基准任务', value: benchmark?.name ?? '未标记' },
+      { label: '场景', value: run.scenario_name },
       { label: '地图', value: run.map_name },
+      { label: '执行后端', value: run.execution_backend },
       { label: '绑定设备', value: run.hil_config?.gateway_id ?? '-' },
       { label: '天气预设', value: run.weather?.preset ?? '-' },
       { label: '传感器模板', value: run.sensors?.profile_name ?? '-' },
       { label: '创建时间', value: formatDateTime(run.created_at_utc) },
       { label: '开始时间', value: formatDateTime(run.started_at_utc) },
       { label: '结束时间', value: formatDateTime(run.ended_at_utc) },
-      { label: '运行时长', value: formatRelativeDuration(run.started_at_utc, run.ended_at_utc) },
-        { label: '失败原因', value: run.error_reason ?? '-' }
-      ];
+      {
+        label: '运行时长',
+        value: formatRelativeDuration(run.started_at_utc, run.ended_at_utc)
+      },
+      { label: '失败原因', value: run.error_reason ?? '-' }
+    ];
   }, [benchmark?.name, dutModel, project?.name, run]);
 
   if (!runId) {
@@ -180,23 +344,42 @@ export function ExecutionDetailPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="执行详情"
+        title={monitorMode ? '执行监控' : '执行详情'}
         eyebrow="Executions / Detail"
-        chips={['执行剖面', '事件时间线', '环境热更新']}
+        chips={
+          monitorMode
+            ? ['自动跳转', '流式监控', run?.execution_backend === 'scenario_runner' ? '官方 runner' : '天气热更新']
+            : ['执行剖面', '事件时间线', run?.execution_backend === 'scenario_runner' ? '官方 runner' : '环境热更新']
+        }
         description={run ? `${run.scenario_name} / ${run.map_name}` : runId}
         actions={
           <div className="flex flex-wrap gap-3">
             <Link className="horizon-button-secondary" to="/executions">
               返回执行中心
             </Link>
+            {monitorMode && (
+              <Link className="horizon-button-secondary" to={`/executions/${runId}`}>
+                打开完整详情
+              </Link>
+            )}
             {run?.status === 'CREATED' && (
-              <button className="horizon-button" disabled={startMutation.isPending} onClick={() => startMutation.mutate()} type="button">
+              <button
+                className="horizon-button"
+                disabled={startMutation.isPending}
+                onClick={() => startMutation.mutate()}
+                type="button"
+              >
                 启动执行
               </button>
             )}
             {['STARTING', 'RUNNING', 'PAUSED', 'STOPPING'].includes(run?.status ?? '') && (
               <>
-                <button className="horizon-button-secondary" disabled={stopMutation.isPending} onClick={() => stopMutation.mutate()} type="button">
+                <button
+                  className="horizon-button-secondary"
+                  disabled={stopMutation.isPending}
+                  onClick={() => stopMutation.mutate()}
+                  type="button"
+                >
                   停止
                 </button>
                 <button
@@ -219,29 +402,170 @@ export function ExecutionDetailPage() {
         </Panel>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MetricCard accent="blue" label="执行 FPS" value={fps ? fps.toFixed(1) : '待接入'} hint="由 tick / wall time 推导" />
-            <MetricCard accent="violet" label="当前 Tick" value={run.current_tick ?? '-'} hint="执行推进深度" />
-            <MetricCard accent="teal" label="仿真时间" value={run.sim_time ?? '-'} hint="sim_time 秒" />
-            <MetricCard accent="orange" label="墙钟耗时" value={run.wall_elapsed_seconds ? `${run.wall_elapsed_seconds.toFixed(1)} s` : '-'} hint="真实运行耗时" />
-          </div>
+          <Panel
+            title="运行时监控"
+            subtitle="这里优先展示连续流式画面；如果流式通道短暂不可用，会回退到快照画面。"
+          >
+            {!viewerQuery.data?.available ? (
+              <EmptyState
+                title="画面暂不可用"
+                description={
+                  viewerQuery.data?.reason ??
+                  '启动 run 后，这里会显示与 ego_viewer.py 类似的运行时画面。'
+                }
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_200px_200px]">
+                  <label className="field">
+                    <span>监视视角</span>
+                    <select
+                      value={selectedViewerView}
+                      onChange={(event) => setSelectedViewerView(event.target.value)}
+                    >
+                      {viewerQuery.data.views.map((item) => (
+                        <option key={item.view_id} value={item.view_id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-          <Panel title="执行摘要">
-            <KeyValueGrid items={summaryItems} />
+                  <div className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
+                    <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
+                      传输状态
+                    </span>
+                    <strong className="mt-2 block text-sm text-navy-900">
+                      {streamStatusLabel}
+                    </strong>
+                    <span className="mt-2 block text-xs text-secondaryGray-600">
+                      目标缓冲 {viewerQuery.data?.stream_buffer_min_frames ?? 0} 帧
+                    </span>
+                  </div>
+
+                  <div className="field">
+                    <span>回退快照</span>
+                    <button
+                      className="horizon-button-secondary"
+                      onClick={() => setViewerSnapshotSeed(Date.now())}
+                      type="button"
+                    >
+                      手动刷新
+                    </button>
+                  </div>
+                </div>
+
+                {viewerImageUrl ? (
+                  <div className="overflow-hidden rounded-[28px] border border-secondaryGray-200 bg-secondaryGray-900">
+                    <img
+                      alt="CARLA 运行时画面"
+                      className="h-auto w-full object-cover"
+                      src={viewerImageUrl}
+                    />
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="正在等待首帧"
+                    description={streamMessage ?? '执行刚进入运行态时，首帧会有短暂延迟。'}
+                  />
+                )}
+
+                <div className="grid gap-3 xl:grid-cols-4">
+                  <div className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
+                    <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
+                      监控模式
+                    </span>
+                    <strong className="mt-2 block text-sm text-navy-900">
+                      {monitorMode ? '自动跳转进入' : '手动打开'}
+                    </strong>
+                  </div>
+                  <div className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
+                    <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
+                      主车角色名
+                    </span>
+                    <strong className="mt-2 block text-sm text-navy-900">
+                      {run.execution_backend === 'scenario_runner' ? 'hero / 官方定义' : 'ego_vehicle'}
+                    </strong>
+                  </div>
+                  <div className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
+                    <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
+                      流状态
+                    </span>
+                    <strong className="mt-2 block text-sm text-navy-900">
+                      {streamHealthLabel}
+                    </strong>
+                  </div>
+                  <div className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
+                    <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
+                      缓冲深度
+                    </span>
+                    <strong className="mt-2 block text-sm text-navy-900">
+                      {streamBufferDepth} / {viewerQuery.data?.stream_buffer_max_frames ?? 0}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            )}
           </Panel>
 
-          <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.3fr)_420px]">
-            <div className="flex flex-col gap-5">
-              <div className="grid gap-5 xl:grid-cols-2">
-                <Panel title="执行标签">
-                  <JsonBlock value={run.metadata} />
-                </Panel>
-                <Panel title="评测协议">
-                  <JsonBlock value={run.evaluation_profile ?? { message: '当前执行未绑定评测协议。' }} />
-                </Panel>
-              </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              accent="blue"
+              label="执行推进率"
+              value={fps ? fps.toFixed(1) : '待接入'}
+              hint="run-local tick / wall time"
+            />
+            <MetricCard
+              accent="violet"
+              label="当前 Tick"
+              value={run.current_tick ?? '-'}
+              hint="执行推进深度"
+            />
+            <MetricCard
+              accent="teal"
+              label="仿真时间"
+              value={run.sim_time ?? '-'}
+              hint="sim_time 秒"
+            />
+            <MetricCard
+              accent="orange"
+              label="墙钟耗时"
+              value={
+                run.wall_elapsed_seconds
+                  ? `${run.wall_elapsed_seconds.toFixed(1)} s`
+                  : '-'
+              }
+              hint="真实运行耗时"
+            />
+          </div>
 
-              <Panel title="事件时间线" subtitle="直接读取 executor 写入的事件流，适合定位失败和状态切换。">
+          <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.35fr)_420px]">
+            <div className="flex flex-col gap-5">
+              <Panel title="执行摘要">
+                <KeyValueGrid items={summaryItems} />
+              </Panel>
+
+              {!monitorMode && (
+                <div className="grid gap-5 xl:grid-cols-2">
+                  <Panel title="执行标签">
+                    <JsonBlock value={run.metadata} />
+                  </Panel>
+                  <Panel title="评测协议">
+                    <JsonBlock
+                      value={
+                        run.evaluation_profile ?? {
+                          message: '当前执行未绑定评测协议。'
+                        }
+                      }
+                    />
+                  </Panel>
+                </div>
+              )}
+
+              <Panel
+                title="事件时间线"
+                subtitle="直接读取 executor 写入的事件流，适合定位失败和状态切换。"
+              >
                 {events.length === 0 ? (
                   <EmptyState title="没有事件" description="该执行还没有写入 events.jsonl。" />
                 ) : (
@@ -255,7 +579,9 @@ export function ExecutionDetailPage() {
                         <div className="timeline__content">
                           <strong>{event.event_type}</strong>
                           <p>{event.message}</p>
-                          {Object.keys(event.payload).length > 0 && <JsonBlock compact value={event.payload} />}
+                          {Object.keys(event.payload).length > 0 && (
+                            <JsonBlock compact value={event.payload} />
+                          )}
                         </div>
                       </div>
                     ))}
@@ -265,113 +591,126 @@ export function ExecutionDetailPage() {
             </div>
 
             <div className="flex flex-col gap-5">
-              <Panel title="运行时画面" subtitle="使用只读 viewer 快照连接到当前 CARLA world，不参与 tick 控制。">
-                {!viewerQuery.data?.available ? (
-                  <EmptyState
-                    title="画面暂不可用"
-                    description={viewerQuery.data?.reason ?? '启动 run 后，这里会显示与 ego_viewer.py 类似的运行时画面。'}
-                  />
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_140px]">
+              <Panel
+                title="运行环境热更新"
+                subtitle={
+                  run.runtime_capabilities.weather_update
+                    ? '预设场景保持地图和事件固定，只开放天气与 viewer 模式的运行时修改。'
+                    : '当前 run 由官方 ScenarioRunner 执行，天气和 viewer 控制由官方场景脚本管理。'
+                }
+              >
+                {run.runtime_capabilities.weather_update ? (
+                  <>
+                    <div className="form-grid">
                       <label className="field">
-                        <span>监视视角</span>
-                        <select value={selectedViewerView} onChange={(event) => setSelectedViewerView(event.target.value)}>
-                          {viewerQuery.data.views.map((item) => (
-                            <option key={item.view_id} value={item.view_id}>
-                              {item.label}
+                        <span>天气预设</span>
+                        <select
+                          value={weatherDraft.preset}
+                          onChange={(event) =>
+                            setWeatherDraft((current) => ({
+                              ...current,
+                              preset: event.target.value
+                            }))
+                          }
+                        >
+                          {environmentPresetsQuery.data?.map((item) => (
+                            <option key={item.preset_id} value={item.weather.preset}>
+                              {item.display_name}
                             </option>
-                          ))}
+                          )) ?? <option value="ClearNoon">Clear Noon</option>}
                         </select>
                       </label>
-                      <div className="field">
-                        <span>操作</span>
-                        <button className="horizon-button-secondary" onClick={() => setViewerRefreshSeed(Date.now())} type="button">
-                          刷新画面
-                        </button>
-                      </div>
+
+                      <label className="field">
+                        <span>Cloudiness</span>
+                        <input
+                          type="number"
+                          value={weatherDraft.cloudiness ?? 0}
+                          onChange={(event) =>
+                            setWeatherDraft((current) => ({
+                              ...current,
+                              cloudiness: Number(event.target.value)
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label className="field">
+                        <span>Precipitation</span>
+                        <input
+                          type="number"
+                          value={weatherDraft.precipitation ?? 0}
+                          onChange={(event) =>
+                            setWeatherDraft((current) => ({
+                              ...current,
+                              precipitation: Number(event.target.value)
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label className="field">
+                        <span>Fog Density</span>
+                        <input
+                          type="number"
+                          value={weatherDraft.fog_density ?? 0}
+                          onChange={(event) =>
+                            setWeatherDraft((current) => ({
+                              ...current,
+                              fog_density: Number(event.target.value)
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label className="field">
+                        <span>Wetness</span>
+                        <input
+                          type="number"
+                          value={weatherDraft.wetness ?? 0}
+                          onChange={(event) =>
+                            setWeatherDraft((current) => ({
+                              ...current,
+                              wetness: Number(event.target.value)
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label className="field field--checkbox">
+                        <input
+                          checked={viewerFriendly}
+                          onChange={(event) => setViewerFriendly(event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span>viewer_friendly</span>
+                      </label>
                     </div>
 
-                    {viewerSnapshotUrl && (
-                      <div className="overflow-hidden rounded-[24px] border border-secondaryGray-200 bg-secondaryGray-900">
-                        <img alt="CARLA 运行时画面" className="h-auto w-full object-cover" src={viewerSnapshotUrl} />
-                      </div>
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <button
+                        className="horizon-button"
+                        disabled={updateEnvironmentMutation.isPending}
+                        onClick={() => updateEnvironmentMutation.mutate()}
+                        type="button"
+                      >
+                        {updateEnvironmentMutation.isPending ? '更新中...' : '应用环境更新'}
+                      </button>
+                    </div>
+
+                    {updateEnvironmentMutation.error && (
+                      <p className="mt-4 text-sm text-rose-600">
+                        {updateEnvironmentMutation.error.message}
+                      </p>
                     )}
-
-                    <div className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4 text-sm leading-6 text-secondaryGray-600">
-                      <p>1. 这是只读 viewer 快照，不会抢占 executor 的 tick 控制权。</p>
-                      <p>2. 视角支持第一视角和第三视角，行为与 `scripts/ego_viewer.py` 对齐。</p>
-                      <p>3. 若画面暂时空白，通常表示 run 还未进入运行态或当前 world 中尚未挂上 ego。</p>
-                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-[20px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4 text-sm leading-6 text-secondaryGray-600">
+                    <p>1. 当前场景由官方 ScenarioRunner / OpenSCENARIO 驱动执行。</p>
+                    <p>2. 平台不会在运行中覆盖天气、传感器或 viewer_friendly。</p>
+                    <p>3. 如果需要改天气，应修改对应 `.xosc` 或其参数声明。</p>
                   </div>
                 )}
-              </Panel>
-
-              <Panel title="运行环境热更新" subtitle="运行中可以调整天气和 viewer 模式，方便复现实验与观察。">
-                <div className="form-grid">
-                  <label className="field">
-                    <span>天气预设</span>
-                    <select
-                      value={weatherDraft.preset}
-                      onChange={(event) => setWeatherDraft((current) => ({ ...current, preset: event.target.value }))}
-                    >
-                      {environmentPresetsQuery.data?.map((item) => (
-                        <option key={item.preset_id} value={item.weather.preset}>
-                          {item.display_name}
-                        </option>
-                      )) ?? <option value="ClearNoon">Clear Noon</option>}
-                    </select>
-                  </label>
-
-                  <label className="field">
-                    <span>Cloudiness</span>
-                    <input
-                      type="number"
-                      value={weatherDraft.cloudiness ?? 0}
-                      onChange={(event) => setWeatherDraft((current) => ({ ...current, cloudiness: Number(event.target.value) }))}
-                    />
-                  </label>
-
-                  <label className="field">
-                    <span>Precipitation</span>
-                    <input
-                      type="number"
-                      value={weatherDraft.precipitation ?? 0}
-                      onChange={(event) => setWeatherDraft((current) => ({ ...current, precipitation: Number(event.target.value) }))}
-                    />
-                  </label>
-
-                  <label className="field">
-                    <span>Fog Density</span>
-                    <input
-                      type="number"
-                      value={weatherDraft.fog_density ?? 0}
-                      onChange={(event) => setWeatherDraft((current) => ({ ...current, fog_density: Number(event.target.value) }))}
-                    />
-                  </label>
-
-                  <label className="field">
-                    <span>Wetness</span>
-                    <input
-                      type="number"
-                      value={weatherDraft.wetness ?? 0}
-                      onChange={(event) => setWeatherDraft((current) => ({ ...current, wetness: Number(event.target.value) }))}
-                    />
-                  </label>
-
-                  <label className="field field--checkbox">
-                    <input checked={viewerFriendly} onChange={(event) => setViewerFriendly(event.target.checked)} type="checkbox" />
-                    <span>viewer_friendly</span>
-                  </label>
-                </div>
-
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <button className="horizon-button" disabled={updateEnvironmentMutation.isPending} onClick={() => updateEnvironmentMutation.mutate()} type="button">
-                    {updateEnvironmentMutation.isPending ? '更新中...' : '应用环境更新'}
-                  </button>
-                </div>
-
-                {updateEnvironmentMutation.error && <p className="mt-4 text-sm text-rose-600">{updateEnvironmentMutation.error.message}</p>}
               </Panel>
 
               <Panel title="当前环境状态">
@@ -387,9 +726,11 @@ export function ExecutionDetailPage() {
                 />
               </Panel>
 
-              <Panel title="传感器配置">
-                <JsonBlock compact value={run.sensors ?? { enabled: false }} />
-              </Panel>
+              {!monitorMode && (
+                <Panel title="传感器配置">
+                  <JsonBlock compact value={run.sensors ?? { enabled: false }} />
+                </Panel>
+              )}
             </div>
           </div>
         </>

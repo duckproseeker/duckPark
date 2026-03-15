@@ -20,7 +20,7 @@
 
     <main>
       <section>
-        <h2>内置场景列表</h2>
+        <h2>ScenarioRunner 场景目录</h2>
         <table id="scenario-table">
           <thead>
             <tr>
@@ -43,9 +43,9 @@
           <label>
             地图 map_name
             <select id="map-name" required disabled>
-              <option value="">正在读取 CARLA 地图...</option>
+              <option value="">由场景模板锁定</option>
             </select>
-            <span id="map-field-note" class="field-note">仅显示当前 CARLA server 可加载的地图。</span>
+            <span id="map-field-note" class="field-note">地图由官方 OpenSCENARIO 模板锁定，这里只做展示。</span>
           </label>
           <label>
             超时 termination.timeout_seconds（仿真时间）
@@ -79,7 +79,7 @@
           </label>
           <label>
             <input id="viewer-friendly" type="checkbox" />
-            启用调试友好模式（debug.viewer_friendly）
+            调试友好模式已随 native builtin runtime 一并废弃
           </label>
           <button id="create-run-button" type="submit">创建运行</button>
         </form>

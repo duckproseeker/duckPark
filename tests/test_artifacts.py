@@ -10,7 +10,7 @@ from app.storage.run_store import RunStore
 
 VALID_DESCRIPTOR = {
     "version": 1,
-    "scenario_name": "empty_drive",
+    "scenario_name": "osc_follow_leading_vehicle",
     "map_name": "Town01",
     "weather": {"preset": "ClearNoon"},
     "sync": {"enabled": True, "fixed_delta_seconds": 0.05},

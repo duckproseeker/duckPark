@@ -7,7 +7,7 @@ from app.scenario.validators import validate_descriptor
 
 VALID_DESCRIPTOR = {
     "version": 1,
-    "scenario_name": "empty_drive",
+    "scenario_name": "osc_follow_leading_vehicle",
     "map_name": "Town01",
     "weather": {"preset": "ClearNoon"},
     "sync": {"enabled": True, "fixed_delta_seconds": 0.05},
@@ -32,7 +32,7 @@ VALID_DESCRIPTOR = {
 
 def test_descriptor_validation_success() -> None:
     descriptor = validate_descriptor(VALID_DESCRIPTOR)
-    assert descriptor.scenario_name == "empty_drive"
+    assert descriptor.scenario_name == "osc_follow_leading_vehicle"
     assert descriptor.sync.fixed_delta_seconds == 0.05
     assert descriptor.debug.viewer_friendly is False
 

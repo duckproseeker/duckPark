@@ -130,6 +130,7 @@ function getStatusTone(status) {
 function renderScenarioTable(scenarios) {
   scenarioTableBody.innerHTML = "";
   scenarioSelect.innerHTML = "";
+  createRunButton.disabled = scenarios.length === 0;
 
   scenarios.forEach((scenario) => {
     const tr = document.createElement("tr");
@@ -159,12 +160,12 @@ function renderMapOptions(maps) {
 
   if (!maps.length) {
     mapSelect.disabled = true;
-    createRunButton.disabled = true;
-    mapFieldNote.textContent = "当前 CARLA server 没有返回可用地图。";
+    mapFieldNote.textContent =
+      "当前未读取到 CARLA 地图列表；ScenarioRunner 会按场景模板中的锁定地图执行。";
 
     const emptyOption = document.createElement("option");
     emptyOption.value = "";
-    emptyOption.textContent = "无可用地图";
+    emptyOption.textContent = "由场景模板锁定";
     mapSelect.appendChild(emptyOption);
     return;
   }
@@ -177,9 +178,9 @@ function renderMapOptions(maps) {
     mapSelect.appendChild(option);
   });
 
-  mapSelect.disabled = false;
-  createRunButton.disabled = false;
-  mapFieldNote.textContent = "仅显示当前 CARLA server 可加载的地图。";
+  mapSelect.disabled = true;
+  mapFieldNote.textContent =
+    "地图由官方 OpenSCENARIO 模板锁定，这里只展示当前 CARLA 可见地图。";
 }
 
 function renderGatewayOptions(gateways) {
@@ -285,10 +286,20 @@ function applyScenarioDefaults(scenarioName) {
     return;
   }
 
-  selectMapOption(template.map_name);
+  const lockedMapName = template.map_name || "";
+  selectMapOption(lockedMapName);
+  if (mapSelect.value !== lockedMapName) {
+    mapSelect.innerHTML = "";
+    const option = document.createElement("option");
+    option.value = lockedMapName;
+    option.textContent = lockedMapName || "由场景模板锁定";
+    mapSelect.appendChild(option);
+    mapSelect.value = lockedMapName;
+  }
   timeoutInput.value = template.termination.timeout_seconds;
   fixedDeltaInput.value = template.sync.fixed_delta_seconds;
-  viewerFriendlyInput.checked = Boolean(template.debug?.viewer_friendly);
+  viewerFriendlyInput.checked = false;
+  viewerFriendlyInput.disabled = true;
 }
 
 function createFlag(label, active) {
@@ -642,7 +653,7 @@ function renderRuns(runs) {
 
 async function loadScenarios() {
   const data = await apiGet("/scenarios");
-  renderScenarioTable(data.builtins || []);
+  renderScenarioTable(data.catalog || []);
 }
 
 async function loadGateways() {
@@ -667,9 +678,8 @@ async function loadMaps() {
     availableMaps = [];
     mapSelect.innerHTML = `<option value="">地图列表读取失败</option>`;
     mapSelect.disabled = true;
-    createRunButton.disabled = true;
-    mapFieldNote.textContent = `地图列表读取失败: ${error.message}`;
-    throw error;
+    mapFieldNote.textContent =
+      `地图列表读取失败，但 ScenarioRunner 仍会使用场景模板中的锁定地图: ${error.message}`;
   }
 }
 
@@ -718,12 +728,12 @@ function buildDescriptorFromForm() {
   }
 
   const descriptor = JSON.parse(JSON.stringify(template));
-  descriptor.map_name = mapSelect.value;
+  descriptor.map_name = descriptor.map_name || mapSelect.value;
   descriptor.termination.timeout_seconds = Number.parseInt(timeoutInput.value, 10);
   descriptor.sync.fixed_delta_seconds = Number.parseFloat(fixedDeltaInput.value);
 
   descriptor.debug = descriptor.debug || {};
-  descriptor.debug.viewer_friendly = viewerFriendlyInput.checked;
+  descriptor.debug.viewer_friendly = false;
 
   descriptor.metadata = descriptor.metadata || {};
   descriptor.metadata.author = "web-ui";

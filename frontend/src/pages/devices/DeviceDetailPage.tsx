@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 
-import { listCaptures } from '../../api/captures';
-import { getGateway } from '../../api/gateways';
+import { getDeviceWorkspace } from '../../api/devices';
 import { EmptyState } from '../../components/common/EmptyState';
 import { JsonBlock } from '../../components/common/JsonBlock';
 import { KeyValueGrid } from '../../components/common/KeyValueGrid';
@@ -24,22 +23,16 @@ import {
 export function DeviceDetailPage() {
   const { gatewayId = '' } = useParams();
 
-  const gatewayQuery = useQuery({
-    queryKey: ['gateways', gatewayId],
-    queryFn: () => getGateway(gatewayId),
+  const workspaceQuery = useQuery({
+    queryKey: ['devices', gatewayId, 'workspace'],
+    queryFn: () => getDeviceWorkspace(gatewayId),
     enabled: Boolean(gatewayId),
     refetchInterval: 5000
   });
-
-  const capturesQuery = useQuery({
-    queryKey: ['captures', gatewayId],
-    queryFn: () => listCaptures({ gatewayId }),
-    enabled: Boolean(gatewayId),
-    refetchInterval: 5000
-  });
-
-  const gateway = gatewayQuery.data;
-  const captures = capturesQuery.data ?? [];
+  const gateway = workspaceQuery.data?.gateway;
+  const captures = workspaceQuery.data?.captures ?? [];
+  const benchmarkTasks = workspaceQuery.data?.benchmark_tasks ?? [];
+  const summary = workspaceQuery.data?.summary;
 
   if (!gatewayId) {
     return <EmptyState title="缺少设备 ID" description="路由参数里没有 gateway_id。" />;
@@ -64,9 +57,17 @@ export function DeviceDetailPage() {
         }
       />
 
-      {!gateway ? (
+      {workspaceQuery.isLoading ? (
         <Panel>
           <p>加载中...</p>
+        </Panel>
+      ) : workspaceQuery.isError ? (
+        <Panel>
+          <p>{workspaceQuery.error instanceof Error ? workspaceQuery.error.message : '设备工作台接口异常。'}</p>
+        </Panel>
+      ) : !gateway ? (
+        <Panel>
+          <p>未找到设备。</p>
         </Panel>
       ) : (
         <>
@@ -90,12 +91,12 @@ export function DeviceDetailPage() {
               <Panel title="关键遥测">
                 <KeyValueGrid
                   items={[
-                    { label: '输入 FPS', value: formatMetric(deriveGatewayInputFps(gateway), 1) },
-                    { label: '输出 FPS', value: formatMetric(deriveGatewayOutputFps(gateway), 1) },
-                    { label: '平均延迟', value: formatMetric(deriveGatewayLatencyMs(gateway), 1, ' ms') },
-                    { label: '丢帧率', value: formatMetric(deriveGatewayFrameDropRate(gateway), 3) },
-                    { label: '功耗', value: formatMetric(deriveGatewayPowerW(gateway), 1, ' W') },
-                    { label: '温度', value: formatMetric(deriveGatewayTemperatureC(gateway), 1, '°C') },
+                    { label: '输入 FPS', value: formatMetric(summary?.input_fps ?? deriveGatewayInputFps(gateway), 1) },
+                    { label: '输出 FPS', value: formatMetric(summary?.output_fps ?? deriveGatewayOutputFps(gateway), 1) },
+                    { label: '平均延迟', value: formatMetric(summary?.latency_ms ?? deriveGatewayLatencyMs(gateway), 1, ' ms') },
+                    { label: '丢帧率', value: formatMetric(summary?.frame_drop_rate ?? deriveGatewayFrameDropRate(gateway), 3) },
+                    { label: '功耗', value: formatMetric(summary?.power_w ?? deriveGatewayPowerW(gateway), 1, ' W') },
+                    { label: '温度', value: formatMetric(summary?.temperature_c ?? deriveGatewayTemperatureC(gateway), 1, '°C') },
                     { label: 'HDMI 检测格式', value: String(gateway.metrics.hdmi_detected_format ?? '-') },
                     { label: '采集分辨率', value: String(gateway.metrics.capture_resolution ?? '-') },
                     { label: 'UDC 状态', value: String(gateway.metrics.udc_state ?? '-') },
@@ -134,6 +135,26 @@ export function DeviceDetailPage() {
             </div>
 
             <div className="flex flex-col gap-5">
+              <Panel title="关联任务">
+                {benchmarkTasks.length === 0 ? (
+                  <EmptyState title="没有关联任务" description="该设备当前还没有绑定的基准任务。" />
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {benchmarkTasks.map((task) => (
+                      <div key={task.benchmark_task_id} className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <strong className="text-sm font-bold text-navy-900">{task.benchmark_name}</strong>
+                          <StatusPill status={task.status} />
+                        </div>
+                        <p className="mt-2 text-xs text-secondaryGray-500">
+                          {task.dut_model ?? '未登记 DUT'} / {task.project_name}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Panel>
+
               <Panel title="能力声明">
                 <JsonBlock value={gateway.capabilities} />
               </Panel>
