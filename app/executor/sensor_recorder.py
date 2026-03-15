@@ -97,16 +97,30 @@ class SensorRecorder:
                 pass
         self._jsonl_handles.clear()
 
-        for sensor_actor in reversed(self._spawned_sensors):
+        sensor_actors = list(reversed(self._spawned_sensors))
+        for sensor_actor in sensor_actors:
+            try:
+                sensor_actor.listen(lambda *_args: None)
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 sensor_actor.stop()
             except Exception:  # noqa: BLE001
                 pass
+        # CARLA sensor callbacks may still flush briefly after stop(); give the
+        # native listener threads a short grace window before destroy().
+        if sensor_actors:
+            time.sleep(0.2)
+        for sensor_actor in sensor_actors:
             try:
                 sensor_actor.destroy()
             except Exception:  # noqa: BLE001
                 pass
         self._spawned_sensors.clear()
+        self._hero_actor = None
+        self._world = None
+        self._client = None
+        self._carla = None
 
     def _connect(self) -> None:
         try:
