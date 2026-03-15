@@ -46,6 +46,7 @@ class DuckparkFreeDrive(BasicScenario):
         self._controller_args = {
             "traffic_manager_port": str(params.get("traffic_manager_port") or "8010"),
             "target_speed_mps": str(params.get("target_speed_mps") or "10.0"),
+            "roaming_seed": str(params.get("roaming_seed") or "0"),
         }
         super().__init__(
             "DuckparkFreeDrive",

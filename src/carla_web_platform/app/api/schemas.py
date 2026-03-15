@@ -116,6 +116,7 @@ class WeatherPayload(BaseModel):
 class TrafficPayload(BaseModel):
     num_vehicles: int = Field(default=0, ge=0, le=128)
     num_walkers: int = Field(default=0, ge=0, le=128)
+    seed: int | None = Field(default=None, ge=0, le=2147483647)
 
 
 class ScenarioTemplateParameterPayload(BaseModel):

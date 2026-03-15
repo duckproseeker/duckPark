@@ -485,6 +485,15 @@ def test_background_traffic_retries_bind_error_on_primary_tm_port(
 
     captured: dict[str, int] = {"attempts": 0}
 
+    class FakeLocation:
+        def distance(self, other):
+            _ = other
+            return 0.0
+
+    class FakeHeroActor:
+        def get_location(self):
+            return FakeLocation()
+
     class FakeCarlaClient:
         def __init__(self, host, port, timeout_seconds, traffic_manager_port):
             _ = (host, port, timeout_seconds)
@@ -496,11 +505,31 @@ def test_background_traffic_retries_bind_error_on_primary_tm_port(
                 raise RuntimeError("bind error")
             return None
 
-        def spawn_traffic_vehicles(self, count, autopilot=True):
+        def apply_traffic_seed(self, seed):
+            captured["seed"] = seed
+
+        def find_actor_by_role_name(self, role_name):
+            captured["role_name"] = role_name
+            return FakeHeroActor()
+
+        def actor_transform_to_dict(self, actor):
+            _ = actor
+            return {"x": 1.0, "y": 2.0, "z": 0.5, "roll": 0.0, "pitch": 0.0, "yaw": 90.0}
+
+        def spawn_traffic_vehicles(
+            self, count, autopilot=True, *, seed=None, anchor_spawn_point=None
+        ):
             _ = autopilot
+            captured["vehicle_seed"] = seed
+            captured["anchor_spawn_point"] = anchor_spawn_point
             return [object()] * count
 
-        def spawn_traffic_walkers(self, count):
+        def spawn_traffic_walkers(
+            self, count, *, seed=None, anchor_location=None, max_radius_m=None
+        ):
+            captured["walker_seed"] = seed
+            captured["walker_anchor"] = anchor_location is not None
+            captured["walker_radius"] = max_radius_m
             return [object()] * count
 
         def cleanup(self):
@@ -516,10 +545,22 @@ def test_background_traffic_retries_bind_error_on_primary_tm_port(
     )
 
     descriptor = SimpleNamespace(
-        traffic=SimpleNamespace(num_vehicles=2, num_walkers=1)
+        traffic=SimpleNamespace(
+            num_vehicles=2,
+            num_walkers=1,
+            seed=17,
+            injection_mode="carla_api_near_ego",
+        )
     )
 
     controller._spawn_background_traffic("tm-port-test", descriptor)
 
     assert captured["traffic_manager_port"] == settings.traffic_manager_port
     assert captured["attempts"] == 2
+    assert captured["seed"] == 17
+    assert captured["role_name"] == "hero"
+    assert captured["vehicle_seed"] == 17
+    assert captured["walker_seed"] == 18
+    assert captured["anchor_spawn_point"]["x"] == 1.0
+    assert captured["walker_anchor"] is True
+    assert captured["walker_radius"] == 80.0

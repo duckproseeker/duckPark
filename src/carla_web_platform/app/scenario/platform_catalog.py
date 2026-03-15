@@ -20,7 +20,8 @@ def build_free_drive_sensor_collection_item() -> dict[str, Any]:
         "display_name": "随机自由行驶 / 传感器采集",
         "description": (
             "面向传感器数据采集的自由行驶模板。支持所有地图随机出生点、"
-            "天气、背景车辆/行人和最长运行时长；hero 由平台内置自动驾驶控制。"
+            "天气、背景车辆/行人和最长运行时长；hero 由平台内置自动驾驶控制，"
+            "背景交通会优先围绕 ego 注入。"
         ),
         "default_map_name": "Town01",
         "execution_support": "scenario_runner",
@@ -59,7 +60,13 @@ def build_free_drive_sensor_collection_item() -> dict[str, Any]:
                     "yaw": 0.0,
                 },
             },
-            "traffic": {"enabled": True, "num_vehicles": 20, "num_walkers": 16},
+            "traffic": {
+                "enabled": True,
+                "num_vehicles": 20,
+                "num_walkers": 16,
+                "seed": None,
+                "injection_mode": "carla_api_near_ego",
+            },
             "sensors": {
                 "enabled": True,
                 "profile_name": "front_rgb",
