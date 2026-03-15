@@ -6,7 +6,15 @@ import shutil
 from fastapi import APIRouter, HTTPException
 
 from app.api.routes_runs import get_run_manager, raise_http_error, run_to_payload
-from app.api.schemas import ApiResponse, RunResponse, ScenarioLaunchRequest
+from app.api.schemas import (
+    ApiResponse,
+    RunResponse,
+    ScenarioLaunchRequest,
+    SensorProfileListPayload,
+    SensorProfileListResponse,
+    SensorProfileResponse,
+    SensorProfileSaveRequest,
+)
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.executor.carla_client import CarlaClient
@@ -22,6 +30,7 @@ from app.scenario.sensor_profiles import (
     build_sensor_config_from_profile,
     get_sensor_profile,
     load_sensor_profiles,
+    save_sensor_profile,
 )
 from app.scenario.template_registry import normalize_template_params
 
@@ -56,6 +65,10 @@ def fetch_available_maps() -> list[dict[str, str]]:
         ) from exc
 
     return collapse_available_maps(available_maps)
+
+
+def _sensor_profile_list_payload(settings_root) -> SensorProfileListPayload:
+    return SensorProfileListPayload(items=load_sensor_profiles(settings_root))
 
 
 @router.get(
@@ -102,16 +115,60 @@ def get_environment_presets() -> ApiResponse:
 
 @router.get(
     "/scenarios/sensor-profiles",
-    response_model=ApiResponse,
+    response_model=SensorProfileListResponse,
     summary="查询传感器配置模板",
     description="返回 YAML 传感器模板，格式参考 CARLA official agent sensors() 配置。",
 )
-def get_sensor_profiles() -> ApiResponse:
+def get_sensor_profiles() -> SensorProfileListResponse:
     settings = get_settings()
-    return ApiResponse(
+    return SensorProfileListResponse(
         success=True,
-        data={"items": load_sensor_profiles(settings.sensor_profiles_root)},
+        data=_sensor_profile_list_payload(settings.sensor_profiles_root),
     )
+
+
+@router.put(
+    "/scenarios/sensor-profiles/{profile_name}",
+    response_model=SensorProfileResponse,
+    summary="创建或更新传感器配置模板",
+    description="用于运维界面维护与车型绑定的 YAML 传感器模板。场景运行仍只引用 profile_name。",
+)
+def save_sensor_profile_endpoint(
+    profile_name: str, request: SensorProfileSaveRequest
+) -> SensorProfileResponse:
+    normalized_path_name = profile_name.strip()
+    if not normalized_path_name:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "VALIDATION_ERROR", "message": "profile_name must not be empty"},
+        )
+    if normalized_path_name != request.profile_name:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": "path profile_name 必须与请求体 profile_name 一致",
+            },
+        )
+
+    settings = get_settings()
+    try:
+        profile = save_sensor_profile(
+            settings.sensor_profiles_root,
+            profile_name=request.profile_name,
+            display_name=request.display_name,
+            description=request.description,
+            sensors=[sensor.model_dump(mode="json", exclude_none=True) for sensor in request.sensors],
+            metadata=request.metadata,
+            vehicle_model=request.vehicle_model,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+        ) from exc
+
+    return SensorProfileResponse(success=True, data=profile)
 
 
 @router.get(

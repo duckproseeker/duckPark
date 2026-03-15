@@ -770,6 +770,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scenarios/sensor-profiles/{profile_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 创建或更新传感器配置模板
+         * @description 用于运维界面维护与车型绑定的 YAML 传感器模板。场景运行仍只引用 profile_name。
+         */
+        put: operations["save_sensor_profile_endpoint_scenarios_sensor_profiles__profile_name__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/status": {
         parameters: {
             query?: never;
@@ -1725,6 +1745,78 @@ export interface components {
             tags?: string[];
         } & {
             [key: string]: unknown;
+        };
+        /** SensorProfileListPayload */
+        SensorProfileListPayload: {
+            /** Items */
+            items: components["schemas"]["SensorProfilePayload"][];
+        };
+        /** SensorProfileListResponse */
+        SensorProfileListResponse: {
+            /** @description 业务数据 */
+            data?: components["schemas"]["SensorProfileListPayload"] | null;
+            /** @description 错误信息 */
+            error?: components["schemas"]["ErrorBody"] | null;
+            /**
+             * Success
+             * @description 请求是否成功
+             * @default true
+             */
+            success: boolean;
+        };
+        /** SensorProfilePayload */
+        SensorProfilePayload: {
+            /** Description */
+            description: string;
+            /** Display Name */
+            display_name: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Profile Name */
+            profile_name: string;
+            /** Raw Yaml */
+            raw_yaml: string;
+            /** Sensors */
+            sensors: components["schemas"]["SensorSpecPayload"][];
+            /** Source Path */
+            source_path: string;
+            /** Vehicle Model */
+            vehicle_model?: string | null;
+        };
+        /** SensorProfileResponse */
+        SensorProfileResponse: {
+            /** @description 业务数据 */
+            data?: components["schemas"]["SensorProfilePayload"] | null;
+            /** @description 错误信息 */
+            error?: components["schemas"]["ErrorBody"] | null;
+            /**
+             * Success
+             * @description 请求是否成功
+             * @default true
+             */
+            success: boolean;
+        };
+        /** SensorProfileSaveRequest */
+        SensorProfileSaveRequest: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Display Name */
+            display_name: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Profile Name */
+            profile_name: string;
+            /** Sensors */
+            sensors: components["schemas"]["SensorSpecPayload"][];
+            /** Vehicle Model */
+            vehicle_model?: string | null;
         };
         /** SensorSpecPayload */
         SensorSpecPayload: {
@@ -3165,7 +3257,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": components["schemas"]["SensorProfileListResponse"];
+                };
+            };
+        };
+    };
+    save_sensor_profile_endpoint_scenarios_sensor_profiles__profile_name__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SensorProfileSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensorProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

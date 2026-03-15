@@ -64,6 +64,13 @@ export const navigation: NavigationItem[] = [
     caption: '采集链路',
     keywords: ['device', 'gateway', 'capture', '设备', '网关'],
     icon: HiOutlineRadio
+  },
+  {
+    to: '/studio',
+    label: '运维',
+    caption: '车型与传感器',
+    keywords: ['studio', 'ops', 'sensor', 'profile', '运维', '传感器', '车型'],
+    icon: HiOutlineSquares2X2
   }
 ];
 

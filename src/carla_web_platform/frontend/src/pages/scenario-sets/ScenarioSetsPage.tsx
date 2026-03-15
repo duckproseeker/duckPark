@@ -578,6 +578,15 @@ export function ScenarioSetsPage() {
                             </option>
                           ))}
                         </select>
+                        <small className="mt-2 block text-xs text-secondaryGray-500">
+                          坐标、姿态和分辨率在
+                          {' '}
+                          <Link className="font-semibold text-brand-500 underline-offset-4 hover:underline" to="/studio">
+                            运维页
+                          </Link>
+                          {' '}
+                          里按车型维护，这里只选模板名。
+                        </small>
                       </label>
 
                       <label className="field">
