@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import random
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -396,6 +398,14 @@ class CarlaClient:
     def actor_transform_to_dict(self, actor: Any) -> dict[str, float]:
         return self._transform_to_dict(actor.get_transform())
 
+    @staticmethod
+    def _deadline_exceeded(deadline_monotonic: float | None) -> bool:
+        return deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+
+    @staticmethod
+    def _abort_requested(should_abort: Callable[[], bool] | None) -> bool:
+        return bool(should_abort is not None and should_abort())
+
     def spawn_fixed_traffic_vehicles(
         self,
         count: int,
@@ -464,6 +474,8 @@ class CarlaClient:
         seed: int | None = None,
         anchor_spawn_point: dict[str, float] | None = None,
         min_distance_from_anchor_m: float = 12.0,
+        deadline_monotonic: float | None = None,
+        should_abort: Callable[[], bool] | None = None,
     ) -> list[Any]:
         if self._world is None:
             raise CarlaClientError("CARLA world is not ready")
@@ -505,6 +517,10 @@ class CarlaClient:
 
         spawned: list[Any] = []
         for index, spawn_point in enumerate(spawn_points):
+            if self._abort_requested(should_abort) or self._deadline_exceeded(
+                deadline_monotonic
+            ):
+                break
             if len(spawned) >= count:
                 break
             blueprint_obj = blueprint_library[index % len(blueprint_library)]
@@ -528,6 +544,8 @@ class CarlaClient:
         seed: int | None = None,
         anchor_location: Any | None = None,
         max_radius_m: float | None = None,
+        deadline_monotonic: float | None = None,
+        should_abort: Callable[[], bool] | None = None,
     ) -> list[Any]:
         if self._world is None or self._carla is None:
             raise CarlaClientError("CARLA world is not ready")
@@ -550,10 +568,18 @@ class CarlaClient:
             else [None]
         )
         for radius in search_radii:
+            if self._abort_requested(should_abort) or self._deadline_exceeded(
+                deadline_monotonic
+            ):
+                break
             if len(spawn_points) >= count:
                 break
             max_attempts = max(count * 10, count + 10)
             for _ in range(max_attempts):
+                if self._abort_requested(should_abort) or self._deadline_exceeded(
+                    deadline_monotonic
+                ):
+                    break
                 location = self._world.get_random_location_from_navigation()
                 if location is None:
                     continue
@@ -570,6 +596,10 @@ class CarlaClient:
         spawned_walkers: list[Any] = []
         controller_blueprint = controller_blueprints[0] if controller_blueprints else None
         for index, spawn_point in enumerate(spawn_points):
+            if self._abort_requested(should_abort) or self._deadline_exceeded(
+                deadline_monotonic
+            ):
+                break
             walker_blueprint = walker_blueprints[index % len(walker_blueprints)]
             if seed is not None and walker_blueprints:
                 walker_blueprint = walker_blueprints[rng.randrange(len(walker_blueprints))]

@@ -205,22 +205,38 @@ class ScenarioRunnerController:
             return None
         return max(0, int(raw_seed))
 
+    @staticmethod
+    def _background_traffic_deadline_exceeded(
+        deadline_monotonic: float | None,
+    ) -> bool:
+        return deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+
     def _wait_for_actor_by_role_name(
         self,
         client: CarlaClient,
         *,
         role_name: str,
         timeout_seconds: float,
+        should_abort: Callable[[], bool] | None = None,
     ) -> Any | None:
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
+            if should_abort is not None and should_abort():
+                return None
             actor = client.find_actor_by_role_name(role_name)
             if actor is not None:
                 return actor
             time.sleep(0.5)
         return None
 
-    def _spawn_background_traffic(self, run_id: str, descriptor: Any) -> CarlaClient | None:
+    def _spawn_background_traffic(
+        self,
+        run_id: str,
+        descriptor: Any,
+        *,
+        should_abort: Callable[[], bool] | None = None,
+        deadline_seconds: float = 15.0,
+    ) -> CarlaClient | None:
         requested_vehicle_count = max(0, int(descriptor.traffic.num_vehicles))
         requested_walker_count = max(0, int(descriptor.traffic.num_walkers))
         if requested_vehicle_count == 0 and requested_walker_count == 0:
@@ -248,12 +264,57 @@ class ScenarioRunnerController:
             5.0,
         )
         background_tm_port = self._settings.traffic_manager_port
+        deadline_monotonic = time.monotonic() + max(1.0, deadline_seconds)
         last_error: Exception | None = None
         client: CarlaClient | None = None
         spawned_vehicles: list[Any] = []
         spawned_walkers: list[Any] = []
 
         for attempt in range(3):
+            if should_abort is not None and should_abort():
+                self._emit_event(
+                    run_id,
+                    "BACKGROUND_TRAFFIC_ABORTED",
+                    "背景交通注入已取消",
+                    payload={
+                        "requested_vehicle_count": requested_vehicle_count,
+                        "spawned_vehicle_count": len(spawned_vehicles),
+                        "requested_walker_count": requested_walker_count,
+                        "spawned_walker_count": len(spawned_walkers),
+                        "seed": traffic_seed,
+                        "injection_mode": injection_mode,
+                    },
+                    level=EventLevel.WARNING,
+                )
+                if client is not None and (
+                    spawned_vehicles or spawned_walkers
+                ):
+                    return client
+                if client is not None:
+                    client.cleanup()
+                return None
+            if self._background_traffic_deadline_exceeded(deadline_monotonic):
+                self._emit_event(
+                    run_id,
+                    "BACKGROUND_TRAFFIC_TIMEOUT",
+                    "背景交通注入超时，场景将继续执行",
+                    payload={
+                        "requested_vehicle_count": requested_vehicle_count,
+                        "spawned_vehicle_count": len(spawned_vehicles),
+                        "requested_walker_count": requested_walker_count,
+                        "spawned_walker_count": len(spawned_walkers),
+                        "seed": traffic_seed,
+                        "injection_mode": injection_mode,
+                    },
+                    level=EventLevel.WARNING,
+                )
+                if client is not None and (
+                    spawned_vehicles or spawned_walkers
+                ):
+                    return client
+                if client is not None:
+                    client.cleanup()
+                return None
             client = CarlaClient(
                 self._settings.carla_host,
                 self._settings.carla_port,
@@ -269,6 +330,7 @@ class ScenarioRunnerController:
                     client,
                     role_name="hero",
                     timeout_seconds=8.0,
+                    should_abort=should_abort,
                 )
                 anchor_spawn_point = (
                     client.actor_transform_to_dict(hero_actor)
@@ -284,6 +346,8 @@ class ScenarioRunnerController:
                         autopilot=True,
                         seed=traffic_seed,
                         anchor_spawn_point=anchor_spawn_point,
+                        deadline_monotonic=deadline_monotonic,
+                        should_abort=should_abort,
                     )
                     if requested_vehicle_count > 0
                     else []
@@ -294,10 +358,56 @@ class ScenarioRunnerController:
                         seed=(traffic_seed + 1) if traffic_seed is not None else None,
                         anchor_location=anchor_location,
                         max_radius_m=80.0 if anchor_location is not None else None,
+                        deadline_monotonic=deadline_monotonic,
+                        should_abort=should_abort,
                     )
                     if requested_walker_count > 0
                     else []
                 )
+                if should_abort is not None and should_abort():
+                    self._emit_event(
+                        run_id,
+                        "BACKGROUND_TRAFFIC_ABORTED",
+                        "背景交通注入已取消",
+                        payload={
+                            "requested_vehicle_count": requested_vehicle_count,
+                            "spawned_vehicle_count": len(spawned_vehicles),
+                            "requested_walker_count": requested_walker_count,
+                            "spawned_walker_count": len(spawned_walkers),
+                            "seed": traffic_seed,
+                            "injection_mode": injection_mode,
+                        },
+                        level=EventLevel.WARNING,
+                    )
+                    if spawned_vehicles or spawned_walkers:
+                        return client
+                    client.cleanup()
+                    return None
+                if (
+                    self._background_traffic_deadline_exceeded(deadline_monotonic)
+                    and (
+                        len(spawned_vehicles) < requested_vehicle_count
+                        or len(spawned_walkers) < requested_walker_count
+                    )
+                ):
+                    self._emit_event(
+                        run_id,
+                        "BACKGROUND_TRAFFIC_TIMEOUT",
+                        "背景交通注入超时，场景将继续执行",
+                        payload={
+                            "requested_vehicle_count": requested_vehicle_count,
+                            "spawned_vehicle_count": len(spawned_vehicles),
+                            "requested_walker_count": requested_walker_count,
+                            "spawned_walker_count": len(spawned_walkers),
+                            "seed": traffic_seed,
+                            "injection_mode": injection_mode,
+                        },
+                        level=EventLevel.WARNING,
+                    )
+                    if spawned_vehicles or spawned_walkers:
+                        return client
+                    client.cleanup()
+                    return None
                 break
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
@@ -412,6 +522,7 @@ class ScenarioRunnerController:
         run_id: str,
         process: subprocess.Popen[str],
         line_callback: Callable[[str], None] | None = None,
+        stop_callback: Callable[[], None] | None = None,
     ) -> None:
         stdout = process.stdout
         if stdout is None:
@@ -424,6 +535,8 @@ class ScenarioRunnerController:
             while True:
                 latest = self._run_store.get(run_id)
                 if latest.stop_requested or latest.cancel_requested:
+                    if stop_callback is not None:
+                        stop_callback()
                     self._transition(run_id, RunStatus.STOPPING)
                     self._emit_event(run_id, "RUN_STOPPING", "官方 ScenarioRunner 收到停止请求")
                     process.terminate()
@@ -526,6 +639,8 @@ class ScenarioRunnerController:
         process: subprocess.Popen[str] | None = None
         background_traffic_client: CarlaClient | None = None
         background_traffic_thread: threading.Thread | None = None
+        background_traffic_cancelled = threading.Event()
+        background_traffic_ready = threading.Event()
         sensor_recorder: SensorRecorder | None = None
         sensor_thread: threading.Thread | None = None
         sensor_recorder_error: str | None = None
@@ -590,21 +705,26 @@ class ScenarioRunnerController:
                 int(descriptor.traffic.num_vehicles) > 0
                 or int(descriptor.traffic.num_walkers) > 0
             )
-            background_traffic_ready = threading.Event()
 
             if background_traffic_requested:
 
                 def _background_traffic_worker() -> None:
                     nonlocal background_traffic_client
                     if not background_traffic_ready.wait(timeout=20.0):
+                        if background_traffic_cancelled.is_set():
+                            return
                         self._emit_event(
                             run_id,
                             "BACKGROUND_TRAFFIC_TRIGGER_FALLBACK",
                             "未等到 ScenarioRunner stdout 触发信号，改用超时降级继续尝试注入背景交通",
                             level=EventLevel.WARNING,
                         )
+                    if background_traffic_cancelled.is_set():
+                        return
                     background_traffic_client = self._spawn_background_traffic(
-                        run_id, descriptor
+                        run_id,
+                        descriptor,
+                        should_abort=background_traffic_cancelled.is_set,
                     )
 
                 background_traffic_thread = threading.Thread(
@@ -624,17 +744,35 @@ class ScenarioRunnerController:
                 ):
                     background_traffic_ready.set()
 
+            def _on_stop_requested() -> None:
+                background_traffic_cancelled.set()
+                background_traffic_ready.set()
+
             self._append_process_output_with_callback(
                 run_id,
                 process,
                 line_callback=_on_process_line,
+                stop_callback=_on_stop_requested,
             )
             return_code = process.wait()
+            background_traffic_cancelled.set()
+            background_traffic_ready.set()
             summary_path, summary_payload = self._load_summary_payload(output_dir)
             if sensor_thread is not None:
                 sensor_thread.join(timeout=2.0)
             if background_traffic_thread is not None:
                 background_traffic_thread.join(timeout=2.0)
+                if background_traffic_thread.is_alive():
+                    self._artifact_store.append_run_log(
+                        run_id,
+                        "[scenario_runner] WARNING background traffic cleanup still running after timeout",
+                    )
+                    self._emit_event(
+                        run_id,
+                        "BACKGROUND_TRAFFIC_CLEANUP_DETACHED",
+                        "背景交通清理超过等待时间，将在后台继续结束",
+                        level=EventLevel.WARNING,
+                    )
 
             latest = self._run_store.get(run_id)
             if latest.cancel_requested:
