@@ -424,6 +424,53 @@ class SensorsConfigPayload(BaseModel):
     sensors: list[SensorSpecPayload]
 
 
+class SensorProfilePayload(BaseModel):
+    profile_name: str
+    display_name: str
+    description: str
+    vehicle_model: str | None = None
+    sensors: list[SensorSpecPayload]
+    raw_yaml: str
+    source_path: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SensorProfileSaveRequest(BaseModel):
+    profile_name: str
+    display_name: str
+    description: str = ""
+    vehicle_model: str | None = None
+    sensors: list[SensorSpecPayload]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("profile_name", "display_name")
+    @classmethod
+    def validate_sensor_profile_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("field must not be empty")
+        return normalized
+
+    @field_validator("vehicle_model")
+    @classmethod
+    def validate_vehicle_model(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @field_validator("metadata")
+    @classmethod
+    def validate_metadata(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ValueError("metadata must be a mapping")
+        return value
+
+
+class SensorProfileListPayload(BaseModel):
+    items: list[SensorProfilePayload]
+
+
 class RunRuntimeCapabilitiesPayload(BaseModel):
     weather_update: bool
     viewer_friendly: bool
@@ -724,6 +771,14 @@ class RunEnvironmentStateResponse(ApiResponse[RunEnvironmentStatePayload]):
 
 
 class RunViewerInfoResponse(ApiResponse[RunViewerInfoPayload]):
+    pass
+
+
+class SensorProfileResponse(ApiResponse[SensorProfilePayload]):
+    pass
+
+
+class SensorProfileListResponse(ApiResponse[SensorProfileListPayload]):
     pass
 
 

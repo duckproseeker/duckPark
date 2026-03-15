@@ -87,6 +87,72 @@ def test_sensor_profiles_endpoint_reads_yaml(tmp_path: Path) -> None:
     assert "raw_yaml" in items[0]
 
 
+def test_sensor_profiles_save_endpoint_writes_yaml(tmp_path: Path) -> None:
+    settings = get_settings()
+    client = TestClient(app)
+
+    payload = {
+        "profile_name": "vehicle_sedan_alpha",
+        "display_name": "Sedan Alpha",
+        "description": "车型 Alpha 的前向采集模板",
+        "vehicle_model": "vehicle.lincoln.mkz_2017",
+        "metadata": {"category": "ops", "source": "duckpark"},
+        "sensors": [
+            {
+                "id": "FrontRGB",
+                "type": "sensor.camera.rgb",
+                "x": 1.65,
+                "y": 0.0,
+                "z": 1.72,
+                "roll": 0.0,
+                "pitch": 0.0,
+                "yaw": 0.0,
+                "width": 1920,
+                "height": 1080,
+                "fov": 100.0,
+            },
+            {
+                "id": "RoofLidar",
+                "type": "sensor.lidar.ray_cast",
+                "x": 0.15,
+                "y": 0.0,
+                "z": 2.05,
+                "channels": 64,
+                "range": 85.0,
+                "points_per_second": 600000,
+                "rotation_frequency": 10.0,
+            },
+        ],
+    }
+
+    resp = client.put(
+        f"/scenarios/sensor-profiles/{payload['profile_name']}",
+        json=payload,
+    )
+    assert resp.status_code == 200, resp.text
+    saved = resp.json()["data"]
+    assert saved["profile_name"] == "vehicle_sedan_alpha"
+    assert saved["vehicle_model"] == "vehicle.lincoln.mkz_2017"
+    assert saved["metadata"]["category"] == "ops"
+    assert len(saved["sensors"]) == 2
+
+    saved_path = settings.sensor_profiles_root / "vehicle_sedan_alpha.yaml"
+    assert saved_path.exists()
+    saved_text = saved_path.read_text(encoding="utf-8")
+    assert "vehicle_model: vehicle.lincoln.mkz_2017" in saved_text
+    assert "id: FrontRGB" in saved_text
+    assert "id: RoofLidar" in saved_text
+
+    list_resp = client.get("/scenarios/sensor-profiles")
+    assert list_resp.status_code == 200
+    items = list_resp.json()["data"]["items"]
+    item = next(
+        entry for entry in items if entry["profile_name"] == "vehicle_sedan_alpha"
+    )
+    assert item["display_name"] == "Sedan Alpha"
+    assert item["vehicle_model"] == "vehicle.lincoln.mkz_2017"
+
+
 def test_scenario_catalog_marks_official_runner_items_when_environment_present(
     tmp_path: Path, monkeypatch
 ) -> None:

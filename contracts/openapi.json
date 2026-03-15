@@ -3005,6 +3005,194 @@
         "title": "ScenarioMetadataPayload",
         "type": "object"
       },
+      "SensorProfileListPayload": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SensorProfilePayload"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SensorProfileListPayload",
+        "type": "object"
+      },
+      "SensorProfileListResponse": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SensorProfileListPayload"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "业务数据"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "错误信息"
+          },
+          "success": {
+            "default": true,
+            "description": "请求是否成功",
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "title": "SensorProfileListResponse",
+        "type": "object"
+      },
+      "SensorProfilePayload": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "profile_name": {
+            "title": "Profile Name",
+            "type": "string"
+          },
+          "raw_yaml": {
+            "title": "Raw Yaml",
+            "type": "string"
+          },
+          "sensors": {
+            "items": {
+              "$ref": "#/components/schemas/SensorSpecPayload"
+            },
+            "title": "Sensors",
+            "type": "array"
+          },
+          "source_path": {
+            "title": "Source Path",
+            "type": "string"
+          },
+          "vehicle_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vehicle Model"
+          }
+        },
+        "required": [
+          "profile_name",
+          "display_name",
+          "description",
+          "sensors",
+          "raw_yaml",
+          "source_path"
+        ],
+        "title": "SensorProfilePayload",
+        "type": "object"
+      },
+      "SensorProfileResponse": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SensorProfilePayload"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "业务数据"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "错误信息"
+          },
+          "success": {
+            "default": true,
+            "description": "请求是否成功",
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "title": "SensorProfileResponse",
+        "type": "object"
+      },
+      "SensorProfileSaveRequest": {
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "profile_name": {
+            "title": "Profile Name",
+            "type": "string"
+          },
+          "sensors": {
+            "items": {
+              "$ref": "#/components/schemas/SensorSpecPayload"
+            },
+            "title": "Sensors",
+            "type": "array"
+          },
+          "vehicle_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vehicle Model"
+          }
+        },
+        "required": [
+          "profile_name",
+          "display_name",
+          "sensors"
+        ],
+        "title": "SensorProfileSaveRequest",
+        "type": "object"
+      },
       "SensorSpecPayload": {
         "properties": {
           "attributes": {
@@ -5257,7 +5445,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+                  "$ref": "#/components/schemas/SensorProfileListResponse"
                 }
               }
             },
@@ -5265,6 +5453,59 @@
           }
         },
         "summary": "查询传感器配置模板",
+        "tags": [
+          "场景管理"
+        ]
+      }
+    },
+    "/scenarios/sensor-profiles/{profile_name}": {
+      "put": {
+        "description": "用于运维界面维护与车型绑定的 YAML 传感器模板。场景运行仍只引用 profile_name。",
+        "operationId": "save_sensor_profile_endpoint_scenarios_sensor_profiles__profile_name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_name",
+            "required": true,
+            "schema": {
+              "title": "Profile Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SensorProfileSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SensorProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建或更新传感器配置模板",
         "tags": [
           "场景管理"
         ]

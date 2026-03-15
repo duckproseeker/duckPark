@@ -10,6 +10,7 @@ import { ProjectsPage } from '../pages/projects/ProjectsPage';
 import { ReportsPage } from '../pages/reports/ReportsPage';
 import { ScenarioSetsPage } from '../pages/scenario-sets/ScenarioSetsPage';
 import { SettingsPage } from '../pages/settings/SettingsPage';
+import { StudioPage } from '../pages/studio/StudioPage';
 
 function LegacyRunRedirect() {
   const { runId = '' } = useParams();
@@ -37,7 +38,7 @@ const router = createBrowserRouter(
         { path: 'devices', element: <DevicesPage /> },
         { path: 'devices/:gatewayId', element: <DeviceDetailPage /> },
         { path: 'overview', element: <Navigate to="/projects" replace /> },
-        { path: 'studio', element: <Navigate to="/executions" replace /> },
+        { path: 'studio', element: <StudioPage /> },
         { path: 'scenario-library', element: <Navigate to="/scenario-sets" replace /> },
         { path: 'runs', element: <Navigate to="/executions" replace /> },
         { path: 'runs/:runId', element: <LegacyRunRedirect /> },

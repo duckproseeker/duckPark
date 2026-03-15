@@ -90,9 +90,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return body as T;
 }
 
-export function postJson<T>(path: string, body?: unknown) {
+export function postJson<T>(path: string, body?: unknown, method: 'POST' | 'PUT' = 'POST') {
   return apiRequest<T>(path, {
-    method: 'POST',
+    method,
     body: body === undefined ? undefined : JSON.stringify(body)
   });
 }

@@ -234,9 +234,19 @@ export interface SensorProfile {
   profile_name: string;
   display_name: string;
   description: string;
+  vehicle_model?: string | null;
   sensors: SensorSpec[];
   raw_yaml: string;
   source_path: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface SensorProfileSavePayload {
+  profile_name: string;
+  display_name: string;
+  description: string;
+  vehicle_model?: string | null;
+  sensors: SensorSpec[];
   metadata: Record<string, unknown>;
 }
 

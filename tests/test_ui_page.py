@@ -25,6 +25,9 @@ def test_ui_page_available() -> None:
     response_deep_link = client.get("/ui/runs")
     assert response_deep_link.status_code == 200
 
+    response_studio = client.get("/ui/studio")
+    assert response_studio.status_code == 200
+
     response_api = client.get("/runs")
     assert response_api.status_code == 200
     assert response_api.json()["success"] is True

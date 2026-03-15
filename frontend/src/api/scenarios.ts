@@ -7,7 +7,8 @@ import type {
   ScenarioCatalogItem,
   ScenarioLaunchPayload,
   RunRecord,
-  SensorProfile
+  SensorProfile,
+  SensorProfileSavePayload
 } from './types';
 
 export function listScenarios() {
@@ -31,6 +32,10 @@ export function listEnvironmentPresets() {
 
 export function listSensorProfiles() {
   return apiRequest<{ items: SensorProfile[] }>('/scenarios/sensor-profiles').then((data) => data.items);
+}
+
+export function saveSensorProfile(payload: SensorProfileSavePayload) {
+  return postJson<SensorProfile>(`/scenarios/sensor-profiles/${payload.profile_name}`, payload, 'PUT');
 }
 
 export function listMaps() {
