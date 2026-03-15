@@ -741,7 +741,7 @@ export interface paths {
         put?: never;
         /**
          * 按场景启动配置创建运行
-         * @description 前端只提交场景、地图、天气和背景交通参数。后端生成 per-run OpenSCENARIO 文件并创建 run，可按需自动加入执行队列。
+         * @description 前端只提交场景、地图、天气、传感器和背景交通参数。后端生成 per-run 的 ScenarioRunner 输入并创建 run，可按需自动加入执行队列。
          */
         post: operations["launch_scenario_scenarios_launch_post"];
         delete?: never;
@@ -1696,6 +1696,8 @@ export interface components {
             metadata?: components["schemas"]["ScenarioMetadataPayload"] | null;
             /** Scenario Id */
             scenario_id: string;
+            /** Sensor Profile Name */
+            sensor_profile_name?: string | null;
             /** Template Params */
             template_params?: {
                 [key: string]: boolean | number | string;
@@ -1790,6 +1792,8 @@ export interface components {
              * @default 0
              */
             num_walkers: number;
+            /** Seed */
+            seed?: number | null;
         };
         /** ValidationError */
         ValidationError: {

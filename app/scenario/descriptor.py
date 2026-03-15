@@ -59,6 +59,8 @@ class TrafficConfig(BaseModel):
     enabled: bool = False
     num_vehicles: int = 0
     num_walkers: int = 0
+    seed: int | None = Field(default=None, ge=0, le=2147483647)
+    injection_mode: str | None = None
 
     @field_validator("num_vehicles", "num_walkers")
     @classmethod
@@ -66,6 +68,14 @@ class TrafficConfig(BaseModel):
         if value < 0:
             raise ValueError("traffic counts must be non-negative")
         return value
+
+    @field_validator("injection_mode")
+    @classmethod
+    def validate_injection_mode(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
 
 class SensorsConfig(BaseModel):

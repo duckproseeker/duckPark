@@ -97,6 +97,13 @@ class CarlaClient:
                 exc,
             )
 
+    def apply_traffic_seed(self, seed: int | None) -> None:
+        if seed is None or self._tm is None:
+            return
+        setter = getattr(self._tm, "set_random_device_seed", None)
+        if callable(setter):
+            setter(int(seed))
+
     def _normalize_map_name(self, map_name: str) -> str:
         return normalize_map_tail(map_name)
 
@@ -371,6 +378,24 @@ class CarlaClient:
             return
         vehicle.set_autopilot(enabled, self._traffic_manager_port)
 
+    def find_actor_by_role_name(self, role_name: str) -> Any | None:
+        if self._world is None:
+            raise CarlaClientError("CARLA world is not ready")
+
+        normalized = role_name.strip()
+        if not normalized:
+            return None
+
+        actors = self._world.get_actors()
+        for actor in actors:
+            actor_role_name = str(actor.attributes.get("role_name") or "").strip()
+            if actor_role_name == normalized:
+                return actor
+        return None
+
+    def actor_transform_to_dict(self, actor: Any) -> dict[str, float]:
+        return self._transform_to_dict(actor.get_transform())
+
     def spawn_fixed_traffic_vehicles(
         self,
         count: int,
@@ -431,19 +456,62 @@ class CarlaClient:
 
         return spawned
 
-    def spawn_traffic_vehicles(self, count: int, autopilot: bool = True) -> list[Any]:
+    def spawn_traffic_vehicles(
+        self,
+        count: int,
+        autopilot: bool = True,
+        *,
+        seed: int | None = None,
+        anchor_spawn_point: dict[str, float] | None = None,
+        min_distance_from_anchor_m: float = 12.0,
+    ) -> list[Any]:
         if self._world is None:
             raise CarlaClientError("CARLA world is not ready")
 
-        blueprint_library = self._world.get_blueprint_library().filter("vehicle.*")
+        blueprint_library = sorted(
+            self._world.get_blueprint_library().filter("vehicle.*"),
+            key=lambda blueprint: blueprint.id,
+        )
         spawn_points = list(self._world.get_map().get_spawn_points())
-        random.shuffle(spawn_points)
+        rng = random.Random(seed) if seed is not None else random
+        anchor_transform = (
+            self._build_transform(anchor_spawn_point)
+            if anchor_spawn_point is not None
+            else None
+        )
+        if anchor_transform is not None:
+            spawn_points = [
+                spawn_point
+                for spawn_point in spawn_points
+                if float(anchor_transform.location.distance(spawn_point.location))
+                >= min_distance_from_anchor_m
+            ]
+            spawn_points.sort(
+                key=lambda spawn_point: (
+                    float(anchor_transform.location.distance(spawn_point.location)),
+                    round(float(spawn_point.location.x), 3),
+                    round(float(spawn_point.location.y), 3),
+                    round(float(spawn_point.rotation.yaw), 3),
+                )
+            )
+            preferred_count = max(count * 4, count + 8)
+            preferred_points = spawn_points[:preferred_count]
+            remaining_points = spawn_points[preferred_count:]
+            if len(preferred_points) > 1:
+                rng.shuffle(preferred_points)
+            spawn_points = preferred_points + remaining_points
+        else:
+            rng.shuffle(spawn_points)
 
         spawned: list[Any] = []
-        for spawn_point in spawn_points:
+        for index, spawn_point in enumerate(spawn_points):
             if len(spawned) >= count:
                 break
-            blueprint_obj = random.choice(blueprint_library)
+            blueprint_obj = blueprint_library[index % len(blueprint_library)]
+            if seed is not None and blueprint_library:
+                blueprint_obj = blueprint_library[rng.randrange(len(blueprint_library))]
+            if blueprint_obj.has_attribute("role_name"):
+                blueprint_obj.set_attribute("role_name", f"scenario_npc_{index}")
             actor = self._world.try_spawn_actor(blueprint_obj, spawn_point)
             if actor is None:
                 continue
@@ -453,12 +521,20 @@ class CarlaClient:
 
         return spawned
 
-    def spawn_traffic_walkers(self, count: int) -> list[Any]:
+    def spawn_traffic_walkers(
+        self,
+        count: int,
+        *,
+        seed: int | None = None,
+        anchor_location: Any | None = None,
+        max_radius_m: float | None = None,
+    ) -> list[Any]:
         if self._world is None or self._carla is None:
             raise CarlaClientError("CARLA world is not ready")
 
-        walker_blueprints = list(
-            self._world.get_blueprint_library().filter("walker.pedestrian.*")
+        walker_blueprints = sorted(
+            self._world.get_blueprint_library().filter("walker.pedestrian.*"),
+            key=lambda blueprint: blueprint.id,
         )
         controller_blueprints = list(
             self._world.get_blueprint_library().filter("controller.ai.walker")
@@ -466,20 +542,37 @@ class CarlaClient:
         if not walker_blueprints:
             raise CarlaClientError("No walker blueprints available")
 
+        rng = random.Random(seed) if seed is not None else random
         spawn_points: list[Any] = []
-        max_attempts = max(count * 6, count + 6)
-        for _ in range(max_attempts):
-            location = self._world.get_random_location_from_navigation()
-            if location is None:
-                continue
-            spawn_points.append(self._carla.Transform(location))
+        search_radii = (
+            [max_radius_m, max_radius_m * 1.5 if max_radius_m is not None else None, None]
+            if anchor_location is not None
+            else [None]
+        )
+        for radius in search_radii:
             if len(spawn_points) >= count:
                 break
+            max_attempts = max(count * 10, count + 10)
+            for _ in range(max_attempts):
+                location = self._world.get_random_location_from_navigation()
+                if location is None:
+                    continue
+                if (
+                    anchor_location is not None
+                    and radius is not None
+                    and float(location.distance(anchor_location)) > float(radius)
+                ):
+                    continue
+                spawn_points.append(self._carla.Transform(location))
+                if len(spawn_points) >= count:
+                    break
 
         spawned_walkers: list[Any] = []
         controller_blueprint = controller_blueprints[0] if controller_blueprints else None
         for index, spawn_point in enumerate(spawn_points):
-            walker_blueprint = random.choice(walker_blueprints)
+            walker_blueprint = walker_blueprints[index % len(walker_blueprints)]
+            if seed is not None and walker_blueprints:
+                walker_blueprint = walker_blueprints[rng.randrange(len(walker_blueprints))]
             if walker_blueprint.has_attribute("is_invincible"):
                 walker_blueprint.set_attribute("is_invincible", "false")
             if walker_blueprint.has_attribute("role_name"):

@@ -198,11 +198,37 @@ class ScenarioRunnerController:
             command[2:2] = ["--openscenario", str(xosc_path)]
         return command, output_dir, env
 
+    @staticmethod
+    def _resolve_background_traffic_seed(descriptor: Any) -> int | None:
+        raw_seed = getattr(descriptor.traffic, "seed", None)
+        if raw_seed in {None, ""}:
+            return None
+        return max(0, int(raw_seed))
+
+    def _wait_for_actor_by_role_name(
+        self,
+        client: CarlaClient,
+        *,
+        role_name: str,
+        timeout_seconds: float,
+    ) -> Any | None:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            actor = client.find_actor_by_role_name(role_name)
+            if actor is not None:
+                return actor
+            time.sleep(0.5)
+        return None
+
     def _spawn_background_traffic(self, run_id: str, descriptor: Any) -> CarlaClient | None:
         requested_vehicle_count = max(0, int(descriptor.traffic.num_vehicles))
         requested_walker_count = max(0, int(descriptor.traffic.num_walkers))
         if requested_vehicle_count == 0 and requested_walker_count == 0:
             return None
+        traffic_seed = self._resolve_background_traffic_seed(descriptor)
+        injection_mode = str(
+            getattr(descriptor.traffic, "injection_mode", None) or "carla_api_near_ego"
+        ).strip()
 
         self._emit_event(
             run_id,
@@ -212,6 +238,8 @@ class ScenarioRunnerController:
                 "requested_vehicle_count": requested_vehicle_count,
                 "requested_walker_count": requested_walker_count,
                 "traffic_manager_port": self._settings.traffic_manager_port,
+                "seed": traffic_seed,
+                "injection_mode": injection_mode,
             },
         )
 
@@ -236,13 +264,37 @@ class ScenarioRunnerController:
                 time.sleep(2.0 if attempt == 0 else 1.5)
                 self._notify_running_heartbeat(run_id)
                 client.connect()
+                client.apply_traffic_seed(traffic_seed)
+                hero_actor = self._wait_for_actor_by_role_name(
+                    client,
+                    role_name="hero",
+                    timeout_seconds=8.0,
+                )
+                anchor_spawn_point = (
+                    client.actor_transform_to_dict(hero_actor)
+                    if hero_actor is not None
+                    else None
+                )
+                anchor_location = (
+                    hero_actor.get_location() if hero_actor is not None else None
+                )
                 spawned_vehicles = (
-                    client.spawn_traffic_vehicles(requested_vehicle_count, autopilot=True)
+                    client.spawn_traffic_vehicles(
+                        requested_vehicle_count,
+                        autopilot=True,
+                        seed=traffic_seed,
+                        anchor_spawn_point=anchor_spawn_point,
+                    )
                     if requested_vehicle_count > 0
                     else []
                 )
                 spawned_walkers = (
-                    client.spawn_traffic_walkers(requested_walker_count)
+                    client.spawn_traffic_walkers(
+                        requested_walker_count,
+                        seed=(traffic_seed + 1) if traffic_seed is not None else None,
+                        anchor_location=anchor_location,
+                        max_radius_m=80.0 if anchor_location is not None else None,
+                    )
                     if requested_walker_count > 0
                     else []
                 )
@@ -295,8 +347,27 @@ class ScenarioRunnerController:
                 "requested_walker_count": requested_walker_count,
                 "spawned_walker_count": len(spawned_walkers),
                 "traffic_manager_port": background_tm_port,
+                "seed": traffic_seed,
+                "injection_mode": injection_mode,
             },
         )
+        if (
+            len(spawned_vehicles) < requested_vehicle_count
+            or len(spawned_walkers) < requested_walker_count
+        ):
+            self._emit_event(
+                run_id,
+                "BACKGROUND_TRAFFIC_PARTIAL",
+                "背景交通只部分注入，请求数量超过当前地图可用出生点或导航点",
+                payload={
+                    "requested_vehicle_count": requested_vehicle_count,
+                    "spawned_vehicle_count": len(spawned_vehicles),
+                    "requested_walker_count": requested_walker_count,
+                    "spawned_walker_count": len(spawned_walkers),
+                    "seed": traffic_seed,
+                },
+                level=EventLevel.WARNING,
+            )
         return client
 
     def _start_sensor_recording(

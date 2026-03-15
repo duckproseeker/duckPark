@@ -80,7 +80,7 @@ def test_sensor_profiles_endpoint_reads_yaml(tmp_path: Path) -> None:
 
     client = TestClient(app)
     resp = client.get("/scenarios/sensor-profiles")
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     items = resp.json()["data"]["items"]
     assert len(items) == 1
     assert items[0]["profile_name"] == "test_profile"
@@ -267,7 +267,7 @@ def test_launch_endpoint_generates_per_run_spec_and_xosc(
         },
     )
 
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     payload = resp.json()["data"]
     assert payload["status"] == "CREATED"
     assert payload["map_name"] == "Town01"
@@ -423,13 +423,15 @@ def test_launch_endpoint_generates_python_scenario_config_and_sensor_descriptor(
         },
     )
 
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     payload = resp.json()["data"]
     assert payload["map_name"] == "Town05"
     assert payload["scenario_source"]["launch_mode"] == "python_scenario"
     assert payload["sensors"]["enabled"] is True
     assert payload["sensors"]["profile_name"] == "front_rgb"
     assert payload["sensors"]["sensors"][0]["type"] == "sensor.camera.rgb"
+    assert isinstance(payload["traffic"]["seed"], int)
+    assert payload["traffic"]["seed"] >= 0
 
     config_path = Path(payload["scenario_source"]["generated_config_path"])
     spec_path = Path(payload["scenario_source"]["generated_spec_path"])
@@ -448,12 +450,16 @@ def test_launch_endpoint_generates_python_scenario_config_and_sensor_descriptor(
     assert free_drive is not None
     assert free_drive.attrib["target_speed_mps"] == "7.5"
     assert free_drive.attrib["timeout_seconds"] == "90"
+    assert free_drive.attrib["roaming_seed"] == str(payload["traffic"]["seed"])
 
     spec_payload = json.loads(spec_path.read_text(encoding="utf-8"))
     assert spec_payload["descriptor"]["map_name"] == "Town05"
     assert spec_payload["descriptor"]["traffic"]["num_vehicles"] == 14
     assert spec_payload["descriptor"]["traffic"]["num_walkers"] == 6
+    assert spec_payload["descriptor"]["traffic"]["seed"] == payload["traffic"]["seed"]
+    assert spec_payload["descriptor"]["traffic"]["injection_mode"] == "carla_api_near_ego"
     assert spec_payload["descriptor"]["sensors"]["profile_name"] == "front_rgb"
+    assert spec_payload["launch_request"]["traffic"]["seed"] == payload["traffic"]["seed"]
     assert spec_payload["resolved_template_params"] == {"targetSpeedMps": 7.5}
 
 

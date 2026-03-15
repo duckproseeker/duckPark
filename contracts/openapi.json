@@ -3264,6 +3264,19 @@
             "minimum": 0.0,
             "title": "Num Walkers",
             "type": "integer"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
           }
         },
         "title": "TrafficPayload",

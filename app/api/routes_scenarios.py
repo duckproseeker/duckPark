@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import shutil
 
 from fastapi import APIRouter, HTTPException
@@ -25,6 +26,10 @@ from app.scenario.sensor_profiles import (
 from app.scenario.template_registry import normalize_template_params
 
 router = APIRouter(tags=["场景管理"])
+
+
+def _derive_traffic_seed(run_id: str) -> int:
+    return int(hashlib.sha1(run_id.encode("utf-8")).hexdigest()[:8], 16) % 2147483647
 
 def fetch_available_maps() -> list[dict[str, str]]:
     settings = get_settings()
@@ -144,6 +149,9 @@ def launch_scenario(request: ScenarioLaunchRequest) -> RunResponse:
     settings = get_settings()
     run_id = manager.build_run_id()
     launch_request = request.model_dump(mode="json", exclude_none=True)
+    launch_request.setdefault("traffic", {})
+    if launch_request["traffic"].get("seed") is None:
+        launch_request["traffic"]["seed"] = _derive_traffic_seed(run_id)
     launch_capabilities = catalog_item.get("launch_capabilities", {})
     resolved_map_name = (
         request.map_name
@@ -196,7 +204,7 @@ def launch_scenario(request: ScenarioLaunchRequest) -> RunResponse:
         weather=request.weather.model_dump(mode="json", exclude_none=True)
         if request.weather is not None
         else None,
-        traffic=request.traffic.model_dump(mode="json"),
+        traffic=launch_request["traffic"],
         sensors=resolved_sensors,
         timeout_seconds=request.timeout_seconds,
         metadata=request.metadata.model_dump(mode="json", exclude_none=True)

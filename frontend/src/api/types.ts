@@ -94,6 +94,8 @@ export interface ScenarioDescriptor {
     enabled: boolean;
     num_vehicles: number;
     num_walkers: number;
+    seed?: number | null;
+    injection_mode?: string | null;
   };
   sensors: SensorsConfig;
   termination: {
@@ -265,6 +267,7 @@ export interface RunMetadata {
 export interface TrafficPayload {
   num_vehicles: number;
   num_walkers: number;
+  seed?: number;
 }
 
 export interface ScenarioLaunchPayload {

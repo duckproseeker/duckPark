@@ -49,6 +49,7 @@ def default_launch_capabilities(
             "前端只暴露场景配置项，底层生成 per-run 运行输入并统一交给 ScenarioRunner。",
             "官方 OpenSCENARIO 当前锁定模板默认地图，避免 roadId 和道路拓扑不匹配导致场景崩溃。",
             "hero 默认走平台内置自动驾驶控制，预留手动接管模式但当前不启用。",
+            "背景交通 seed 留空时会在创建 run 时自动生成，并回写到 per-run spec 里。",
         ],
     }
 
@@ -236,10 +237,15 @@ def _resolve_launch_traffic(traffic: dict[str, Any] | None) -> dict[str, Any]:
     requested = traffic if isinstance(traffic, dict) else {}
     num_vehicles = max(0, int(requested.get("num_vehicles") or 0))
     num_walkers = max(0, int(requested.get("num_walkers") or 0))
+    raw_seed = requested.get("seed")
+    seed = None if raw_seed in {None, ""} else max(0, int(raw_seed))
+    enabled = num_vehicles > 0 or num_walkers > 0
     return {
-        "enabled": num_vehicles > 0 or num_walkers > 0,
+        "enabled": enabled,
         "num_vehicles": num_vehicles,
         "num_walkers": num_walkers,
+        "seed": seed,
+        "injection_mode": "carla_api_near_ego" if enabled else "disabled",
     }
 
 
@@ -358,6 +364,11 @@ def _write_generated_python_scenario_config(
         "additional_scenario_path": str(additional_scenario_path),
         "traffic_manager_port": str(settings.traffic_manager_port),
         "target_speed_mps": str(template_params.get("targetSpeedMps", 10.0)),
+        "roaming_seed": str(
+            descriptor.get("traffic", {}).get("seed")
+            if descriptor.get("traffic", {}).get("seed") is not None
+            else 0
+        ),
     }
     ElementTree.SubElement(scenario_node, "duckpark_free_drive", free_drive_attrs)
 

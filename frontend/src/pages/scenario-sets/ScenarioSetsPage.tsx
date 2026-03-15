@@ -155,6 +155,7 @@ function buildScenarioSections(
   selectedSensorProfile: SensorProfile | undefined,
   vehicleCount: number,
   walkerCount: number,
+  trafficSeedLabel: string,
   timeoutSeconds: number,
   templateParams: Record<string, ScenarioTemplateParamValue>
 ): ScenarioSection[] {
@@ -170,6 +171,7 @@ function buildScenarioSections(
         { label: '传感器模板', value: selectedSensorProfile?.display_name ?? '未启用' },
         { label: '背景车辆', value: `${vehicleCount}` },
         { label: '背景行人', value: `${walkerCount}` },
+        { label: '随机种子', value: trafficSeedLabel },
         { label: '最长运行时长', value: `${timeoutSeconds} s` }
       ]
     },
@@ -244,6 +246,17 @@ function parseIntegerInput(rawValue: string, fallback: number) {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
 }
 
+function parseOptionalSeedInput(rawValue: string) {
+  if (!rawValue.trim()) {
+    return undefined;
+  }
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+  return Math.max(0, Math.trunc(parsed));
+}
+
 function buildLaunchTags(
   scenarioId: string,
   projectId: string | null,
@@ -269,6 +282,7 @@ export function ScenarioSetsPage() {
   const [selectedMapName, setSelectedMapName] = useState('');
   const [vehicleCount, setVehicleCount] = useState(0);
   const [walkerCount, setWalkerCount] = useState(0);
+  const [trafficSeedInput, setTrafficSeedInput] = useState('');
   const [timeoutSeconds, setTimeoutSeconds] = useState(120);
   const [autoStart, setAutoStart] = useState(true);
   const [templateParams, setTemplateParams] = useState<Record<string, ScenarioTemplateParamValue>>(
@@ -324,6 +338,7 @@ export function ScenarioSetsPage() {
         selectedSensorProfile,
         vehicleCount,
         walkerCount,
+        trafficSeedInput.trim() || '自动生成',
         timeoutSeconds,
         templateParams
       )
@@ -366,6 +381,11 @@ export function ScenarioSetsPage() {
     setSelectedMapName(selectedScenario.default_map_name);
     setVehicleCount(clampCount(selectedScenario.descriptor_template.traffic.num_vehicles, 48));
     setWalkerCount(clampCount(selectedScenario.descriptor_template.traffic.num_walkers, 48));
+    setTrafficSeedInput(
+      typeof selectedScenario.descriptor_template.traffic.seed === 'number'
+        ? `${selectedScenario.descriptor_template.traffic.seed}`
+        : ''
+    );
     setTimeoutSeconds(selectedScenario.descriptor_template.termination.timeout_seconds);
     setTemplateParams(buildDefaultTemplateParams(selectedScenario.parameter_schema));
     const defaultSensorProfileName = selectedScenario.descriptor_template.sensors.profile_name;
@@ -414,7 +434,8 @@ export function ScenarioSetsPage() {
           num_walkers: clampCount(
             walkerCount,
             selectedCapabilities?.max_walker_count ?? 48
-          )
+          ),
+          seed: parseOptionalSeedInput(trafficSeedInput)
         },
         sensor_profile_name:
           selectedCapabilities?.sensor_profile_editable === true
@@ -595,6 +616,20 @@ export function ScenarioSetsPage() {
                           type="number"
                           value={walkerCount}
                         />
+                      </label>
+
+                      <label className="field">
+                        <span>随机种子</span>
+                        <input
+                          min={0}
+                          onChange={(event) => setTrafficSeedInput(event.target.value)}
+                          placeholder="留空自动生成"
+                          type="number"
+                          value={trafficSeedInput}
+                        />
+                        <small className="text-xs text-slate-500">
+                          控制背景交通与自由漫游的随机性；留空时后端会为每条 run 自动生成。
+                        </small>
                       </label>
 
                       <label className="field">
@@ -833,6 +868,7 @@ export function ScenarioSetsPage() {
                   <p>天气: {selectedEnvironmentPreset?.display_name ?? '未选择'}</p>
                   <p>背景车辆: {vehicleCount}</p>
                   <p>背景行人: {walkerCount}</p>
+                  <p>随机种子: {trafficSeedInput.trim() || '自动生成'}</p>
                   {selectedScenario.parameter_schema.map((parameter) => (
                     <p key={parameter.field}>
                       {parameter.label}:{' '}
