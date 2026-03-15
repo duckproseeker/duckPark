@@ -597,7 +597,12 @@ class ScenarioRunnerController:
                 def _background_traffic_worker() -> None:
                     nonlocal background_traffic_client
                     if not background_traffic_ready.wait(timeout=20.0):
-                        return
+                        self._emit_event(
+                            run_id,
+                            "BACKGROUND_TRAFFIC_TRIGGER_FALLBACK",
+                            "未等到 ScenarioRunner stdout 触发信号，改用超时降级继续尝试注入背景交通",
+                            level=EventLevel.WARNING,
+                        )
                     background_traffic_client = self._spawn_background_traffic(
                         run_id, descriptor
                     )

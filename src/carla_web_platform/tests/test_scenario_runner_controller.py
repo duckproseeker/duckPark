@@ -564,3 +564,103 @@ def test_background_traffic_retries_bind_error_on_primary_tm_port(
     assert captured["anchor_spawn_point"]["x"] == 1.0
     assert captured["walker_anchor"] is True
     assert captured["walker_radius"] == 80.0
+
+
+def test_background_traffic_falls_back_when_stdout_trigger_is_missing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    scenario_runner_root, carla_root = _write_fake_runner_environment(tmp_path)
+    monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
+    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    run_store = RunStore(settings.runs_root)
+    artifact_store = ArtifactStore(settings.artifacts_root)
+    command_queue = FileCommandQueue(settings.commands_root)
+    manager = RunManager(
+        run_store=run_store,
+        artifact_store=artifact_store,
+        command_queue=command_queue,
+        gateway_store=GatewayStore(settings.gateways_root),
+    )
+    controller = ScenarioRunnerController(
+        settings=settings,
+        run_store=run_store,
+        artifact_store=artifact_store,
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_spawn_background_traffic(run_id: str, descriptor: object) -> None:
+        captured["run_id"] = run_id
+        captured["vehicles"] = descriptor.traffic.num_vehicles
+        captured["walkers"] = descriptor.traffic.num_walkers
+        return None
+
+    monkeypatch.setattr(
+        controller,
+        "_spawn_background_traffic",
+        fake_spawn_background_traffic,
+    )
+    monkeypatch.setattr(
+        "app.executor.scenario_runner_controller.threading.Event.wait",
+        lambda self, timeout=None: False,
+    )
+
+    descriptor = {
+        "version": 1,
+        "scenario_name": "free_drive_sensor_collection",
+        "map_name": "Town03",
+        "weather": {"preset": "ClearNoon"},
+        "sync": {"enabled": True, "fixed_delta_seconds": 0.05},
+        "ego_vehicle": {
+            "blueprint": "vehicle.lincoln.mkz_2017",
+            "spawn_point": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "roll": 0.0,
+                "pitch": 0.0,
+                "yaw": 0.0,
+            },
+        },
+        "traffic": {"enabled": True, "num_vehicles": 2, "num_walkers": 1, "seed": 21},
+        "sensors": {"enabled": False, "sensors": []},
+        "termination": {"timeout_seconds": 30, "success_condition": "timeout"},
+        "recorder": {"enabled": False},
+        "debug": {"viewer_friendly": False},
+        "metadata": {"author": "test", "tags": ["scenario_runner"], "description": "test"},
+    }
+
+    run = manager.create_run(
+        descriptor_payload=descriptor,
+        scenario_source={
+            "provider": "scenario_runner",
+            "version": "generated",
+            "launch_mode": "python_scenario",
+            "scenario_class": "DuckparkFreeDrive",
+            "generated_config_path": str(tmp_path / "generated.xml"),
+            "additional_scenario_path": str(tmp_path / "duckpark_free_drive.py"),
+        },
+    )
+    Path(run.scenario_source["generated_config_path"]).write_text(
+        "<scenarios><scenario name='DuckparkFreeDrive' type='DuckparkFreeDrive' town='Town03'/></scenarios>",
+        encoding="utf-8",
+    )
+    Path(run.scenario_source["additional_scenario_path"]).write_text(
+        "class DuckparkFreeDrive:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    run_store.transition(run.run_id, run.status.__class__.QUEUED)
+    controller.execute_run(run.run_id)
+
+    assert captured["run_id"] == run.run_id
+    assert captured["vehicles"] == 2
+    assert captured["walkers"] == 1
+
+    event_types = [
+        event["event_type"] for event in artifact_store.read_events(run.run_id)
+    ]
+    assert "BACKGROUND_TRAFFIC_TRIGGER_FALLBACK" in event_types
