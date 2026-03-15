@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -517,19 +519,37 @@ def test_background_traffic_retries_bind_error_on_primary_tm_port(
             return {"x": 1.0, "y": 2.0, "z": 0.5, "roll": 0.0, "pitch": 0.0, "yaw": 90.0}
 
         def spawn_traffic_vehicles(
-            self, count, autopilot=True, *, seed=None, anchor_spawn_point=None
+            self,
+            count,
+            autopilot=True,
+            *,
+            seed=None,
+            anchor_spawn_point=None,
+            deadline_monotonic=None,
+            should_abort=None,
         ):
             _ = autopilot
             captured["vehicle_seed"] = seed
             captured["anchor_spawn_point"] = anchor_spawn_point
+            captured["vehicle_deadline"] = deadline_monotonic is not None
+            captured["vehicle_abort_callable"] = callable(should_abort)
             return [object()] * count
 
         def spawn_traffic_walkers(
-            self, count, *, seed=None, anchor_location=None, max_radius_m=None
+            self,
+            count,
+            *,
+            seed=None,
+            anchor_location=None,
+            max_radius_m=None,
+            deadline_monotonic=None,
+            should_abort=None,
         ):
             captured["walker_seed"] = seed
             captured["walker_anchor"] = anchor_location is not None
             captured["walker_radius"] = max_radius_m
+            captured["walker_deadline"] = deadline_monotonic is not None
+            captured["walker_abort_callable"] = callable(should_abort)
             return [object()] * count
 
         def cleanup(self):
@@ -553,7 +573,11 @@ def test_background_traffic_retries_bind_error_on_primary_tm_port(
         )
     )
 
-    controller._spawn_background_traffic("tm-port-test", descriptor)
+    controller._spawn_background_traffic(
+        "tm-port-test",
+        descriptor,
+        should_abort=lambda: False,
+    )
 
     assert captured["traffic_manager_port"] == settings.traffic_manager_port
     assert captured["attempts"] == 2
@@ -564,6 +588,69 @@ def test_background_traffic_retries_bind_error_on_primary_tm_port(
     assert captured["anchor_spawn_point"]["x"] == 1.0
     assert captured["walker_anchor"] is True
     assert captured["walker_radius"] == 80.0
+    assert captured["vehicle_deadline"] is True
+    assert captured["walker_deadline"] is True
+    assert captured["vehicle_abort_callable"] is True
+    assert captured["walker_abort_callable"] is True
+
+
+def test_background_traffic_aborts_before_connect_when_stop_is_requested(
+    tmp_path: Path, monkeypatch
+) -> None:
+    scenario_runner_root, carla_root = _write_fake_runner_environment(tmp_path)
+    monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
+    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    run_store = RunStore(settings.runs_root)
+    artifact_store = ArtifactStore(settings.artifacts_root)
+    controller = ScenarioRunnerController(
+        settings=settings,
+        run_store=run_store,
+        artifact_store=artifact_store,
+    )
+    artifact_store.run_dir("traffic-abort-test").mkdir(parents=True, exist_ok=True)
+
+    captured = {"connect_calls": 0}
+
+    class FakeCarlaClient:
+        def __init__(self, host, port, timeout_seconds, traffic_manager_port):
+            _ = (host, port, timeout_seconds, traffic_manager_port)
+
+        def connect(self):
+            captured["connect_calls"] += 1
+
+        def cleanup(self):
+            return None
+
+    monkeypatch.setattr(
+        "app.executor.scenario_runner_controller.CarlaClient",
+        FakeCarlaClient,
+    )
+
+    descriptor = SimpleNamespace(
+        traffic=SimpleNamespace(
+            num_vehicles=1,
+            num_walkers=0,
+            seed=17,
+            injection_mode="carla_api_near_ego",
+        )
+    )
+
+    result = controller._spawn_background_traffic(
+        "traffic-abort-test",
+        descriptor,
+        should_abort=lambda: True,
+    )
+
+    assert result is None
+    assert captured["connect_calls"] == 0
+
+    event_types = [
+        event["event_type"] for event in artifact_store.read_events("traffic-abort-test")
+    ]
+    assert "BACKGROUND_TRAFFIC_ABORTED" in event_types
 
 
 def test_background_traffic_falls_back_when_stdout_trigger_is_missing(
@@ -592,7 +679,14 @@ def test_background_traffic_falls_back_when_stdout_trigger_is_missing(
 
     captured: dict[str, object] = {}
 
-    def fake_spawn_background_traffic(run_id: str, descriptor: object) -> None:
+    def fake_spawn_background_traffic(
+        run_id: str,
+        descriptor: object,
+        *,
+        should_abort=None,
+        deadline_seconds=15.0,
+    ) -> None:
+        _ = (should_abort, deadline_seconds)
         captured["run_id"] = run_id
         captured["vehicles"] = descriptor.traffic.num_vehicles
         captured["walkers"] = descriptor.traffic.num_walkers
@@ -664,3 +758,152 @@ def test_background_traffic_falls_back_when_stdout_trigger_is_missing(
         event["event_type"] for event in artifact_store.read_events(run.run_id)
     ]
     assert "BACKGROUND_TRAFFIC_TRIGGER_FALLBACK" in event_types
+
+
+def test_execute_run_stop_request_interrupts_background_traffic_worker(
+    tmp_path: Path, monkeypatch
+) -> None:
+    scenario_runner_root, carla_root = _write_fake_runner_environment(tmp_path)
+    (scenario_runner_root / "scenario_runner.py").write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env python3",
+                "import pathlib",
+                "import signal",
+                "import sys",
+                "import time",
+                "args = sys.argv[1:]",
+                "output_dir = pathlib.Path(args[args.index('--outputDir') + 1])",
+                "output_dir.mkdir(parents=True, exist_ok=True)",
+                "stopped = False",
+                "def _handle_stop(signum, frame):",
+                "    global stopped",
+                "    _ = (signum, frame)",
+                "    stopped = True",
+                "signal.signal(signal.SIGTERM, _handle_stop)",
+                "print('preparing scenario', flush=True)",
+                "while not stopped:",
+                "    time.sleep(0.1)",
+                "print('fake scenario runner stopping', flush=True)",
+                "sys.exit(0)",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
+    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    run_store = RunStore(settings.runs_root)
+    artifact_store = ArtifactStore(settings.artifacts_root)
+    command_queue = FileCommandQueue(settings.commands_root)
+    manager = RunManager(
+        run_store=run_store,
+        artifact_store=artifact_store,
+        command_queue=command_queue,
+        gateway_store=GatewayStore(settings.gateways_root),
+    )
+    controller = ScenarioRunnerController(
+        settings=settings,
+        run_store=run_store,
+        artifact_store=artifact_store,
+    )
+
+    background_started = threading.Event()
+    background_cancelled = threading.Event()
+
+    def fake_spawn_background_traffic(
+        run_id: str,
+        descriptor: object,
+        *,
+        should_abort=None,
+        deadline_seconds=15.0,
+    ) -> None:
+        _ = (run_id, descriptor, deadline_seconds)
+        background_started.set()
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            if should_abort is not None and should_abort():
+                background_cancelled.set()
+                return None
+            time.sleep(0.01)
+        return None
+
+    monkeypatch.setattr(
+        controller,
+        "_spawn_background_traffic",
+        fake_spawn_background_traffic,
+    )
+
+    descriptor = {
+        "version": 1,
+        "scenario_name": "free_drive_sensor_collection",
+        "map_name": "Town03",
+        "weather": {"preset": "ClearNoon"},
+        "sync": {"enabled": True, "fixed_delta_seconds": 0.05},
+        "ego_vehicle": {
+            "blueprint": "vehicle.lincoln.mkz_2017",
+            "spawn_point": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "roll": 0.0,
+                "pitch": 0.0,
+                "yaw": 0.0,
+            },
+        },
+        "traffic": {"enabled": True, "num_vehicles": 2, "num_walkers": 1, "seed": 21},
+        "sensors": {"enabled": False, "sensors": []},
+        "termination": {"timeout_seconds": 30, "success_condition": "timeout"},
+        "recorder": {"enabled": False},
+        "debug": {"viewer_friendly": False},
+        "metadata": {"author": "test", "tags": ["scenario_runner"], "description": "test"},
+    }
+
+    run = manager.create_run(
+        descriptor_payload=descriptor,
+        scenario_source={
+            "provider": "scenario_runner",
+            "version": "generated",
+            "launch_mode": "python_scenario",
+            "scenario_class": "DuckparkFreeDrive",
+            "generated_config_path": str(tmp_path / "generated.xml"),
+            "additional_scenario_path": str(tmp_path / "duckpark_free_drive.py"),
+        },
+    )
+    Path(run.scenario_source["generated_config_path"]).write_text(
+        "<scenarios><scenario name='DuckparkFreeDrive' type='DuckparkFreeDrive' town='Town03'/></scenarios>",
+        encoding="utf-8",
+    )
+    Path(run.scenario_source["additional_scenario_path"]).write_text(
+        "class DuckparkFreeDrive:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    run_store.transition(run.run_id, run.status.__class__.QUEUED)
+
+    execute_thread = threading.Thread(
+        target=controller.execute_run,
+        args=(run.run_id,),
+        daemon=True,
+    )
+    execute_thread.start()
+
+    assert background_started.wait(timeout=3.0)
+    manager.stop_run(run.run_id)
+    assert background_cancelled.wait(timeout=3.0)
+
+    execute_thread.join(timeout=5.0)
+    assert execute_thread.is_alive() is False
+    assert background_cancelled.is_set() is True
+
+    final_run = run_store.get(run.run_id)
+    assert final_run.status.value == "COMPLETED"
+
+    event_types = [
+        event["event_type"] for event in artifact_store.read_events(run.run_id)
+    ]
+    assert "RUN_STOPPING" in event_types
+    assert "SCENARIO_COMPLETED" in event_types
