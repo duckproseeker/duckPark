@@ -3,10 +3,22 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.api.main import app
+from app.core.config import get_settings
+
+
+def _write_fake_carla_pythonapi(carla_root) -> None:
+    agents_root = carla_root / "PythonAPI" / "carla" / "agents" / "navigation"
+    agents_root.mkdir(parents=True, exist_ok=True)
+    (agents_root.parent / "__init__.py").write_text("", encoding="utf-8")
+    (agents_root / "__init__.py").write_text("", encoding="utf-8")
+    dist_root = carla_root / "PythonAPI" / "carla" / "dist"
+    dist_root.mkdir(parents=True, exist_ok=True)
+    (dist_root / "carla-0.9.16-py3.9-linux-x86_64.egg").write_text("", encoding="utf-8")
+
 
 VALID_DESCRIPTOR = {
     "version": 1,
-    "scenario_name": "empty_drive",
+    "scenario_name": "osc_follow_leading_vehicle",
     "map_name": "Town01",
     "weather": {"preset": "ClearNoon"},
     "sync": {"enabled": True, "fixed_delta_seconds": 0.05},
@@ -43,6 +55,8 @@ def test_create_start_stop_run() -> None:
     assert "updated_at_utc" in start_resp.json()["data"]
     assert "started_at_utc" in start_resp.json()["data"]
     assert "sim_time" in start_resp.json()["data"]
+    assert "executed_tick_count" in start_resp.json()["data"]
+    assert "achieved_tick_rate_hz" in start_resp.json()["data"]
     assert "wall_elapsed_seconds" in start_resp.json()["data"]
 
     stop_resp = client.post(f"/runs/{run_id}/stop")
@@ -107,31 +121,18 @@ def test_create_run_with_hil_config_and_evaluation_profile() -> None:
     )
 
 
-def test_update_run_environment() -> None:
+def test_get_run_environment_for_scenario_runner_run() -> None:
     client = TestClient(app)
 
     create_resp = client.post("/runs", json={"descriptor": VALID_DESCRIPTOR})
     assert create_resp.status_code == 200
     run_id = create_resp.json()["data"]["run_id"]
 
-    update_resp = client.post(
-        f"/runs/{run_id}/environment",
-        json={
-            "weather": {
-                "preset": "CloudyNoon",
-                "cloudiness": 72.0,
-                "fog_density": 15.0,
-            },
-            "debug": {"viewer_friendly": True},
-        },
-    )
-    assert update_resp.status_code == 200
-    assert update_resp.json()["data"]["weather"]["preset"] == "CloudyNoon"
-
     get_resp = client.get(f"/runs/{run_id}/environment")
     assert get_resp.status_code == 200
-    assert get_resp.json()["data"]["descriptor_weather"]["cloudiness"] == 72.0
-    assert get_resp.json()["data"]["runtime_control"]["debug"]["viewer_friendly"] is True
+    assert get_resp.json()["data"]["descriptor_weather"]["preset"] == "ClearNoon"
+    assert get_resp.json()["data"]["runtime_control"]["weather"] is None
+    assert get_resp.json()["data"]["runtime_control"]["debug"] is None
 
 
 def test_run_viewer_info_on_created_run() -> None:
@@ -147,6 +148,64 @@ def test_run_viewer_info_on_created_run() -> None:
     assert payload["available"] is False
     assert len(payload["views"]) >= 2
     assert payload["snapshot_url"].endswith("/viewer/frame")
+    assert payload["stream_ws_path"].endswith("/ws/runs/" + run_id + "/viewer")
+    assert payload["playback_interval_ms"] >= payload["stream_interval_ms"]
+    assert payload["stream_buffer_min_frames"] >= 1
+    assert payload["stream_buffer_max_frames"] > payload["stream_buffer_min_frames"]
 
     frame_resp = client.get(f"/runs/{run_id}/viewer/frame")
     assert frame_resp.status_code == 409
+
+
+def test_update_run_environment_rejects_official_runner_run(
+    tmp_path, monkeypatch
+) -> None:
+    scenario_runner_root = tmp_path / "scenario_runner"
+    (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
+    (scenario_runner_root / "scenario_runner.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    (
+        scenario_runner_root / "srunner" / "examples" / "FollowLeadingVehicle.xosc"
+    ).write_text(
+        "\n".join(
+            [
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                "<OpenSCENARIO>",
+                '  <RoadNetwork><LogicFile filepath="Town01"/></RoadNetwork>',
+                "  <Entities>",
+                '    <ScenarioObject name="hero"><Vehicle name="vehicle.lincoln.mkz_2017" vehicleCategory="car"/></ScenarioObject>',
+                "  </Entities>",
+                "  <Storyboard/>",
+                "</OpenSCENARIO>",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    carla_root = tmp_path / "carla"
+    _write_fake_carla_pythonapi(carla_root)
+
+    monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
+    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
+    get_settings.cache_clear()
+
+    client = TestClient(app)
+    create_resp = client.post(
+        "/runs",
+        json={
+            "descriptor": {
+                **VALID_DESCRIPTOR,
+                "scenario_name": "osc_follow_leading_vehicle",
+                "map_name": "Town01",
+            }
+        },
+    )
+    assert create_resp.status_code == 200
+    run_id = create_resp.json()["data"]["run_id"]
+
+    update_resp = client.post(
+        f"/runs/{run_id}/environment",
+        json={
+            "weather": {"preset": "CloudyNoon"},
+            "debug": {"viewer_friendly": True},
+        },
+    )
+    assert update_resp.status_code == 409

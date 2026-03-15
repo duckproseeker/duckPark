@@ -1,5 +1,13 @@
 import { apiRequest, postJson } from './client';
-import type { CreateRunPayload, RunEnvironmentState, RunEvent, RunRecord, RunViewerInfo, WeatherConfig } from './types';
+import type { RunCreateResponseSchema } from './generated/contracts';
+import type {
+  CreateRunPayload,
+  RunEnvironmentState,
+  RunEnvironmentUpdatePayload,
+  RunEvent,
+  RunRecord,
+  RunViewerInfo
+} from './types';
 
 export function listRuns(status?: string) {
   return apiRequest<RunRecord[]>('/runs', {
@@ -16,7 +24,7 @@ export function getRunEvents(runId: string) {
 }
 
 export function createRun(payload: CreateRunPayload) {
-  return postJson<{ run_id: string; status: string }>('/runs', payload);
+  return postJson<RunCreateResponseSchema>('/runs', payload);
 }
 
 export function startRun(runId: string) {
@@ -35,15 +43,7 @@ export function getRunEnvironment(runId: string) {
   return apiRequest<RunEnvironmentState>(`/runs/${runId}/environment`);
 }
 
-export function updateRunEnvironment(
-  runId: string,
-  payload: {
-    weather: WeatherConfig;
-    debug?: {
-      viewer_friendly?: boolean;
-    };
-  }
-) {
+export function updateRunEnvironment(runId: string, payload: RunEnvironmentUpdatePayload) {
   return postJson<RunEnvironmentState>(`/runs/${runId}/environment`, payload);
 }
 

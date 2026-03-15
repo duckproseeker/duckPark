@@ -7,7 +7,14 @@ import pytest
 from app.api.routes_captures import get_capture_manager
 from app.api.routes_gateways import get_gateway_registry
 from app.api.routes_projects import get_platform_service
-from app.api.routes_runs import get_artifact_store, get_control_store, get_run_manager
+from app.api.routes_runs import (
+    get_artifact_store,
+    get_benchmark_definition_store,
+    get_benchmark_task_store,
+    get_control_store,
+    get_project_store,
+    get_run_manager,
+)
 from app.core.config import get_settings
 
 
@@ -27,6 +34,9 @@ def reset_settings_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         parents=True, exist_ok=True
     )
     (project_root / "run_data" / "reports").mkdir(parents=True, exist_ok=True)
+    (project_root / "run_data" / "scenario_builds").mkdir(
+        parents=True, exist_ok=True
+    )
     (project_root / "configs" / "sensors").mkdir(parents=True, exist_ok=True)
     (project_root / "artifacts").mkdir(parents=True, exist_ok=True)
     (project_root / "artifacts" / "captures").mkdir(parents=True, exist_ok=True)
@@ -47,6 +57,10 @@ def reset_settings_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         "BENCHMARK_TASKS_ROOT", str(project_root / "run_data" / "benchmark_tasks")
     )
     monkeypatch.setenv("REPORTS_ROOT", str(project_root / "run_data" / "reports"))
+    monkeypatch.setenv(
+        "SCENARIO_BUILDS_ROOT",
+        str(project_root / "run_data" / "scenario_builds"),
+    )
     monkeypatch.setenv("ARTIFACTS_ROOT", str(project_root / "artifacts"))
     monkeypatch.setenv(
         "CAPTURE_ARTIFACTS_ROOT", str(project_root / "artifacts" / "captures")
@@ -60,6 +74,9 @@ def reset_settings_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     get_settings.cache_clear()
     get_run_manager.cache_clear()
     get_artifact_store.cache_clear()
+    get_project_store.cache_clear()
+    get_benchmark_definition_store.cache_clear()
+    get_benchmark_task_store.cache_clear()
     get_control_store.cache_clear()
     get_gateway_registry.cache_clear()
     get_capture_manager.cache_clear()
@@ -70,6 +87,9 @@ def reset_settings_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     get_settings.cache_clear()
     get_run_manager.cache_clear()
     get_artifact_store.cache_clear()
+    get_project_store.cache_clear()
+    get_benchmark_definition_store.cache_clear()
+    get_benchmark_task_store.cache_clear()
     get_control_store.cache_clear()
     get_gateway_registry.cache_clear()
     get_capture_manager.cache_clear()

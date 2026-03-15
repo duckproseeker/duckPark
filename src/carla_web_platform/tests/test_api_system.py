@@ -16,7 +16,7 @@ def test_system_status_reports_offline_executor_with_pending_queue() -> None:
         json={
             "descriptor": {
                 "version": 1,
-                "scenario_name": "empty_drive",
+                "scenario_name": "osc_follow_leading_vehicle",
                 "map_name": "Town01",
                 "weather": {"preset": "ClearNoon"},
                 "sync": {"enabled": True, "fixed_delta_seconds": 0.05},

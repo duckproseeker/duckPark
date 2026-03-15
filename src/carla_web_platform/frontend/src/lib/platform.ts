@@ -55,7 +55,7 @@ export function getMetadataTagValue(metadata: RunMetadata | undefined, prefix: s
 }
 
 export function getRunProjectId(run: RunRecord) {
-  return getMetadataTagValue(run.metadata, 'project') ?? getMetadataTagValue(run.metadata, 'chip');
+  return run.project_id ?? getMetadataTagValue(run.metadata, 'project') ?? getMetadataTagValue(run.metadata, 'chip');
 }
 
 export function getRunChipId(run: RunRecord) {
@@ -63,15 +63,15 @@ export function getRunChipId(run: RunRecord) {
 }
 
 export function getRunBenchmarkId(run: RunRecord) {
-  return getMetadataTagValue(run.metadata, 'benchmark');
+  return run.benchmark_definition_id ?? getMetadataTagValue(run.metadata, 'benchmark');
 }
 
 export function getRunTaskId(run: RunRecord) {
-  return getMetadataTagValue(run.metadata, 'task');
+  return run.benchmark_task_id ?? getMetadataTagValue(run.metadata, 'task');
 }
 
 export function getRunDutModel(run: RunRecord) {
-  return run.metadata?.dut_model ?? null;
+  return run.dut_model ?? run.metadata?.dut_model ?? null;
 }
 
 export function findProjectRecord(projects: ProjectRecord[], projectId: string | null | undefined) {
@@ -86,8 +86,15 @@ export function findBenchmarkDefinition(
 }
 
 export function deriveRunFps(run: RunRecord) {
-  if (run.current_tick !== null && run.wall_elapsed_seconds !== null && run.wall_elapsed_seconds > 0) {
-    return run.current_tick / run.wall_elapsed_seconds;
+  if (run.achieved_tick_rate_hz !== null && run.achieved_tick_rate_hz > 0) {
+    return run.achieved_tick_rate_hz;
+  }
+  if (
+    run.executed_tick_count !== null &&
+    run.wall_elapsed_seconds !== null &&
+    run.wall_elapsed_seconds > 0
+  ) {
+    return run.executed_tick_count / run.wall_elapsed_seconds;
   }
   return null;
 }

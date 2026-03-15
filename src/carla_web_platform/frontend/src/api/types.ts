@@ -1,3 +1,22 @@
+import type {
+  BenchmarkDefinitionSchema,
+  BenchmarkTaskSchema,
+  CreateBenchmarkTaskPayloadSchema,
+  CreateCapturePayloadSchema,
+  CreateRunPayloadSchema,
+  EvaluationProfilePayloadSchema,
+  HilConfigPayloadSchema,
+  ReportSchema,
+  ReportExportPayloadSchema,
+  ReportsWorkspaceSchema,
+  RerunBenchmarkTaskPayloadSchema,
+  RunEnvironmentStateSchema,
+  RunEnvironmentUpdatePayloadSchema,
+  RunEventSchema,
+  RunRecordSchema,
+  RunViewerInfoSchema
+} from './generated/contracts';
+
 export interface ApiError {
   code: string;
   message: string;
@@ -8,6 +27,10 @@ export interface ApiEnvelope<T> {
   data: T;
   error: ApiError | null;
 }
+
+type Present<T> = {
+  [K in keyof T]-?: Exclude<T[K], undefined>;
+};
 
 export interface HealthStatus {
   status: string;
@@ -132,29 +155,70 @@ export interface SensorsConfig {
   sensors: SensorSpec[];
 }
 
-export interface BuiltinScenario {
-  scenario_name: string;
-  display_name: string;
-  description: string;
-  default_map_name: string;
-  descriptor_template: ScenarioDescriptor;
-}
-
 export interface ScenarioCatalogItem {
   scenario_id: string;
   scenario_name: string;
   display_name: string;
   description: string;
+  category: string;
   default_map_name: string;
-  execution_support: 'native' | 'catalog_only';
+  execution_support: 'scenario_runner';
+  execution_backend: 'scenario_runner';
+  launch_capabilities: ScenarioLaunchCapabilities;
   source: {
     provider: string;
     version?: string;
     class_name?: string;
     source_file?: string;
     reference?: string;
+    relative_xosc_path?: string | null;
+    resolved_xosc_path?: string | null;
   };
+  preset: {
+    locked_map_name: string;
+    map_locked: boolean;
+    event_locked: boolean;
+    actors_locked: boolean;
+    weather_runtime_editable: boolean;
+    event_summary: string;
+    actors_summary: string;
+  };
+  parameter_declarations: Array<{
+    name: string;
+    parameter_type: string;
+    default_value: string;
+  }>;
+  parameter_schema: ScenarioTemplateParameterSchema[];
   descriptor_template: ScenarioDescriptor;
+}
+
+export type ScenarioTemplateParamValue = string | number | boolean;
+
+export interface ScenarioTemplateParameterSchema {
+  field: string;
+  label: string;
+  description?: string | null;
+  type: 'number' | 'boolean' | 'text' | 'enum';
+  parameter_type?: string | null;
+  required: boolean;
+  default?: ScenarioTemplateParamValue | null;
+  min?: number | null;
+  max?: number | null;
+  step?: number | null;
+  unit?: string | null;
+  options: string[];
+}
+
+export interface ScenarioLaunchCapabilities {
+  map_editable: boolean;
+  weather_editable: boolean;
+  traffic_vehicle_count_editable: boolean;
+  traffic_walker_count_editable: boolean;
+  sensor_profile_editable: boolean;
+  timeout_editable: boolean;
+  max_vehicle_count: number;
+  max_walker_count: number;
+  notes: string[];
 }
 
 export interface EnvironmentPreset {
@@ -198,6 +262,23 @@ export interface RunMetadata {
   dut_model?: string | null;
 }
 
+export interface TrafficPayload {
+  num_vehicles: number;
+  num_walkers: number;
+}
+
+export interface ScenarioLaunchPayload {
+  scenario_id: string;
+  map_name?: string;
+  weather?: WeatherConfig;
+  traffic?: TrafficPayload;
+  sensor_profile_name?: string;
+  template_params?: Record<string, ScenarioTemplateParamValue>;
+  timeout_seconds?: number;
+  auto_start?: boolean;
+  metadata?: RunMetadata;
+}
+
 export interface ProjectRecord {
   project_id: string;
   name: string;
@@ -212,129 +293,127 @@ export interface ProjectRecord {
   updated_at_utc: string | null;
 }
 
-export interface BenchmarkDefinition {
-  benchmark_definition_id: string;
-  name: string;
-  description: string;
-  focus_metrics: string[];
-  cadence: string;
-  report_shape: string;
-  project_ids: string[];
-  default_evaluation_profile_name: string | null;
-  created_at_utc: string | null;
-  updated_at_utc: string | null;
-}
+export type BenchmarkPlanningMode =
+  | 'single_scenario'
+  | 'timed_single_scenario'
+  | 'all_runnable'
+  | 'custom_multi_scenario';
+
+export type BenchmarkDefinition = Present<BenchmarkDefinitionSchema> & {
+  planning_mode: BenchmarkPlanningMode;
+};
 
 export interface BenchmarkTaskScenarioMatrixEntry {
   scenario_id: string;
   scenario_name: string;
   scenario_display_name: string;
+  execution_backend: 'native' | 'scenario_runner';
   requested_map_name: string;
   resolved_map_name: string;
   display_map_name: string;
   environment_preset_id: string;
   environment_name: string;
   sensor_profile_name: string;
+  requested_timeout_seconds: number | null;
+  resolved_timeout_seconds: number;
 }
 
-export interface BenchmarkTaskRecord {
-  benchmark_task_id: string;
-  project_id: string;
-  project_name: string;
-  dut_model: string | null;
-  benchmark_definition_id: string;
-  benchmark_name: string;
-  status: 'CREATED' | 'RUNNING' | 'COMPLETED' | 'PARTIAL_FAILED' | 'FAILED' | 'CANCELED';
-  planned_run_count: number;
-  counts_by_status: Record<string, number>;
-  run_ids: string[];
-  scenario_matrix: BenchmarkTaskScenarioMatrixEntry[];
-  hil_config: HilConfigPayload | null;
-  evaluation_profile_name: string | null;
-  auto_start: boolean;
-  summary: {
-    counts?: {
-      total_runs?: number;
-      completed_runs?: number;
-      failed_runs?: number;
-      canceled_runs?: number;
-      running_runs?: number;
-    };
-    metrics?: {
-      fps?: number | null;
-      latency_ms?: number | null;
-      map?: number | null;
-      power_w?: number | null;
-      temperature_c?: number | null;
-      frame_drop_rate?: number | null;
-      pass_rate?: number | null;
-      anomaly_rate?: number | null;
-    };
-    scenario_breakdown?: Record<string, { total_runs: number; completed: number; failed: number; canceled: number }>;
-    gateway_snapshot?: Record<string, unknown>;
+export interface BenchmarkTaskSummary {
+  counts?: {
+    total_runs?: number;
+    created_runs?: number;
+    queued_runs?: number;
+    completed_runs?: number;
+    failed_runs?: number;
+    canceled_runs?: number;
+    running_runs?: number;
   };
-  created_at_utc: string | null;
-  updated_at_utc: string | null;
-  started_at_utc: string | null;
-  ended_at_utc: string | null;
+  metrics?: {
+    fps?: number | null;
+    latency_ms?: number | null;
+    map?: number | null;
+    power_w?: number | null;
+    temperature_c?: number | null;
+    frame_drop_rate?: number | null;
+    pass_rate?: number | null;
+    anomaly_rate?: number | null;
+  };
+  scenario_breakdown?: Record<
+    string,
+    { total_runs: number; completed: number; failed: number; canceled: number }
+  >;
+  gateway_snapshot?: Record<string, unknown>;
+  execution_queue?: {
+    active_run_id?: string | null;
+    next_run_id?: string | null;
+    completed_run_ids?: string[];
+    failed_run_ids?: string[];
+    canceled_run_ids?: string[];
+    queued_run_ids?: string[];
+    ordered_runs?: Array<{
+      position: number;
+      run_id: string;
+      scenario_id: string | null;
+      scenario_display_name: string;
+      display_map_name: string;
+      execution_backend: string;
+      status: string;
+      is_active: boolean;
+      is_next: boolean;
+      started_at_utc: string | null;
+      ended_at_utc: string | null;
+      error_reason: string | null;
+    }>;
+  };
 }
 
-export interface ReportRecord {
-  report_id: string;
-  benchmark_task_id: string;
-  project_id: string;
-  benchmark_definition_id: string;
-  dut_model: string | null;
-  title: string;
+export type BenchmarkTaskRecord = Omit<
+  Present<BenchmarkTaskSchema>,
+  'status' | 'planning_mode' | 'scenario_matrix' | 'summary'
+> & {
+  status: 'CREATED' | 'RUNNING' | 'COMPLETED' | 'PARTIAL_FAILED' | 'FAILED' | 'CANCELED';
+  planning_mode: BenchmarkPlanningMode;
+  scenario_matrix: BenchmarkTaskScenarioMatrixEntry[];
+  summary: BenchmarkTaskSummary;
+};
+
+export type ReportRecord = Omit<Present<ReportSchema>, 'status' | 'summary'> & {
   status: 'READY' | 'FAILED';
-  artifact_dir: string;
-  json_path: string;
-  markdown_path: string;
-  summary: BenchmarkTaskRecord['summary'];
-  created_at_utc: string | null;
-  updated_at_utc: string | null;
-}
+  summary: BenchmarkTaskSummary;
+};
 
-export interface RunRecord {
-  run_id: string;
-  status: string;
-  scenario_name: string;
-  map_name: string;
-  created_at_utc: string | null;
-  updated_at_utc: string | null;
-  started_at_utc: string | null;
-  ended_at_utc: string | null;
-  error_reason: string | null;
-  stop_requested: boolean;
-  cancel_requested: boolean;
-  hil_config: {
-    gateway_id?: string;
-    video_source?: string;
-  } | null;
-  evaluation_profile: {
-    profile_name?: string;
-  } | null;
-  artifact_dir: string;
+export type ReportsWorkspace = Omit<
+  Present<ReportsWorkspaceSchema>,
+  'projects' | 'reports' | 'benchmark_tasks' | 'exportable_tasks' | 'pending_report_tasks' | 'recent_failures'
+> & {
+  projects: ProjectRecord[];
+  reports: ReportRecord[];
+  benchmark_tasks: BenchmarkTaskRecord[];
+  exportable_tasks: BenchmarkTaskRecord[];
+  pending_report_tasks: BenchmarkTaskRecord[];
+  recent_failures: RunRecord[];
+};
+
+export type RunRecord = Omit<
+  Present<RunRecordSchema>,
+  'execution_backend' | 'metadata' | 'weather' | 'sensors' | 'debug' | 'runtime_capabilities'
+> & {
+  execution_backend: 'native' | 'scenario_runner';
   metadata: RunMetadata;
   weather: WeatherConfig;
   sensors: SensorsConfig;
   debug: {
-    viewer_friendly?: boolean;
+    viewer_friendly?: boolean | null;
   };
-  sim_time: number | null;
-  current_tick: number | null;
-  wall_elapsed_seconds: number | null;
-  spawned_actors_count: number | null;
-}
+  runtime_capabilities: {
+    weather_update: boolean;
+    viewer_friendly: boolean;
+  };
+};
 
-export interface RunEvent {
-  timestamp: string;
-  run_id: string;
-  level: string;
-  event_type: string;
-  message: string;
+export type RunEvent = Omit<Present<RunEventSchema>, 'payload'> & {
   payload: Record<string, unknown>;
-}
+};
 
 export interface GatewayRecord {
   gateway_id: string;
@@ -349,6 +428,55 @@ export interface GatewayRecord {
   last_seen_at_utc: string | null;
   created_at_utc: string | null;
   updated_at_utc: string | null;
+}
+
+export interface ProjectWorkspace {
+  project: ProjectRecord;
+  summary: {
+    benchmark_definition_count: number;
+    benchmark_task_count: number;
+    recent_run_count: number;
+    active_run_count: number;
+    online_gateway_count: number;
+    total_gateway_count: number;
+  };
+  benchmark_definitions: BenchmarkDefinition[];
+  benchmark_tasks: BenchmarkTaskRecord[];
+  recent_runs: RunRecord[];
+  gateways: GatewayRecord[];
+  scenario_presets: ScenarioCatalogItem[];
+}
+
+export interface DevicesWorkspace {
+  summary: {
+    online_device_count: number;
+    running_capture_count: number;
+    avg_input_fps: number | null;
+    avg_output_fps: number | null;
+    avg_frame_drop_rate: number | null;
+    avg_power_w: number | null;
+    avg_temperature_c: number | null;
+  };
+  gateways: GatewayRecord[];
+  captures: CaptureRecord[];
+  benchmark_tasks: BenchmarkTaskRecord[];
+}
+
+export interface DeviceWorkspace {
+  gateway: GatewayRecord;
+  summary: {
+    capture_count: number;
+    active_capture_count: number;
+    linked_benchmark_task_count: number;
+    input_fps: number | null;
+    output_fps: number | null;
+    latency_ms: number | null;
+    frame_drop_rate: number | null;
+    power_w: number | null;
+    temperature_c: number | null;
+  };
+  captures: CaptureRecord[];
+  benchmark_tasks: BenchmarkTaskRecord[];
 }
 
 export interface CaptureRecord {
@@ -397,75 +525,47 @@ export interface CaptureManifest {
   frames: CaptureFrame[];
 }
 
-export interface HilConfigPayload {
-  mode: string;
-  gateway_id: string;
-  video_source: string;
-  dut_input_mode: string;
-  result_ingest_mode: string;
-}
+export type HilConfigPayload = HilConfigPayloadSchema;
 
-export interface EvaluationProfilePayload {
-  profile_name: string;
-  metrics: string[];
-  iou_threshold: number;
-  classes: string[];
-}
+export type EvaluationProfilePayload = EvaluationProfilePayloadSchema;
 
-export interface CreateRunPayload {
-  descriptor: ScenarioDescriptor;
-  hil_config?: HilConfigPayload;
-  evaluation_profile?: EvaluationProfilePayload;
-}
+export type CreateRunPayload = Omit<CreateRunPayloadSchema, 'descriptor'> & {
+  descriptor?: ScenarioDescriptor;
+};
 
-export interface CreateBenchmarkTaskPayload {
-  project_id: string;
-  benchmark_definition_id: string;
-  dut_model?: string;
-  scenario_matrix: Array<{
-    scenario_id: string;
-    map_name: string;
-    environment_preset_id: string;
-    sensor_profile_name: string;
-  }>;
-  hil_config?: HilConfigPayload;
-  evaluation_profile_name?: string;
-  auto_start?: boolean;
-}
+export type CreateBenchmarkTaskPayload = CreateBenchmarkTaskPayloadSchema;
 
-export interface RunEnvironmentState {
-  run_id: string;
+export type RunEnvironmentState = Omit<
+  Present<RunEnvironmentStateSchema>,
+  'descriptor_weather' | 'descriptor_debug' | 'runtime_control' | 'weather'
+> & {
   descriptor_weather: WeatherConfig;
   descriptor_debug: {
-    viewer_friendly?: boolean;
+    viewer_friendly?: boolean | null;
   };
-  runtime_control: {
-    weather?: WeatherConfig;
-    debug?: {
-      viewer_friendly?: boolean;
-    };
-    updated_at_utc?: string;
+  weather: WeatherConfig | null;
+  runtime_control: Omit<
+    Present<Exclude<RunEnvironmentStateSchema['runtime_control'], undefined>>,
+    'weather' | 'debug'
+  > & {
+    weather: WeatherConfig | null;
+    debug: {
+      viewer_friendly?: boolean | null;
+    } | null;
   };
-}
+};
 
-export interface RunViewerInfo {
-  run_id: string;
-  available: boolean;
-  reason: string | null;
+export type RunEnvironmentUpdatePayload = RunEnvironmentUpdatePayloadSchema;
+
+export type RunViewerInfo = Omit<Present<RunViewerInfoSchema>, 'views'> & {
   views: Array<{
     view_id: string;
     label: string;
   }>;
-  snapshot_url: string;
-  refresh_interval_ms: number;
-}
+};
 
-export interface CreateCapturePayload {
-  gateway_id: string;
-  source: string;
-  save_format: string;
-  sample_fps: number;
-  max_frames: number;
-  save_dir: string;
-  note?: string;
-}
+export type CreateCapturePayload = CreateCapturePayloadSchema;
+
+export type ReportExportPayload = ReportExportPayloadSchema;
+
+export type RerunBenchmarkTaskPayload = RerunBenchmarkTaskPayloadSchema;

@@ -31,20 +31,11 @@ function buildDescriptor(
   mapName: string
 ): ScenarioDescriptor {
   const descriptor = cloneDescriptor(scenario.descriptor_template);
-  descriptor.map_name = mapName || scenario.default_map_name;
-  descriptor.weather = environmentPreset?.weather ?? descriptor.weather;
-  descriptor.sensors = sensorProfile
-    ? {
-        enabled: true,
-        profile_name: sensorProfile.profile_name,
-        config_yaml_path: sensorProfile.source_path,
-        sensors: sensorProfile.sensors
-      }
-    : { enabled: false, sensors: [] };
+  descriptor.map_name = scenario.preset.locked_map_name || scenario.default_map_name;
   descriptor.metadata = {
     ...descriptor.metadata,
     author: 'react-studio',
-    description: `${scenario.display_name}（Studio 创建）`
+    description: `${scenario.display_name}（Studio / ScenarioRunner 创建）`
   };
   return descriptor;
 }
@@ -64,8 +55,7 @@ export function StudioPage() {
   const sensorProfilesQuery = useQuery({ queryKey: ['sensor-profiles'], queryFn: listSensorProfiles });
 
   const catalogItems = catalogQuery.data ?? [];
-  const nativeScenarios = catalogItems.filter((item) => item.execution_support === 'native');
-  const officialTemplates = catalogItems.filter((item) => item.execution_support === 'catalog_only');
+  const runnerScenarios = catalogItems.filter((item) => item.execution_support === 'scenario_runner');
   const environmentPresets = environmentPresetsQuery.data ?? [];
   const sensorProfiles = sensorProfilesQuery.data ?? [];
   const evaluationProfiles = profilesQuery.data ?? [];
@@ -81,10 +71,10 @@ export function StudioPage() {
   const [autoStart, setAutoStart] = useState(true);
 
   useEffect(() => {
-    if (!selectedScenarioId && nativeScenarios[0]) {
-      setSelectedScenarioId(nativeScenarios[0].scenario_id);
+    if (!selectedScenarioId && runnerScenarios[0]) {
+      setSelectedScenarioId(runnerScenarios[0].scenario_id);
     }
-  }, [nativeScenarios, selectedScenarioId]);
+  }, [runnerScenarios, selectedScenarioId]);
 
   useEffect(() => {
     if (!selectedEnvironmentPresetId && environmentPresets[0]) {
@@ -141,9 +131,6 @@ export function StudioPage() {
       if (!selectedScenario || !descriptorPreview) {
         throw new Error('请选择场景模板');
       }
-      if (selectedScenario.execution_support !== 'native') {
-        throw new Error('当前官方模板尚未接入本地 executor，暂不支持直接启动');
-      }
 
       const payload: CreateRunPayload = {
         descriptor: descriptorPreview
@@ -198,15 +185,15 @@ export function StudioPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard accent="blue" label="Native Scenarios" value={nativeScenarios.length} hint="当前可直接由本地 executor 执行" />
-        <MetricCard accent="violet" label="Official Templates" value={officialTemplates.length} hint="已导入的 ScenarioRunner 官方模板" />
-        <MetricCard accent="teal" label="Sensor Profiles" value={sensorProfiles.length} hint="YAML 传感器配置模板" />
-        <MetricCard accent="orange" label="Environment Presets" value={environmentPresets.length} hint="运行前和运行中可选环境预设" />
+        <MetricCard accent="blue" label="ScenarioRunner" value={runnerScenarios.length} hint="当前目录里的统一执行模板" />
+        <MetricCard accent="violet" label="Linked XOSC" value={catalogItems.filter((item) => item.source.resolved_xosc_path).length} hint="能解析到 xosc 文件的模板数" />
+        <MetricCard accent="teal" label="Gateways" value={gateways.length} hint="可绑定到 run 的网关数量" />
+        <MetricCard accent="orange" label="Eval Profiles" value={evaluationProfiles.length} hint="可附带的评测模板" />
       </div>
 
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.5fr)_420px]">
         <div className="flex flex-col gap-5">
-          <Panel title="Scenario Selection" subtitle="本地 native 场景可直接启动；官方模板当前只作为场景库模板管理。">
+          <Panel title="Scenario Selection" subtitle="所有场景统一由 ScenarioRunner 执行；Studio 这里只负责创建 run 并绑定 HIL / 评测模板。">
             {catalogItems.length === 0 ? (
               <EmptyState title="没有场景目录" description="后端尚未返回可用场景库。" />
             ) : (
@@ -225,12 +212,12 @@ export function StudioPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <strong className="block text-lg font-extrabold tracking-[-0.03em] text-navy-900">
-                          {item.display_name}
-                        </strong>
-                        <p className="mt-2 text-sm leading-6 text-secondaryGray-600">{item.description}</p>
-                      </div>
-                      <StatusPill status={item.execution_support === 'native' ? 'READY' : 'CATALOG'} />
+                      <strong className="block text-lg font-extrabold tracking-[-0.03em] text-navy-900">
+                        {item.display_name}
+                      </strong>
+                      <p className="mt-2 text-sm leading-6 text-secondaryGray-600">{item.description}</p>
+                    </div>
+                      <StatusPill status="READY" />
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-secondaryGray-500">
                       <span className="rounded-full bg-white px-3 py-1">{item.default_map_name}</span>
@@ -244,7 +231,7 @@ export function StudioPage() {
           </Panel>
 
           <div className="grid gap-5 xl:grid-cols-2">
-            <Panel title="Environment Presets" subtitle="运行前写入 descriptor，运行中可在 Run Detail 里热更新天气。">
+            <Panel title="Environment Presets" subtitle="当前统一由 ScenarioRunner 执行，这里只保留目录展示，不覆写官方场景参数。">
               <div className="flex flex-col gap-3">
                 {environmentPresets.map((item) => (
                   <button
@@ -265,7 +252,7 @@ export function StudioPage() {
               </div>
             </Panel>
 
-            <Panel title="Sensor Profiles" subtitle="YAML 结构参考 CARLA 官方 agent sensors() 字段。">
+            <Panel title="Sensor Profiles" subtitle="当前仅展示平台传感器模板目录，不直接注入到 ScenarioRunner 模板。">
               <div className="flex flex-col gap-3">
                 {sensorProfiles.map((item) => (
                   <button
@@ -296,12 +283,10 @@ export function StudioPage() {
             <div className="form-grid">
               <label className="field">
                 <span>地图</span>
-                <select value={selectedMapName} onChange={(event) => setSelectedMapName(event.target.value)}>
-                  {maps.map((item) => (
-                    <option key={item.map_name} value={item.map_name}>
-                      {item.display_name}
-                    </option>
-                  ))}
+                <select disabled value={selectedScenario?.preset.locked_map_name ?? selectedMapName}>
+                  <option value={selectedScenario?.preset.locked_map_name ?? ''}>
+                    {selectedScenario?.preset.locked_map_name ?? '请先选择场景'}
+                  </option>
                 </select>
               </label>
 
@@ -341,17 +326,15 @@ export function StudioPage() {
             <div className="mt-5 flex flex-wrap gap-3">
               <button
                 className="horizon-button"
-                disabled={createMutation.isPending || !selectedScenario || selectedScenario.execution_support !== 'native'}
+                disabled={createMutation.isPending || !selectedScenario}
                 onClick={() => createMutation.mutate()}
                 type="button"
               >
                 {createMutation.isPending ? '提交中...' : autoStart ? 'Create & Start Run' : 'Create Run'}
               </button>
-              {selectedScenario?.execution_support !== 'native' && (
-                <span className="inline-flex items-center rounded-full bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-600">
-                  官方模板当前只支持导入与管理，不直接执行
-                </span>
-              )}
+              <span className="inline-flex items-center rounded-full bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-600">
+                统一进入 ScenarioRunner 执行链路
+              </span>
             </div>
           </Panel>
 

@@ -9,8 +9,7 @@ from pydantic import ValidationError as PydanticValidationError
 from app.core.errors import ConflictError, ValidationError
 from app.core.models import EventLevel, RunEvent, RunRecord, RunStatus
 from app.orchestrator.queue import FileCommandQueue
-from app.scenario.maps import prefer_optimized_map_request
-from app.scenario.registry import BUILTIN_SCENARIOS
+from app.scenario.library import get_scenario_catalog_item, list_scenario_catalog
 from app.scenario.validators import load_descriptor_from_yaml, validate_descriptor
 from app.storage.artifact_store import ArtifactStore
 from app.storage.gateway_store import GatewayStore
@@ -58,12 +57,20 @@ class RunManager:
     def _persist_status(self, run: RunRecord) -> None:
         self._artifact_store.write_status(run)
 
+    def build_run_id(self) -> str:
+        return f"run_{now_utc().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+
     def create_run(
         self,
         descriptor_payload: dict[str, Any] | None = None,
         descriptor_path: str | None = None,
         hil_config: dict[str, Any] | None = None,
         evaluation_profile: dict[str, Any] | None = None,
+        *,
+        run_id: str | None = None,
+        execution_backend: str | None = None,
+        scenario_source: dict[str, Any] | None = None,
+        config_snapshot_extra: dict[str, Any] | None = None,
     ) -> RunRecord:
         if descriptor_payload is None and descriptor_path is None:
             raise ValidationError("必须提供 descriptor 或 descriptor_path")
@@ -77,20 +84,38 @@ class RunManager:
         except (ValueError, PydanticValidationError) as exc:
             raise ValidationError(f"场景描述校验失败: {exc}") from exc
 
-        descriptor.map_name = prefer_optimized_map_request(descriptor.map_name)
-
-        if descriptor.scenario_name not in BUILTIN_SCENARIOS:
+        scenario_catalog_item = get_scenario_catalog_item(descriptor.scenario_name)
+        if scenario_catalog_item is None:
+            available_scenarios = sorted(
+                item["scenario_id"] for item in list_scenario_catalog()
+            )
             raise ValidationError(
                 f"未知场景: '{descriptor.scenario_name}'。"
-                f"可用场景: {sorted(BUILTIN_SCENARIOS.keys())}"
+                f"可用场景: {available_scenarios}"
             )
+        execution_support = str(scenario_catalog_item.get("execution_support", "")).strip()
+        if execution_support != "scenario_runner":
+            raise ValidationError(
+                f"场景 {descriptor.scenario_name} 当前不可执行，execution_support={execution_support}"
+            )
+        execution_backend_value = str(
+            execution_backend
+            or scenario_catalog_item.get(
+                "execution_backend", execution_support or "scenario_runner"
+            )
+        ).strip() or "scenario_runner"
+        scenario_source_value = (
+            dict(scenario_source)
+            if isinstance(scenario_source, dict)
+            else scenario_catalog_item.get("source")
+        )
 
         if hil_config and self._gateway_store is not None:
             gateway_id = str(hil_config.get("gateway_id", "")).strip()
             if gateway_id:
                 self._gateway_store.get(gateway_id)
 
-        run_id = f"run_{now_utc().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        run_id = run_id or self.build_run_id()
         artifact_dir = self._artifact_store.init_run(run_id)
 
         run = RunRecord(
@@ -104,16 +129,20 @@ class RunManager:
             hil_config=hil_config,
             evaluation_profile=evaluation_profile,
             artifact_dir=str(artifact_dir),
+            execution_backend=execution_backend_value,
+            scenario_source=scenario_source_value,
         )
         self._run_store.create(run)
-        self._artifact_store.write_config_snapshot(
-            run_id,
-            {
-                "descriptor": descriptor.to_dict(),
-                "hil_config": hil_config,
-                "evaluation_profile": evaluation_profile,
-            },
-        )
+        config_snapshot = {
+            "descriptor": descriptor.to_dict(),
+            "hil_config": hil_config,
+            "evaluation_profile": evaluation_profile,
+            "execution_backend": execution_backend_value,
+            "scenario_source": scenario_source_value,
+        }
+        if config_snapshot_extra:
+            config_snapshot.update(config_snapshot_extra)
+        self._artifact_store.write_config_snapshot(run_id, config_snapshot)
         self._persist_status(run)
 
         self._emit_event(
@@ -123,6 +152,7 @@ class RunManager:
             payload={
                 "scenario_name": descriptor.scenario_name,
                 "map_name": descriptor.map_name,
+                "execution_backend": execution_backend_value,
                 "gateway_id": (hil_config or {}).get("gateway_id"),
                 "evaluation_profile": (evaluation_profile or {}).get("profile_name"),
             },

@@ -1,9 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
-import { listBenchmarkTasks } from '../../api/benchmarks';
-import { listCaptures } from '../../api/captures';
-import { listGateways } from '../../api/gateways';
+import { getDevicesWorkspace } from '../../api/devices';
 import { EmptyState } from '../../components/common/EmptyState';
 import { MetricCard } from '../../components/common/MetricCard';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -22,21 +20,24 @@ import {
 } from '../../lib/platform';
 
 export function DevicesPage() {
-  const gatewaysQuery = useQuery({ queryKey: ['gateways'], queryFn: listGateways, refetchInterval: 5000 });
-  const capturesQuery = useQuery({ queryKey: ['captures'], queryFn: () => listCaptures(), refetchInterval: 5000 });
-  const tasksQuery = useQuery({ queryKey: ['benchmark-tasks'], queryFn: () => listBenchmarkTasks(), refetchInterval: 5000 });
+  const workspaceQuery = useQuery({
+    queryKey: ['devices', 'workspace'],
+    queryFn: getDevicesWorkspace,
+    refetchInterval: 5000
+  });
 
-  const gateways = sortByActivity(gatewaysQuery.data ?? []);
-  const captures = sortByActivity(capturesQuery.data ?? []);
-  const tasks = sortByActivity(tasksQuery.data ?? []).slice(0, 6);
-
-  const onlineDevices = gateways.filter((gateway) => ['READY', 'BUSY'].includes(gateway.status)).length;
-  const runningCaptures = captures.filter((capture) => capture.status === 'RUNNING').length;
-  const avgInputFps = average(gateways.map(deriveGatewayInputFps));
-  const avgOutputFps = average(gateways.map(deriveGatewayOutputFps));
-  const avgDropRate = average(gateways.map(deriveGatewayFrameDropRate));
-  const avgPower = average(gateways.map(deriveGatewayPowerW));
-  const avgTemperature = average(gateways.map(deriveGatewayTemperatureC));
+  const gateways = sortByActivity(workspaceQuery.data?.gateways ?? []);
+  const captures = sortByActivity(workspaceQuery.data?.captures ?? []);
+  const tasks = sortByActivity(workspaceQuery.data?.benchmark_tasks ?? []);
+  const summary = workspaceQuery.data?.summary;
+  const onlineDevices = summary?.online_device_count ?? 0;
+  const runningCaptures = summary?.running_capture_count ?? 0;
+  const avgInputFps = summary?.avg_input_fps ?? average(gateways.map(deriveGatewayInputFps));
+  const avgOutputFps = summary?.avg_output_fps ?? average(gateways.map(deriveGatewayOutputFps));
+  const avgDropRate = summary?.avg_frame_drop_rate ?? average(gateways.map(deriveGatewayFrameDropRate));
+  const avgPower = summary?.avg_power_w ?? average(gateways.map(deriveGatewayPowerW));
+  const avgTemperature =
+    summary?.avg_temperature_c ?? average(gateways.map(deriveGatewayTemperatureC));
 
   return (
     <div className="page-stack">
@@ -58,7 +59,14 @@ export function DevicesPage() {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_420px]">
         <Panel title="设备列表" subtitle="设备页只负责确认底层链路是否稳定，不再承担项目与报告语义。">
-          {gateways.length === 0 ? (
+          {workspaceQuery.isLoading ? (
+            <EmptyState title="设备工作台加载中" description="正在同步设备、采集和任务上下文。" />
+          ) : workspaceQuery.isError ? (
+            <EmptyState
+              title="设备工作台加载失败"
+              description={workspaceQuery.error instanceof Error ? workspaceQuery.error.message : '设备工作台接口异常。'}
+            />
+          ) : gateways.length === 0 ? (
             <EmptyState title="没有设备" description="当前还没有注册中的 Pi gateway。" />
           ) : (
             <div className="flex flex-col gap-4">

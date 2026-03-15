@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import math
 import queue
+import struct
 import tempfile
 import time
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -49,6 +51,36 @@ VIEWER_VIEWS: tuple[ViewerView, ...] = (
 
 class EgoSnapshotViewerError(RuntimeError):
     """Raised when a read-only viewer snapshot cannot be collected."""
+
+
+@dataclass
+class EgoViewerStreamSession:
+    viewer: EgoSnapshotViewer
+    sensor: Any
+    image_queue: queue.Queue[Any]
+    temp_dir: Any
+
+    def capture_png_bytes(self, timeout_seconds: float = 2.5) -> bytes:
+        try:
+            image = self.image_queue.get(timeout=timeout_seconds)
+        except queue.Empty as exc:
+            raise EgoSnapshotViewerError(
+                "未在超时时间内收到 viewer 帧，请确认 run 正在推进"
+            ) from exc
+        return self.viewer._image_to_png_bytes(
+            image, output_dir=Path(self.temp_dir.name)
+        )
+
+    def close(self) -> None:
+        try:
+            self.sensor.stop()
+        except Exception:
+            pass
+        try:
+            self.sensor.destroy()
+        except Exception:
+            pass
+        self.temp_dir.cleanup()
 
 
 class EgoSnapshotViewer:
@@ -215,6 +247,20 @@ class EgoSnapshotViewer:
                 return view
         raise EgoSnapshotViewerError(f"未知 viewer 视角: {view_id}")
 
+    @staticmethod
+    def _image_queue_handler(image_queue: queue.Queue[Any]) -> Any:
+        def on_image(image: Any) -> None:
+            try:
+                if image_queue.full():
+                    _ = image_queue.get_nowait()
+                image_queue.put_nowait(image)
+            except queue.Empty:
+                pass
+            except queue.Full:
+                pass
+
+        return on_image
+
     def _build_transform(self, view: ViewerView) -> Any:
         assert self._carla is not None
         return self._carla.Transform(
@@ -230,25 +276,10 @@ class EgoSnapshotViewer:
             ),
         )
 
-    def capture_png_bytes(self, *, view_id: str) -> bytes:
-        self._connect()
+    def _spawn_viewer_sensor(self, ego_vehicle: Any, view_id: str, image_queue: queue.Queue[Any]) -> Any:
         assert self._world is not None
         assert self._carla is not None
-
-        ego_vehicle = self._wait_for_ego_vehicle()
         viewer_view = self._viewer_view(view_id)
-        image_queue: queue.Queue[Any] = queue.Queue(maxsize=1)
-
-        def on_image(image: Any) -> None:
-            try:
-                if image_queue.full():
-                    _ = image_queue.get_nowait()
-                image_queue.put_nowait(image)
-            except queue.Empty:
-                pass
-            except queue.Full:
-                pass
-
         sensor = self._world.spawn_actor(
             self._camera_blueprint(),
             self._build_transform(viewer_view),
@@ -259,29 +290,91 @@ class EgoSnapshotViewer:
                 else self._carla.AttachmentType.Rigid
             ),
         )
+        sensor.listen(self._image_queue_handler(image_queue))
+        return sensor
 
+    @staticmethod
+    def _write_image_to_path(image: Any, image_path: Path) -> bytes:
+        image.save_to_disk(str(image_path))
+        return image_path.read_bytes()
+
+    @staticmethod
+    def _png_chunk(chunk_type: bytes, payload: bytes) -> bytes:
+        return b"".join(
+            [
+                struct.pack(">I", len(payload)),
+                chunk_type,
+                payload,
+                struct.pack(">I", zlib.crc32(chunk_type + payload) & 0xFFFFFFFF),
+            ]
+        )
+
+    @staticmethod
+    def _raw_bgra_to_png_bytes(image: Any) -> bytes:
+        width = int(image.width)
+        height = int(image.height)
+        raw_data = memoryview(bytes(image.raw_data))
+        row_stride = width * 4
+        rgb_rows = bytearray((width * 3 + 1) * height)
+        write_offset = 0
+
+        for row_index in range(height):
+            row_start = row_index * row_stride
+            rgb_rows[write_offset] = 0
+            write_offset += 1
+            for pixel_offset in range(row_start, row_start + row_stride, 4):
+                blue = raw_data[pixel_offset]
+                green = raw_data[pixel_offset + 1]
+                red = raw_data[pixel_offset + 2]
+                rgb_rows[write_offset] = red
+                rgb_rows[write_offset + 1] = green
+                rgb_rows[write_offset + 2] = blue
+                write_offset += 3
+
+        compressed = zlib.compress(bytes(rgb_rows), level=6)
+        header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+        return b"".join(
+            [
+                b"\x89PNG\r\n\x1a\n",
+                EgoSnapshotViewer._png_chunk(b"IHDR", header),
+                EgoSnapshotViewer._png_chunk(b"IDAT", compressed),
+                EgoSnapshotViewer._png_chunk(b"IEND", b""),
+            ]
+        )
+
+    def _image_to_png_bytes(self, image: Any, *, output_dir: Path | None = None) -> bytes:
         try:
-            sensor.listen(on_image)
-            try:
-                image = image_queue.get(timeout=2.5)
-            except queue.Empty as exc:
-                raise EgoSnapshotViewerError(
-                    "未在超时时间内收到 viewer 帧，请确认 run 正在推进"
-                ) from exc
+            return self._raw_bgra_to_png_bytes(image)
+        except Exception:
+            pass
 
-            with tempfile.TemporaryDirectory(prefix="ego-snapshot-") as tmp_dir:
-                image_path = Path(tmp_dir) / "frame.png"
-                image.save_to_disk(str(image_path))
-                return image_path.read_bytes()
+        if output_dir is not None:
+            image_path = output_dir / "frame.png"
+            return self._write_image_to_path(image, image_path)
+
+        with tempfile.TemporaryDirectory(prefix="ego-snapshot-") as tmp_dir:
+            image_path = Path(tmp_dir) / "frame.png"
+            return self._write_image_to_path(image, image_path)
+
+    def open_stream_session(self, *, view_id: str) -> EgoViewerStreamSession:
+        self._connect()
+        ego_vehicle = self._wait_for_ego_vehicle()
+        image_queue: queue.Queue[Any] = queue.Queue(maxsize=2)
+        temp_dir = tempfile.TemporaryDirectory(prefix="ego-stream-")
+        sensor = self._spawn_viewer_sensor(ego_vehicle, view_id, image_queue)
+        return EgoViewerStreamSession(
+            viewer=self,
+            sensor=sensor,
+            image_queue=image_queue,
+            temp_dir=temp_dir,
+        )
+
+    def capture_png_bytes(self, *, view_id: str) -> bytes:
+        session = self.open_stream_session(view_id=view_id)
+        try:
+            return session.capture_png_bytes()
         finally:
-            try:
-                sensor.stop()
-            except Exception:
-                pass
-            try:
-                sensor.destroy()
-            except Exception:
-                pass
+            session.close()
 
 
 def list_viewer_views() -> list[dict[str, str]]:

@@ -6,29 +6,14 @@ from app.api.main import app
 from app.core.config import get_settings
 
 
-def _write_sensor_profile() -> None:
-    settings = get_settings()
-    profile_path = settings.sensor_profiles_root / "front_rgb.yaml"
-    profile_path.write_text(
-        "\n".join(
-            [
-                "profile_name: front_rgb",
-                "display_name: Front RGB Camera",
-                "description: API test profile",
-                "sensors:",
-                "  - id: FrontRGB",
-                "    type: sensor.camera.rgb",
-                "    x: 1.5",
-                "    y: 0.0",
-                "    z: 1.7",
-                "    width: 1920",
-                "    height: 1080",
-                "    fov: 90.0",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
+def _write_fake_carla_pythonapi(carla_root) -> None:
+    agents_root = carla_root / "PythonAPI" / "carla" / "agents" / "navigation"
+    agents_root.mkdir(parents=True, exist_ok=True)
+    (agents_root.parent / "__init__.py").write_text("", encoding="utf-8")
+    (agents_root / "__init__.py").write_text("", encoding="utf-8")
+    dist_root = carla_root / "PythonAPI" / "carla" / "dist"
+    dist_root.mkdir(parents=True, exist_ok=True)
+    (dist_root / "carla-0.9.16-py3.9-linux-x86_64.egg").write_text("", encoding="utf-8")
 
 
 def test_list_projects_and_benchmark_definitions() -> None:
@@ -46,10 +31,38 @@ def test_list_projects_and_benchmark_definitions() -> None:
     }
     assert "baseline-validation" in project_ids
     assert "perception-baseline" in definition_ids
+    assert "custom-suite" in definition_ids
+    perception_definition = next(
+        item
+        for item in definitions_resp.json()["data"]["definitions"]
+        if item["benchmark_definition_id"] == "perception-baseline"
+    )
+    assert perception_definition["planning_mode"] == "single_scenario"
+    assert perception_definition["default_project_id"] == "baseline-validation"
+
+
+def test_project_workspace_endpoint() -> None:
+    client = TestClient(app)
+
+    response = client.get("/projects/baseline-validation/workspace")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["project"]["project_id"] == "baseline-validation"
+    assert payload["summary"]["benchmark_definition_count"] == 1
+    assert isinstance(payload["benchmark_definitions"], list)
+    assert {
+        item["benchmark_definition_id"] for item in payload["benchmark_definitions"]
+    } == {"perception-baseline"}
+    assert isinstance(payload["scenario_presets"], list)
+    assert payload["scenario_presets"]
+    assert all(
+        item["execution_support"] == "scenario_runner"
+        for item in payload["scenario_presets"]
+    )
 
 
 def test_create_benchmark_task_and_export_report() -> None:
-    _write_sensor_profile()
     client = TestClient(app)
 
     task_resp = client.post(
@@ -60,10 +73,8 @@ def test_create_benchmark_task_and_export_report() -> None:
             "dut_model": "演示开发板",
             "scenario_matrix": [
                 {
-                    "scenario_id": "empty_drive",
+                    "scenario_id": "osc_follow_leading_vehicle",
                     "map_name": "Town01",
-                    "environment_preset_id": "clear_day",
-                    "sensor_profile_name": "front_rgb",
                 }
             ],
             "evaluation_profile_name": "yolo_open_loop_v1",
@@ -78,14 +89,27 @@ def test_create_benchmark_task_and_export_report() -> None:
     assert task_payload["dut_model"] == "演示开发板"
     assert task_payload["status"] == "CREATED"
     assert task_payload["planned_run_count"] == 1
-    assert task_payload["scenario_matrix"][0]["resolved_map_name"] == "Town01_Opt"
+    assert task_payload["scenario_matrix"][0]["resolved_map_name"] == "Town01"
+    assert task_payload["scenario_matrix"][0]["execution_backend"] == "scenario_runner"
+    assert task_payload["scenario_matrix"][0]["environment_preset_id"] == "scenario_default"
+    assert task_payload["scenario_matrix"][0]["sensor_profile_name"] == "disabled"
     assert len(task_payload["run_ids"]) == 1
+    assert task_payload["summary"]["execution_queue"]["active_run_id"] is None
+    assert task_payload["summary"]["execution_queue"]["next_run_id"] == task_payload["run_ids"][0]
+    assert task_payload["summary"]["execution_queue"]["ordered_runs"][0]["status"] == "CREATED"
 
     run_id = task_payload["run_ids"][0]
     run_resp = client.get(f"/runs/{run_id}")
     assert run_resp.status_code == 200
-    assert run_resp.json()["data"]["map_name"] == "Town01_Opt"
+    assert run_resp.json()["data"]["map_name"] == "Town01"
     assert run_resp.json()["data"]["metadata"]["dut_model"] == "演示开发板"
+    assert run_resp.json()["data"]["project_id"] == "baseline-validation"
+    assert run_resp.json()["data"]["benchmark_definition_id"] == "perception-baseline"
+    assert run_resp.json()["data"]["benchmark_task_id"] == task_payload["benchmark_task_id"]
+    assert run_resp.json()["data"]["dut_model"] == "演示开发板"
+    assert run_resp.json()["data"]["project_name"] == task_payload["project_name"]
+    assert run_resp.json()["data"]["benchmark_name"] == task_payload["benchmark_name"]
+    assert run_resp.json()["data"]["execution_backend"] == "scenario_runner"
 
     report_resp = client.post(
         "/reports/export",
@@ -102,3 +126,342 @@ def test_create_benchmark_task_and_export_report() -> None:
     )
     assert download_resp.status_code == 200
     assert report_payload["report_id"] in download_resp.text
+
+    reports_by_project_resp = client.get("/reports", params={"project_id": "baseline-validation"})
+    assert reports_by_project_resp.status_code == 200
+    reports_by_project = reports_by_project_resp.json()["data"]["reports"]
+    assert any(item["report_id"] == report_payload["report_id"] for item in reports_by_project)
+
+
+def test_reports_workspace_endpoint() -> None:
+    client = TestClient(app)
+
+    task_resp = client.post(
+        "/benchmark-tasks",
+        json={
+            "benchmark_definition_id": "perception-baseline",
+            "selected_scenario_ids": ["osc_follow_leading_vehicle"],
+            "auto_start": False,
+        },
+    )
+    assert task_resp.status_code == 200
+    task_payload = task_resp.json()["data"]
+
+    report_resp = client.post(
+        "/reports/export",
+        json={"benchmark_task_id": task_payload["benchmark_task_id"]},
+    )
+    assert report_resp.status_code == 200
+
+    workspace_resp = client.get("/reports/workspace")
+    assert workspace_resp.status_code == 200
+    payload = workspace_resp.json()["data"]
+    assert payload["summary"]["report_count"] == 1
+    assert payload["summary"]["benchmark_task_count"] == 1
+    assert len(payload["reports"]) == 1
+    assert payload["reports"][0]["benchmark_task_id"] == task_payload["benchmark_task_id"]
+    assert payload["exportable_tasks"] == []
+    assert payload["pending_report_tasks"] == []
+
+
+def test_devices_workspace_endpoints() -> None:
+    client = TestClient(app)
+
+    register_resp = client.post(
+        "/gateways/register",
+        json={
+            "gateway_id": "gw_alpha",
+            "name": "Gateway Alpha",
+            "capabilities": {"video_source": "hdmi_x1301"},
+            "address": "192.168.1.10",
+        },
+    )
+    assert register_resp.status_code == 200
+
+    capture_resp = client.post(
+        "/captures",
+        json={
+            "gateway_id": "gw_alpha",
+            "source": "hdmi_x1301",
+            "save_format": "jpg",
+            "sample_fps": 2,
+            "max_frames": 30,
+            "save_dir": "/tmp/gw_alpha_capture",
+        },
+    )
+    assert capture_resp.status_code == 200
+
+    task_resp = client.post(
+        "/benchmark-tasks",
+        json={
+            "benchmark_definition_id": "perception-baseline",
+            "selected_scenario_ids": ["osc_follow_leading_vehicle"],
+            "dut_model": "Orin NX",
+            "hil_config": {
+                "mode": "camera_open_loop",
+                "gateway_id": "gw_alpha",
+                "video_source": "hdmi_x1301",
+                "dut_input_mode": "uvc_camera",
+                "result_ingest_mode": "http_push",
+            },
+            "auto_start": False,
+        },
+    )
+    assert task_resp.status_code == 200
+
+    workspace_resp = client.get("/devices/workspace")
+    assert workspace_resp.status_code == 200
+    workspace_payload = workspace_resp.json()["data"]
+    assert workspace_payload["summary"]["online_device_count"] == 0
+    assert len(workspace_payload["gateways"]) == 1
+    assert workspace_payload["gateways"][0]["gateway_id"] == "gw_alpha"
+    assert len(workspace_payload["captures"]) == 1
+    assert len(workspace_payload["benchmark_tasks"]) == 1
+
+    detail_resp = client.get("/devices/gw_alpha/workspace")
+    assert detail_resp.status_code == 200
+    detail_payload = detail_resp.json()["data"]
+    assert detail_payload["gateway"]["gateway_id"] == "gw_alpha"
+    assert detail_payload["summary"]["capture_count"] == 1
+    assert detail_payload["summary"]["linked_benchmark_task_count"] == 1
+    assert len(detail_payload["captures"]) == 1
+    assert len(detail_payload["benchmark_tasks"]) == 1
+
+
+def test_create_benchmark_task_with_scenario_defaults() -> None:
+    client = TestClient(app)
+
+    task_resp = client.post(
+        "/benchmark-tasks",
+        json={
+            "project_id": "baseline-validation",
+            "benchmark_definition_id": "perception-baseline",
+            "scenario_matrix": [{"scenario_id": "osc_follow_leading_vehicle"}],
+            "auto_start": False,
+        },
+    )
+
+    assert task_resp.status_code == 200
+    task_payload = task_resp.json()["data"]
+    assert task_payload["planned_run_count"] == 1
+    assert task_payload["scenario_matrix"][0]["resolved_map_name"] == "Town01"
+    assert task_payload["scenario_matrix"][0]["environment_preset_id"] == "scenario_default"
+    assert task_payload["scenario_matrix"][0]["sensor_profile_name"] == "disabled"
+
+    run_id = task_payload["run_ids"][0]
+    run_resp = client.get(f"/runs/{run_id}")
+    assert run_resp.status_code == 200
+    assert run_resp.json()["data"]["map_name"] == "Town01"
+    assert run_resp.json()["data"]["sensors"]["enabled"] is False
+    assert run_resp.json()["data"]["execution_backend"] == "scenario_runner"
+
+
+def test_create_benchmark_task_from_definition_selected_scenarios() -> None:
+    client = TestClient(app)
+
+    task_resp = client.post(
+        "/benchmark-tasks",
+        json={
+            "benchmark_definition_id": "perception-baseline",
+            "selected_scenario_ids": ["osc_follow_leading_vehicle"],
+            "auto_start": False,
+        },
+    )
+
+    assert task_resp.status_code == 200
+    task_payload = task_resp.json()["data"]
+    assert task_payload["project_id"] == "baseline-validation"
+    assert task_payload["planning_mode"] == "single_scenario"
+    assert task_payload["selected_scenario_ids"] == ["osc_follow_leading_vehicle"]
+    assert task_payload["planned_run_count"] == 1
+    assert task_payload["scenario_matrix"][0]["scenario_id"] == "osc_follow_leading_vehicle"
+
+
+def test_create_benchmark_task_for_power_thermal_duration_override() -> None:
+    client = TestClient(app)
+
+    task_resp = client.post(
+        "/benchmark-tasks",
+        json={
+            "benchmark_definition_id": "power-thermal",
+            "selected_scenario_ids": ["osc_lane_change_simple"],
+            "run_duration_seconds": 1800,
+            "auto_start": False,
+        },
+    )
+
+    assert task_resp.status_code == 200
+    task_payload = task_resp.json()["data"]
+    assert task_payload["project_id"] == "thermal-soak"
+    assert task_payload["planning_mode"] == "timed_single_scenario"
+    assert task_payload["requested_duration_seconds"] == 1800
+    assert task_payload["selected_scenario_ids"] == ["osc_lane_change_simple"]
+    assert task_payload["planned_run_count"] == 1
+    assert task_payload["scenario_matrix"][0]["resolved_timeout_seconds"] == 1800
+
+
+def test_create_benchmark_task_for_stress_matrix_uses_all_runnable() -> None:
+    client = TestClient(app)
+
+    task_resp = client.post(
+        "/benchmark-tasks",
+        json={
+            "benchmark_definition_id": "stress-matrix",
+            "auto_start": False,
+        },
+    )
+
+    assert task_resp.status_code == 200
+    task_payload = task_resp.json()["data"]
+    assert task_payload["project_id"] == "matrix-regression"
+    assert task_payload["planning_mode"] == "all_runnable"
+    assert task_payload["planned_run_count"] > 1
+    assert len(task_payload["run_ids"]) == task_payload["planned_run_count"]
+    assert len(task_payload["selected_scenario_ids"]) == task_payload["planned_run_count"]
+    assert len(task_payload["summary"]["execution_queue"]["ordered_runs"]) == task_payload["planned_run_count"]
+    assert task_payload["summary"]["execution_queue"]["next_run_id"] == task_payload["run_ids"][0]
+
+
+def test_create_benchmark_task_rejects_incompatible_project() -> None:
+    client = TestClient(app)
+
+    task_resp = client.post(
+        "/benchmark-tasks",
+        json={
+            "project_id": "thermal-soak",
+            "benchmark_definition_id": "perception-baseline",
+            "selected_scenario_ids": ["osc_follow_leading_vehicle"],
+            "auto_start": False,
+        },
+    )
+
+    assert task_resp.status_code == 422
+    assert task_resp.json()["detail"]["code"] == "VALIDATION_ERROR"
+
+
+def test_rerun_benchmark_task_reuses_original_configuration() -> None:
+    client = TestClient(app)
+
+    register_resp = client.post(
+        "/gateways/register",
+        json={
+            "gateway_id": "gw-replay",
+            "name": "Replay Gateway",
+        },
+    )
+    assert register_resp.status_code == 200
+
+    task_resp = client.post(
+        "/benchmark-tasks",
+        json={
+            "benchmark_definition_id": "custom-suite",
+            "dut_model": "Replay DUT",
+            "selected_scenario_ids": ["osc_follow_leading_vehicle", "osc_lane_change_simple"],
+            "hil_config": {
+                "mode": "camera_open_loop",
+                "gateway_id": "gw-replay",
+                "video_source": "hdmi_x1301",
+                "dut_input_mode": "uvc_camera",
+                "result_ingest_mode": "http_push",
+            },
+            "auto_start": False,
+        },
+    )
+    assert task_resp.status_code == 200
+    original_task = task_resp.json()["data"]
+
+    rerun_resp = client.post(
+        f"/benchmark-tasks/{original_task['benchmark_task_id']}/rerun",
+        json={"auto_start": False},
+    )
+    assert rerun_resp.status_code == 200
+    rerun_task = rerun_resp.json()["data"]
+
+    assert rerun_task["benchmark_task_id"] != original_task["benchmark_task_id"]
+    assert rerun_task["benchmark_definition_id"] == original_task["benchmark_definition_id"]
+    assert rerun_task["project_id"] == original_task["project_id"]
+    assert rerun_task["dut_model"] == original_task["dut_model"]
+    assert rerun_task["selected_scenario_ids"] == original_task["selected_scenario_ids"]
+    assert rerun_task["planned_run_count"] == original_task["planned_run_count"]
+    assert [item["scenario_id"] for item in rerun_task["scenario_matrix"]] == [
+        item["scenario_id"] for item in original_task["scenario_matrix"]
+    ]
+
+
+def test_stop_benchmark_task_cancels_active_queue() -> None:
+    client = TestClient(app)
+
+    task_resp = client.post(
+        "/benchmark-tasks",
+        json={
+            "benchmark_definition_id": "custom-suite",
+            "selected_scenario_ids": ["osc_follow_leading_vehicle", "osc_lane_change_simple"],
+            "auto_start": True,
+        },
+    )
+    assert task_resp.status_code == 200
+    task_payload = task_resp.json()["data"]
+    assert task_payload["status"] == "RUNNING"
+    assert task_payload["summary"]["counts"]["queued_runs"] == 2
+
+    stop_resp = client.post(f"/benchmark-tasks/{task_payload['benchmark_task_id']}/stop")
+    assert stop_resp.status_code == 200
+    stopped_task = stop_resp.json()["data"]
+
+    assert stopped_task["status"] == "CANCELED"
+    assert stopped_task["summary"]["counts"]["canceled_runs"] == 2
+    assert stopped_task["summary"]["counts"]["queued_runs"] == 0
+    assert stopped_task["summary"]["execution_queue"]["queued_run_ids"] == []
+
+
+def test_create_benchmark_task_for_official_runner_preset(
+    tmp_path, monkeypatch
+) -> None:
+    scenario_runner_root = tmp_path / "scenario_runner"
+    (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
+    (scenario_runner_root / "scenario_runner.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    (
+        scenario_runner_root / "srunner" / "examples" / "FollowLeadingVehicle.xosc"
+    ).write_text(
+        "\n".join(
+            [
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                "<OpenSCENARIO>",
+                '  <RoadNetwork><LogicFile filepath="Town01"/></RoadNetwork>',
+                "  <Entities>",
+                '    <ScenarioObject name="hero"><Vehicle name="vehicle.lincoln.mkz_2017" vehicleCategory="car"/></ScenarioObject>',
+                '    <ScenarioObject name="adversary"><Vehicle name="vehicle.tesla.model3" vehicleCategory="car"/></ScenarioObject>',
+                "  </Entities>",
+                "  <Storyboard/>",
+                "</OpenSCENARIO>",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    carla_root = tmp_path / "carla"
+    _write_fake_carla_pythonapi(carla_root)
+
+    monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
+    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
+    get_settings.cache_clear()
+
+    client = TestClient(app)
+    task_resp = client.post(
+        "/benchmark-tasks",
+        json={
+            "project_id": "baseline-validation",
+            "benchmark_definition_id": "perception-baseline",
+            "scenario_matrix": [{"scenario_id": "osc_follow_leading_vehicle"}],
+            "auto_start": False,
+        },
+    )
+
+    assert task_resp.status_code == 200
+    task_payload = task_resp.json()["data"]
+    assert task_payload["scenario_matrix"][0]["execution_backend"] == "scenario_runner"
+    assert task_payload["scenario_matrix"][0]["resolved_map_name"] == "Town01"
+
+    run_id = task_payload["run_ids"][0]
+    run_resp = client.get(f"/runs/{run_id}")
+    assert run_resp.status_code == 200
+    assert run_resp.json()["data"]["execution_backend"] == "scenario_runner"

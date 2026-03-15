@@ -10,6 +10,15 @@ from app.utils.file_utils import atomic_write_json, ensure_dir
 from app.utils.time_utils import now_utc
 
 LEGACY_PROJECT_IDS = {"jetson-nano", "fudan-fpai", "rk3568"}
+SYNCED_FIELDS = (
+    "project_ids",
+    "default_project_id",
+    "planning_mode",
+    "candidate_scenario_ids",
+    "supports_duration_seconds",
+    "default_duration_seconds",
+    "queue_note",
+)
 
 
 class BenchmarkDefinitionStore:
@@ -39,8 +48,16 @@ class BenchmarkDefinitionStore:
                 "r", encoding="utf-8"
             ) as handle:
                 current = BenchmarkDefinitionRecord.model_validate(json.load(handle))
+            changed = False
             if set(current.project_ids).issubset(LEGACY_PROJECT_IDS):
                 current.project_ids = definition.project_ids
+                changed = True
+            for field_name in SYNCED_FIELDS:
+                if getattr(current, field_name) == getattr(definition, field_name):
+                    continue
+                setattr(current, field_name, getattr(definition, field_name))
+                changed = True
+            if changed:
                 self.save(current)
 
     def create(self, definition: BenchmarkDefinitionRecord) -> BenchmarkDefinitionRecord:

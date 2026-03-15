@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,8 @@ from app.scenario.maps import (
     map_family_key,
     normalize_map_tail,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,6 +62,7 @@ class CarlaClient:
         self._client: Any = None
         self._world: Any = None
         self._tm: Any = None
+        self._tm_unavailable_reason: str | None = None
         self._original_sync_mode: bool | None = None
         self._original_fixed_delta: float | None = None
         self._spawned_actors: list[Any] = []
@@ -80,7 +84,18 @@ class CarlaClient:
         self._client = carla.Client(self._host, self._port)
         self._client.set_timeout(self._timeout_seconds)
         self._world = self._client.get_world()
-        self._tm = self._client.get_trafficmanager(self._traffic_manager_port)
+        try:
+            self._tm = self._client.get_trafficmanager(self._traffic_manager_port)
+            self._tm_unavailable_reason = None
+        except RuntimeError as exc:
+            self._tm = None
+            self._tm_unavailable_reason = str(exc)
+            logger.warning(
+                "Traffic Manager unavailable at %s:%s: %s",
+                self._host,
+                self._traffic_manager_port,
+                exc,
+            )
 
     def _normalize_map_name(self, map_name: str) -> str:
         return normalize_map_tail(map_name)
@@ -166,7 +181,11 @@ class CarlaClient:
 
     def configure_tm_sync(self, enabled: bool) -> None:
         if self._tm is None:
-            raise CarlaClientError("Traffic Manager is not ready")
+            logger.warning(
+                "Skipping Traffic Manager sync change because TM is unavailable: %s",
+                self._tm_unavailable_reason or "unknown reason",
+            )
+            return
         self._tm.set_synchronous_mode(enabled)
         self._tm_sync_enabled = enabled
 
@@ -352,6 +371,66 @@ class CarlaClient:
             return
         vehicle.set_autopilot(enabled, self._traffic_manager_port)
 
+    def spawn_fixed_traffic_vehicles(
+        self,
+        count: int,
+        *,
+        anchor_spawn_point: dict[str, float] | None = None,
+        autopilot: bool = True,
+        min_distance_from_anchor_m: float = 8.0,
+    ) -> list[Any]:
+        if self._world is None:
+            raise CarlaClientError("CARLA world is not ready")
+
+        blueprint_library = sorted(
+            self._world.get_blueprint_library().filter("vehicle.*"),
+            key=lambda blueprint: blueprint.id,
+        )
+        spawn_points = list(self._world.get_map().get_spawn_points())
+        anchor_transform = (
+            self._build_transform(anchor_spawn_point)
+            if anchor_spawn_point is not None
+            else None
+        )
+
+        if anchor_transform is not None:
+            spawn_points.sort(
+                key=lambda transform: anchor_transform.location.distance(
+                    transform.location
+                )
+            )
+        else:
+            spawn_points.sort(
+                key=lambda transform: (
+                    round(float(transform.location.x), 3),
+                    round(float(transform.location.y), 3),
+                    round(float(transform.rotation.yaw), 3),
+                )
+            )
+
+        spawned: list[Any] = []
+        for index, spawn_point in enumerate(spawn_points):
+            if len(spawned) >= count:
+                break
+            if anchor_transform is not None:
+                distance = float(
+                    anchor_transform.location.distance(spawn_point.location)
+                )
+                if distance < min_distance_from_anchor_m:
+                    continue
+
+            blueprint_obj = blueprint_library[index % len(blueprint_library)]
+            if blueprint_obj.has_attribute("role_name"):
+                blueprint_obj.set_attribute("role_name", f"scenario_npc_{index}")
+            actor = self._world.try_spawn_actor(blueprint_obj, spawn_point)
+            if actor is None:
+                continue
+            actor.set_autopilot(autopilot, self._traffic_manager_port)
+            self._spawned_actors.append(actor)
+            spawned.append(actor)
+
+        return spawned
+
     def spawn_traffic_vehicles(self, count: int, autopilot: bool = True) -> list[Any]:
         if self._world is None:
             raise CarlaClientError("CARLA world is not ready")
@@ -374,8 +453,87 @@ class CarlaClient:
 
         return spawned
 
-    def spawn_crossing_actor_ahead(
-        self, ego_vehicle: Any, distance_m: float = 18.0, lateral_offset_m: float = 2.8
+    def spawn_traffic_walkers(self, count: int) -> list[Any]:
+        if self._world is None or self._carla is None:
+            raise CarlaClientError("CARLA world is not ready")
+
+        walker_blueprints = list(
+            self._world.get_blueprint_library().filter("walker.pedestrian.*")
+        )
+        controller_blueprints = list(
+            self._world.get_blueprint_library().filter("controller.ai.walker")
+        )
+        if not walker_blueprints:
+            raise CarlaClientError("No walker blueprints available")
+
+        spawn_points: list[Any] = []
+        max_attempts = max(count * 6, count + 6)
+        for _ in range(max_attempts):
+            location = self._world.get_random_location_from_navigation()
+            if location is None:
+                continue
+            spawn_points.append(self._carla.Transform(location))
+            if len(spawn_points) >= count:
+                break
+
+        spawned_walkers: list[Any] = []
+        controller_blueprint = controller_blueprints[0] if controller_blueprints else None
+        for index, spawn_point in enumerate(spawn_points):
+            walker_blueprint = random.choice(walker_blueprints)
+            if walker_blueprint.has_attribute("is_invincible"):
+                walker_blueprint.set_attribute("is_invincible", "false")
+            if walker_blueprint.has_attribute("role_name"):
+                walker_blueprint.set_attribute("role_name", f"scenario_walker_{index}")
+
+            walker_actor = self._world.try_spawn_actor(walker_blueprint, spawn_point)
+            if walker_actor is None:
+                continue
+
+            self._spawned_actors.append(walker_actor)
+            spawned_walkers.append(walker_actor)
+
+            if controller_blueprint is None:
+                continue
+
+            controller_actor = self._world.try_spawn_actor(
+                controller_blueprint,
+                self._carla.Transform(),
+                walker_actor,
+            )
+            if controller_actor is None:
+                continue
+
+            self._spawned_actors.append(controller_actor)
+            controller_actor.start()
+            destination = self._world.get_random_location_from_navigation()
+            if destination is not None:
+                controller_actor.go_to_location(destination)
+
+            max_speed = 1.4
+            if walker_blueprint.has_attribute("speed"):
+                recommended_values = walker_blueprint.get_attribute(
+                    "speed"
+                ).recommended_values
+                numeric_values: list[float] = []
+                for value in recommended_values:
+                    try:
+                        numeric_values.append(float(value))
+                    except (TypeError, ValueError):
+                        continue
+                if numeric_values:
+                    max_speed = numeric_values[1] if len(numeric_values) > 1 else numeric_values[0]
+            controller_actor.set_max_speed(max_speed)
+
+        return spawned_walkers
+
+    def spawn_event_actor_ahead(
+        self,
+        ego_vehicle: Any,
+        *,
+        actor_kind: str = "walker",
+        distance_m: float = 18.0,
+        lateral_offset_m: float = 2.8,
+        role_name: str = "scenario_event_actor",
     ) -> Any | None:
         if self._world is None or self._carla is None:
             raise CarlaClientError("CARLA world is not ready")
@@ -407,20 +565,44 @@ class CarlaClient:
         )
         blocker_transform = self._carla.Transform(blocker_location, blocker_rotation)
 
-        blueprints = self._world.get_blueprint_library().filter("walker.pedestrian.*")
-        if not blueprints:
-            blueprints = self._world.get_blueprint_library().filter("static.prop.streetbarrier")
+        if actor_kind == "vehicle":
+            blueprints = self._world.get_blueprint_library().filter("vehicle.*")
+        elif actor_kind == "barrier":
+            blueprints = self._world.get_blueprint_library().filter(
+                "static.prop.streetbarrier"
+            )
+        else:
+            blueprints = self._world.get_blueprint_library().filter(
+                "walker.pedestrian.*"
+            )
+        if not blueprints and actor_kind != "barrier":
+            blueprints = self._world.get_blueprint_library().filter(
+                "static.prop.streetbarrier"
+            )
         if not blueprints:
             blueprints = self._world.get_blueprint_library().filter("vehicle.*")
         if not blueprints:
             return None
 
-        actor = self._world.try_spawn_actor(
-            random.choice(blueprints), blocker_transform
-        )
+        blueprint = sorted(blueprints, key=lambda item: item.id)[0]
+        if blueprint.has_attribute("role_name"):
+            blueprint.set_attribute("role_name", role_name)
+        actor = self._world.try_spawn_actor(blueprint, blocker_transform)
         if actor is not None:
+            if actor_kind == "vehicle":
+                actor.set_autopilot(False, self._traffic_manager_port)
             self._spawned_actors.append(actor)
         return actor
+
+    def spawn_crossing_actor_ahead(
+        self, ego_vehicle: Any, distance_m: float = 18.0, lateral_offset_m: float = 2.8
+    ) -> Any | None:
+        return self.spawn_event_actor_ahead(
+            ego_vehicle,
+            actor_kind="walker",
+            distance_m=distance_m,
+            lateral_offset_m=lateral_offset_m,
+        )
 
     def tick(self) -> CarlaTickResult:
         if self._world is None:

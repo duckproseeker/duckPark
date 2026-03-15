@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+UNSUPPORTED_MAP_NAME_KEYWORDS: tuple[str, ...] = (
+    "annotationcolor",
+    "annotation_color",
+    "landscape",
+    "testmap",
+)
+
 KNOWN_OPTIMIZED_MAP_REQUESTS: dict[str, str] = {
     "town01": "Town01_Opt",
     "town02": "Town02_Opt",
@@ -11,6 +18,10 @@ KNOWN_OPTIMIZED_MAP_REQUESTS: dict[str, str] = {
     "town10": "Town10HD_Opt",
     "town10hd": "Town10HD_Opt",
 }
+
+FALLBACK_RUNTIME_MAPS: tuple[str, ...] = tuple(
+    dict.fromkeys(KNOWN_OPTIMIZED_MAP_REQUESTS.values())
+)
 
 
 def normalize_map_tail(map_name: str) -> str:
@@ -41,6 +52,15 @@ def prefer_optimized_map_request(map_name: str) -> str:
     return KNOWN_OPTIMIZED_MAP_REQUESTS.get(map_family_key(normalized), normalized)
 
 
+def is_supported_runtime_map(map_name: str) -> bool:
+    normalized = normalize_map_tail(map_name).lower()
+    if not normalized:
+        return False
+    if normalized.startswith("town"):
+        return True
+    return not any(keyword in normalized for keyword in UNSUPPORTED_MAP_NAME_KEYWORDS)
+
+
 def choose_preferred_available_map(candidates: list[str]) -> str:
     if not candidates:
         raise ValueError("candidates must not be empty")
@@ -58,6 +78,8 @@ def choose_preferred_available_map(candidates: list[str]) -> str:
 def collapse_available_maps(available_maps: list[str]) -> list[dict[str, object]]:
     grouped: dict[str, list[str]] = defaultdict(list)
     for map_name in available_maps:
+        if not is_supported_runtime_map(map_name):
+            continue
         grouped[map_family_key(map_name)].append(map_name)
 
     items: list[dict[str, object]] = []
@@ -80,3 +102,7 @@ def collapse_available_maps(available_maps: list[str]) -> list[dict[str, object]
 
     items.sort(key=lambda item: (str(item["display_name"]), str(item["map_name"])))
     return items
+
+
+def fallback_runtime_map_options() -> list[dict[str, object]]:
+    return collapse_available_maps(list(FALLBACK_RUNTIME_MAPS))

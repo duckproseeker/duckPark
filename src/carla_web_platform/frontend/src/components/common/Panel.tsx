@@ -11,17 +11,17 @@ interface PanelProps extends PropsWithChildren {
 
 export function Panel({ title, subtitle, actions, className, children }: PanelProps) {
   return (
-    <section className={clsx('horizon-card rounded-[24px] border border-white/90 bg-white/95', className)}>
+    <section className={clsx('horizon-card rounded-[14px]', className)}>
       {(title || subtitle || actions) && (
-        <header className="flex items-start justify-between gap-4 px-5 pb-0 pt-5 md:px-6 md:pt-6">
+        <header className="flex items-start justify-between gap-4 px-4 pb-0 pt-4 md:px-5 md:pt-5">
           <div>
-            {title && <h2 className="text-lg font-extrabold tracking-[-0.02em] text-navy-900">{title}</h2>}
-            {subtitle && <p className="mt-1 text-sm leading-6 text-secondaryGray-600">{subtitle}</p>}
+            {title && <h2 className="text-base font-extrabold tracking-[-0.02em] text-slate-100">{title}</h2>}
+            {subtitle && <p className="mt-1 text-xs leading-5 text-slate-400">{subtitle}</p>}
           </div>
           {actions && <div className="flex items-center gap-3">{actions}</div>}
         </header>
       )}
-      <div className="px-5 py-5 md:px-6 md:py-6">{children}</div>
+      <div className="px-4 py-4 md:px-5 md:py-5">{children}</div>
     </section>
   );
 }

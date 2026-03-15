@@ -111,6 +111,15 @@ carla_web_platform/
 - `GET /projects`
 - `GET /benchmark-definitions`
 
+### 场景模板与场景启动
+
+- `GET /scenarios/catalog`
+- `POST /scenarios/launch`
+
+设计说明见：
+
+- `docs/scenario-template-design.md`
+
 ### 测评任务
 
 - `GET /benchmark-tasks`
