@@ -1,4 +1,4 @@
-.PHONY: format lint test run-platform export-openapi contract-sync
+.PHONY: format lint test run-platform export-openapi contract-sync remote-clean remote-smoke remote-deploy
 
 OPENAPI_SPEC ?= contracts/openapi.json
 PYTHON ?= python3
@@ -29,3 +29,12 @@ export-openapi:
 
 contract-sync: export-openapi
 	cd frontend && npm run generate:api-types
+
+remote-clean:
+	bash scripts/remote_cleanup.sh
+
+remote-smoke:
+	python3 scripts/remote_smoke.py --base-url $${REMOTE_API_BASE_URL:-http://$${REMOTE_HOST:-192.168.110.151}:8000} --mode $${SMOKE_MODE:-basic}
+
+remote-deploy:
+	bash scripts/remote_deploy.sh --smoke-mode $${SMOKE_MODE:-basic}

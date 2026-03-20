@@ -12,11 +12,11 @@ import { StatusPill } from '../../components/common/StatusPill';
 
 export function ScenarioLibraryPage() {
   const catalogQuery = useQuery({ queryKey: ['scenario-catalog'], queryFn: listScenarioCatalog });
-  const [supportFilter, setSupportFilter] = useState<'all' | 'scenario_runner'>('all');
+  const [supportFilter, setSupportFilter] = useState<'all' | 'native' | 'scenario_runner'>('all');
   const [selectedScenarioId, setSelectedScenarioId] = useState('');
 
   const catalogItems = catalogQuery.data ?? [];
-  const runnerCount = catalogItems.filter((item) => item.execution_support === 'scenario_runner').length;
+  const nativeCount = catalogItems.filter((item) => item.execution_support === 'native').length;
   const linkedXoscCount = catalogItems.filter((item) => item.source.resolved_xosc_path).length;
   const filteredItems = catalogItems.filter((item) =>
     supportFilter === 'all' ? true : item.execution_support === supportFilter
@@ -28,21 +28,22 @@ export function ScenarioLibraryPage() {
     <div className="page-stack">
       <PageHeader
         title="Scenario Library"
-        description="所有场景统一走 ScenarioRunner。这里主要用来核对模板元数据、默认 descriptor 和 xosc 来源。"
+        description="场景目录默认走平台 native runtime。这里主要用来核对模板元数据、默认 descriptor 和 xosc 来源。"
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard accent="blue" label="Catalog Items" value={catalogItems.length} hint="场景库总条目数" />
-        <MetricCard accent="teal" label="ScenarioRunner" value={runnerCount} hint="统一由 ScenarioRunner 驱动" />
+        <MetricCard accent="teal" label="Native Runtime" value={nativeCount} hint="默认由平台 native runtime 执行" />
         <MetricCard accent="violet" label="Linked XOSC" value={linkedXoscCount} hint="当前工作区里能直接定位到的 xosc 文件" />
         <MetricCard accent="orange" label="Selected Support" value={supportFilter.toUpperCase()} hint="当前筛选模式" />
       </div>
 
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.35fr)_420px]">
-        <Panel title="Scenario Catalog" subtitle="目录条目全部指向 ScenarioRunner，页面不再区分 builtin/native。">
+        <Panel title="Scenario Catalog" subtitle="目录条目默认指向 native runtime，页面保留 support 维度方便核对兼容情况。">
           <div className="mb-4 flex flex-wrap gap-3">
             {[
               { label: 'ALL', value: 'all' as const },
+              { label: 'NATIVE', value: 'native' as const },
               { label: 'SCENARIO_RUNNER', value: 'scenario_runner' as const }
             ].map((item) => (
               <button

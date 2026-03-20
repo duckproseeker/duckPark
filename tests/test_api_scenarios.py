@@ -9,27 +9,7 @@ from fastapi.testclient import TestClient
 from app.api.main import app
 from app.core.config import get_settings
 from app.orchestrator.queue import FileCommandQueue
-from app.scenario.official_runner import (
-    build_scenario_runner_pythonpath,
-    scenario_runner_runtime_issues,
-)
-
-
-def _write_fake_carla_pythonapi(carla_root: Path) -> None:
-    agents_root = carla_root / "PythonAPI" / "carla" / "agents" / "navigation"
-    agents_root.mkdir(parents=True, exist_ok=True)
-    (agents_root.parent / "__init__.py").write_text("", encoding="utf-8")
-    (agents_root / "__init__.py").write_text("", encoding="utf-8")
-    dist_root = carla_root / "PythonAPI" / "carla" / "dist"
-    dist_root.mkdir(parents=True, exist_ok=True)
-    (dist_root / "carla-0.9.16-py3.9-linux-x86_64.egg").write_text("", encoding="utf-8")
-
-
-def _write_fake_flat_carla_repo(carla_root: Path) -> None:
-    agents_root = carla_root / "agents" / "navigation"
-    agents_root.mkdir(parents=True, exist_ok=True)
-    (carla_root / "agents" / "__init__.py").write_text("", encoding="utf-8")
-    (agents_root / "__init__.py").write_text("", encoding="utf-8")
+from app.scenario.library import get_scenario_catalog_item
 
 
 def test_scenario_catalog_and_environment_endpoints() -> None:
@@ -38,19 +18,20 @@ def test_scenario_catalog_and_environment_endpoints() -> None:
     catalog_resp = client.get("/scenarios/catalog")
     assert catalog_resp.status_code == 200
     items = catalog_resp.json()["data"]["items"]
-    assert len(items) >= 5
-    assert all(item["execution_support"] == "scenario_runner" for item in items)
-    assert all(item["execution_backend"] == "scenario_runner" for item in items)
+    assert len(items) >= 2
+    assert all(item["execution_support"] == "native" for item in items)
+    assert all(item["execution_backend"] == "native" for item in items)
     assert all("launch_capabilities" in item for item in items)
+    assert any(item["scenario_id"] == "town10_autonomous_demo" for item in items)
     assert any(item["scenario_id"] == "free_drive_sensor_collection" for item in items)
-    assert any(item["scenario_id"] == "osc_follow_leading_vehicle" for item in items)
-    assert any(item["scenario_id"] == "osc_lane_change_simple" for item in items)
-    assert any(item["scenario_id"] == "osc_pedestrian_crossing_front" for item in items)
+    assert not any(item["scenario_id"] == "osc_follow_leading_vehicle" for item in items)
 
     env_resp = client.get("/scenarios/environment-presets")
     assert env_resp.status_code == 200
     env_items = env_resp.json()["data"]["items"]
-    assert any(item["preset_id"] == "clear_day" for item in env_items)
+    assert any(item["preset_id"] == "clear_noon" for item in env_items)
+    assert any(item["preset_id"] == "hard_rain_night" for item in env_items)
+    assert any(item["preset_id"] == "dense_fog_night" for item in env_items)
 
 
 def test_sensor_profiles_endpoint_reads_yaml(tmp_path: Path) -> None:
@@ -146,9 +127,7 @@ def test_sensor_profiles_save_endpoint_writes_yaml(tmp_path: Path) -> None:
     list_resp = client.get("/scenarios/sensor-profiles")
     assert list_resp.status_code == 200
     items = list_resp.json()["data"]["items"]
-    item = next(
-        entry for entry in items if entry["profile_name"] == "vehicle_sedan_alpha"
-    )
+    item = next(entry for entry in items if entry["profile_name"] == "vehicle_sedan_alpha")
     assert item["display_name"] == "Sedan Alpha"
     assert item["vehicle_model"] == "vehicle.lincoln.mkz_2017"
 
@@ -158,10 +137,10 @@ def test_scenario_catalog_marks_official_runner_items_when_environment_present(
 ) -> None:
     scenario_runner_root = tmp_path / "scenario_runner"
     (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
-    (scenario_runner_root / "scenario_runner.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
-    (
-        scenario_runner_root / "srunner" / "examples" / "FollowLeadingVehicle.xosc"
-    ).write_text(
+    (scenario_runner_root / "scenario_runner.py").write_text(
+        "#!/usr/bin/env python3\n", encoding="utf-8"
+    )
+    (scenario_runner_root / "srunner" / "examples" / "FollowLeadingVehicle.xosc").write_text(
         "\n".join(
             [
                 '<?xml version="1.0" encoding="UTF-8"?>',
@@ -180,85 +159,99 @@ def test_scenario_catalog_marks_official_runner_items_when_environment_present(
         ),
         encoding="utf-8",
     )
-    carla_root = tmp_path / "carla"
-    _write_fake_carla_pythonapi(carla_root)
-
     monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
-    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
     get_settings.cache_clear()
 
     client = TestClient(app)
     catalog_resp = client.get("/scenarios/catalog")
     assert catalog_resp.status_code == 200
     items = catalog_resp.json()["data"]["items"]
-    official_item = next(
-        item for item in items if item["scenario_id"] == "osc_follow_leading_vehicle"
+    assert not any(item["scenario_id"] == "osc_follow_leading_vehicle" for item in items)
+    demo_item = next(
+        item for item in items if item["scenario_id"] == "town10_autonomous_demo"
     )
     free_drive_item = next(
         item for item in items if item["scenario_id"] == "free_drive_sensor_collection"
     )
-    assert official_item["execution_support"] == "scenario_runner"
-    assert official_item["execution_backend"] == "scenario_runner"
-    assert official_item["category"] == "vehicle_following"
-    assert official_item["default_map_name"] == "Town01"
-    assert official_item["parameter_declarations"][0]["name"] == "leadingSpeed"
-    assert official_item["parameter_schema"][0]["field"] == "leadingSpeed"
-    assert official_item["parameter_schema"][0]["type"] == "number"
-    assert official_item["parameter_schema"][0]["default"] == 2.0
-    assert official_item["launch_capabilities"]["map_editable"] is False
+    hidden_official_item = get_scenario_catalog_item("osc_follow_leading_vehicle")
+    assert hidden_official_item is not None
+    assert hidden_official_item["web_hidden"] is True
+    assert hidden_official_item["execution_support"] == "native"
+    assert hidden_official_item["execution_backend"] == "native"
+    assert hidden_official_item["category"] == "vehicle_following"
+    assert hidden_official_item["default_map_name"] == "Town01"
+    assert hidden_official_item["parameter_declarations"][0]["name"] == "leadingSpeed"
+    assert hidden_official_item["parameter_schema"][0]["field"] == "leadingSpeed"
+    assert hidden_official_item["parameter_schema"][0]["type"] == "number"
+    assert hidden_official_item["parameter_schema"][0]["default"] == 2.0
+    assert hidden_official_item["launch_capabilities"]["map_editable"] is False
+    assert demo_item["default_map_name"] == "Town10HD_Opt"
+    assert demo_item["descriptor_template"]["map_name"] == "Town10HD_Opt"
+    assert demo_item["preset"]["map_locked"] is True
+    assert demo_item["launch_capabilities"]["map_editable"] is False
+    assert demo_item["launch_capabilities"]["timeout_editable"] is False
+    assert demo_item["parameter_schema"][0]["field"] == "targetSpeedMps"
+    assert demo_item["parameter_schema"][0]["default"] == 8.0
+    assert demo_item["descriptor_template"]["termination"]["timeout_seconds"] == 86400
+    assert demo_item["descriptor_template"]["termination"]["success_condition"] == "manual_stop"
+    assert demo_item["descriptor_template"]["sync"]["enabled"] is False
     assert free_drive_item["launch_capabilities"]["map_editable"] is True
     assert free_drive_item["launch_capabilities"]["sensor_profile_editable"] is True
+    assert free_drive_item["default_map_name"] == "Town10HD_Opt"
+    assert free_drive_item["descriptor_template"]["map_name"] == "Town10HD_Opt"
+    assert free_drive_item["descriptor_template"]["sync"]["enabled"] is False
+    assert free_drive_item["descriptor_template"]["sync"]["fixed_delta_seconds"] == 1.0 / 30.0
     assert free_drive_item["parameter_schema"][0]["field"] == "targetSpeedMps"
+    assert free_drive_item["descriptor_template"]["sensors"]["auto_start"] is False
+    assert free_drive_item["descriptor_template"]["recorder"]["enabled"] is True
 
 
-def test_launch_endpoint_generates_per_run_spec_and_xosc(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_launch_endpoint_generates_per_run_spec_and_xosc(tmp_path: Path, monkeypatch) -> None:
     scenario_runner_root = tmp_path / "scenario_runner"
     (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
-    (scenario_runner_root / "scenario_runner.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
-    (
-        scenario_runner_root / "srunner" / "examples" / "FollowLeadingVehicle.xosc"
-    ).write_text(
+    (scenario_runner_root / "scenario_runner.py").write_text(
+        "#!/usr/bin/env python3\n", encoding="utf-8"
+    )
+    (scenario_runner_root / "srunner" / "examples" / "FollowLeadingVehicle.xosc").write_text(
         "\n".join(
             [
                 '<?xml version="1.0" encoding="UTF-8"?>',
                 "<OpenSCENARIO>",
                 '  <ParameterDeclarations><ParameterDeclaration name="leadingSpeed" parameterType="double" value="2.0"/></ParameterDeclarations>',
-                "  <RoadNetwork><LogicFile filepath=\"Town01\"/></RoadNetwork>",
+                '  <RoadNetwork><LogicFile filepath="Town01"/></RoadNetwork>',
                 "  <Storyboard>",
                 "    <Init>",
                 "      <Actions>",
                 "        <GlobalAction>",
                 "          <EnvironmentAction>",
-                "            <Environment name=\"TemplateEnvironment\">",
-                "              <TimeOfDay animation=\"false\" dateTime=\"2020-01-01T12:00:00\"/>",
-                "              <Weather cloudState=\"free\">",
-                "                <Sun azimuth=\"0\" elevation=\"1.0\" intensity=\"1.0\"/>",
-                "                <Fog visualRange=\"100000.0\"/>",
-                "                <Precipitation precipitationType=\"dry\" intensity=\"0.0\"/>",
+                '            <Environment name="TemplateEnvironment">',
+                '              <TimeOfDay animation="false" dateTime="2020-01-01T12:00:00"/>',
+                '              <Weather cloudState="free">',
+                '                <Sun azimuth="0" elevation="1.0" intensity="1.0"/>',
+                '                <Fog visualRange="100000.0"/>',
+                '                <Precipitation precipitationType="dry" intensity="0.0"/>',
                 "              </Weather>",
-                "              <RoadCondition frictionScaleFactor=\"1.0\"/>",
+                '              <RoadCondition frictionScaleFactor="1.0"/>',
                 "            </Environment>",
                 "          </EnvironmentAction>",
                 "        </GlobalAction>",
                 "      </Actions>",
                 "    </Init>",
-                "    <Story name=\"Story\">",
-                "      <Act name=\"Act\">",
-                "        <ManeuverGroup name=\"ManeuverGroup\" maximumExecutionCount=\"1\">",
-                "          <Actors selectTriggeringEntities=\"false\">",
-                "            <EntityRef entityRef=\"adversary\"/>",
+                '    <Story name="Story">',
+                '      <Act name="Act">',
+                '        <ManeuverGroup name="ManeuverGroup" maximumExecutionCount="1">',
+                '          <Actors selectTriggeringEntities="false">',
+                '            <EntityRef entityRef="adversary"/>',
                 "          </Actors>",
-                "          <Maneuver name=\"Maneuver\">",
-                "            <Event name=\"LeadingVehicleKeepsVelocity\" priority=\"overwrite\">",
-                "              <Action name=\"LeadingVehicleKeepsVelocity\">",
+                '          <Maneuver name="Maneuver">',
+                '            <Event name="LeadingVehicleKeepsVelocity" priority="overwrite">',
+                '              <Action name="LeadingVehicleKeepsVelocity">',
                 "                <PrivateAction>",
                 "                  <LongitudinalAction>",
                 "                    <SpeedAction>",
-                "                      <SpeedActionDynamics dynamicsShape=\"step\" value=\"20\" dynamicsDimension=\"distance\"/>",
+                '                      <SpeedActionDynamics dynamicsShape="step" value="20" dynamicsDimension="distance"/>',
                 "                      <SpeedActionTarget>",
-                "                        <AbsoluteTargetSpeed value=\"$leadingSpeed\"/>",
+                '                        <AbsoluteTargetSpeed value="$leadingSpeed"/>',
                 "                      </SpeedActionTarget>",
                 "                    </SpeedAction>",
                 "                  </LongitudinalAction>",
@@ -266,13 +259,13 @@ def test_launch_endpoint_generates_per_run_spec_and_xosc(
                 "              </Action>",
                 "              <StartTrigger>",
                 "                <ConditionGroup>",
-                "                  <Condition name=\"StartConditionLeadingVehicleKeepsVelocity\" delay=\"0\" conditionEdge=\"rising\">",
+                '                  <Condition name="StartConditionLeadingVehicleKeepsVelocity" delay="0" conditionEdge="rising">',
                 "                    <ByEntityCondition>",
-                "                      <TriggeringEntities triggeringEntitiesRule=\"any\">",
-                "                        <EntityRef entityRef=\"hero\"/>",
+                '                      <TriggeringEntities triggeringEntitiesRule="any">',
+                '                        <EntityRef entityRef="hero"/>',
                 "                      </TriggeringEntities>",
                 "                      <EntityCondition>",
-                "                        <RelativeDistanceCondition entityRef=\"adversary\" relativeDistanceType=\"longitudinal\" value=\"40.0\" freespace=\"true\" rule=\"lessThan\"/>",
+                '                        <RelativeDistanceCondition entityRef="adversary" relativeDistanceType="longitudinal" value="40.0" freespace="true" rule="lessThan"/>',
                 "                      </EntityCondition>",
                 "                    </ByEntityCondition>",
                 "                  </Condition>",
@@ -283,13 +276,13 @@ def test_launch_endpoint_generates_per_run_spec_and_xosc(
                 "        </ManeuverGroup>",
                 "        <StopTrigger>",
                 "          <ConditionGroup>",
-                "            <Condition name=\"EndCondition\" delay=\"0\" conditionEdge=\"rising\">",
+                '            <Condition name="EndCondition" delay="0" conditionEdge="rising">',
                 "              <ByEntityCondition>",
-                "                <TriggeringEntities triggeringEntitiesRule=\"any\">",
-                "                  <EntityRef entityRef=\"hero\"/>",
+                '                <TriggeringEntities triggeringEntitiesRule="any">',
+                '                  <EntityRef entityRef="hero"/>',
                 "                </TriggeringEntities>",
                 "                <EntityCondition>",
-                "                  <TraveledDistanceCondition value=\"200.0\"/>",
+                '                  <TraveledDistanceCondition value="200.0"/>',
                 "                </EntityCondition>",
                 "              </ByEntityCondition>",
                 "            </Condition>",
@@ -303,11 +296,7 @@ def test_launch_endpoint_generates_per_run_spec_and_xosc(
         ),
         encoding="utf-8",
     )
-    carla_root = tmp_path / "carla"
-    _write_fake_carla_pythonapi(carla_root)
-
     monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
-    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
     get_settings.cache_clear()
 
     client = TestClient(app)
@@ -342,6 +331,7 @@ def test_launch_endpoint_generates_per_run_spec_and_xosc(
     assert payload["traffic"]["num_vehicles"] == 6
     assert payload["traffic"]["num_walkers"] == 2
     assert payload["scenario_source"]["version"] == "generated"
+    assert payload["execution_backend"] == "native"
 
     generated_xosc_path = Path(payload["scenario_source"]["generated_xosc_path"])
     generated_spec_path = Path(payload["scenario_source"]["generated_spec_path"])
@@ -375,7 +365,7 @@ def test_launch_endpoint_generates_per_run_spec_and_xosc(
         "AssignControllerAction/Controller/Properties/Property[@name='traffic_manager_port']"
     )
     assert traffic_manager_port is not None
-    assert traffic_manager_port.attrib["value"] == "8010"
+    assert traffic_manager_port.attrib["value"] == str(get_settings().traffic_manager_port)
     target_speed = generated_root.find(
         "./Storyboard/Init/Actions/Private[@entityRef='hero']/PrivateAction/ControllerAction/"
         "AssignControllerAction/Controller/Properties/Property[@name='target_speed_mps']"
@@ -438,12 +428,10 @@ def test_launch_endpoint_generates_python_scenario_config_and_sensor_descriptor(
 ) -> None:
     scenario_runner_root = tmp_path / "scenario_runner"
     (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
-    (scenario_runner_root / "scenario_runner.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
-    carla_root = tmp_path / "carla"
-    _write_fake_carla_pythonapi(carla_root)
-
+    (scenario_runner_root / "scenario_runner.py").write_text(
+        "#!/usr/bin/env python3\n", encoding="utf-8"
+    )
     monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
-    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
     monkeypatch.setenv("SENSOR_PROFILES_ROOT", str(tmp_path / "sensors"))
     get_settings.cache_clear()
 
@@ -492,31 +480,19 @@ def test_launch_endpoint_generates_python_scenario_config_and_sensor_descriptor(
     assert resp.status_code == 200, resp.text
     payload = resp.json()["data"]
     assert payload["map_name"] == "Town05"
-    assert payload["scenario_source"]["launch_mode"] == "python_scenario"
+    assert payload["scenario_source"]["launch_mode"] == "native_descriptor"
+    assert payload["execution_backend"] == "native"
     assert payload["sensors"]["enabled"] is True
+    assert payload["sensors"]["auto_start"] is False
     assert payload["sensors"]["profile_name"] == "front_rgb"
     assert payload["sensors"]["sensors"][0]["type"] == "sensor.camera.rgb"
+    assert payload["recorder"]["enabled"] is True
     assert isinstance(payload["traffic"]["seed"], int)
     assert payload["traffic"]["seed"] >= 0
 
-    config_path = Path(payload["scenario_source"]["generated_config_path"])
     spec_path = Path(payload["scenario_source"]["generated_spec_path"])
-    assert config_path.exists()
     assert spec_path.exists()
-
-    config_root = ElementTree.parse(config_path).getroot()
-    scenario_node = config_root.find("./scenario")
-    assert scenario_node is not None
-    assert scenario_node.attrib["type"] == "DuckparkFreeDrive"
-    assert scenario_node.attrib["town"] == "Town05"
-    ego_vehicle = scenario_node.find("./ego_vehicle")
-    assert ego_vehicle is not None
-    assert ego_vehicle.attrib["random_location"] == "true"
-    free_drive = scenario_node.find("./duckpark_free_drive")
-    assert free_drive is not None
-    assert free_drive.attrib["target_speed_mps"] == "7.5"
-    assert free_drive.attrib["timeout_seconds"] == "90"
-    assert free_drive.attrib["roaming_seed"] == str(payload["traffic"]["seed"])
+    assert payload["scenario_source"]["generated_xosc_path"] is None
 
     spec_payload = json.loads(spec_path.read_text(encoding="utf-8"))
     assert spec_payload["descriptor"]["map_name"] == "Town05"
@@ -525,25 +501,154 @@ def test_launch_endpoint_generates_python_scenario_config_and_sensor_descriptor(
     assert spec_payload["descriptor"]["traffic"]["seed"] == payload["traffic"]["seed"]
     assert spec_payload["descriptor"]["traffic"]["injection_mode"] == "carla_api_near_ego"
     assert spec_payload["descriptor"]["sensors"]["profile_name"] == "front_rgb"
+    assert spec_payload["descriptor"]["sensors"]["auto_start"] is False
+    assert spec_payload["descriptor"]["recorder"]["enabled"] is True
     assert spec_payload["launch_request"]["traffic"]["seed"] == payload["traffic"]["seed"]
     assert spec_payload["resolved_template_params"] == {"targetSpeedMps": 7.5}
+
+
+def test_launch_endpoint_assigns_default_hil_config_to_scenario_launch(
+    tmp_path: Path, monkeypatch
+) -> None:
+    scenario_runner_root = tmp_path / "scenario_runner"
+    (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
+    (scenario_runner_root / "scenario_runner.py").write_text(
+        "#!/usr/bin/env python3\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
+    monkeypatch.setenv("SENSOR_PROFILES_ROOT", str(tmp_path / "sensors"))
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    sensor_root = settings.sensor_profiles_root
+    sensor_root.mkdir(parents=True, exist_ok=True)
+    (sensor_root / "front_rgb.yaml").write_text(
+        "\n".join(
+            [
+                "profile_name: front_rgb",
+                "display_name: Front RGB",
+                "description: front rgb",
+                "sensors:",
+                "  - id: FrontRGB",
+                "    type: sensor.camera.rgb",
+                "    x: 1.5",
+                "    y: 0.0",
+                "    z: 1.7",
+                "    width: 1280",
+                "    height: 720",
+                "    fov: 90.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    client = TestClient(app)
+    resp = client.post(
+        "/scenarios/launch",
+        json={
+            "scenario_id": "free_drive_sensor_collection",
+            "map_name": "Town05",
+            "weather": {"preset": "WetCloudySunset"},
+            "template_params": {"targetSpeedMps": 8.5},
+            "auto_start": False,
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()["data"]
+    assert payload["status"] == "CREATED"
+    assert payload["map_name"] == "Town05"
+    assert payload["hil_config"] == {
+        "mode": "camera_open_loop",
+        "gateway_id": None,
+        "video_source": "hdmi_x1301",
+        "dut_input_mode": "uvc_camera",
+        "result_ingest_mode": "http_push",
+    }
+
+
+def test_launch_endpoint_uses_template_traffic_defaults_when_request_omits_traffic(
+    tmp_path: Path, monkeypatch
+) -> None:
+    scenario_runner_root = tmp_path / "scenario_runner"
+    (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
+    (scenario_runner_root / "scenario_runner.py").write_text(
+        "#!/usr/bin/env python3\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
+    monkeypatch.setenv("SENSOR_PROFILES_ROOT", str(tmp_path / "sensors"))
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    sensor_root = settings.sensor_profiles_root
+    sensor_root.mkdir(parents=True, exist_ok=True)
+    (sensor_root / "front_rgb.yaml").write_text(
+        "\n".join(
+            [
+                "profile_name: front_rgb",
+                "display_name: Front RGB",
+                "description: front rgb",
+                "sensors:",
+                "  - id: FrontRGB",
+                "    type: sensor.camera.rgb",
+                "    x: 1.5",
+                "    y: 0.0",
+                "    z: 1.7",
+                "    width: 1280",
+                "    height: 720",
+                "    fov: 90.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    client = TestClient(app)
+    resp = client.post(
+        "/scenarios/launch",
+        json={
+            "scenario_id": "free_drive_sensor_collection",
+            "map_name": "Town03",
+            "weather": {"preset": "WetSunset"},
+            "template_params": {"targetSpeedMps": 6.5},
+            "timeout_seconds": 75,
+            "auto_start": False,
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()["data"]
+    assert payload["map_name"] == "Town03"
+    assert payload["traffic"]["num_vehicles"] == 20
+    assert payload["traffic"]["num_walkers"] == 16
+    assert isinstance(payload["traffic"]["seed"], int)
+    assert payload["traffic"]["seed"] >= 0
+    assert payload["sensors"]["profile_name"] == "front_rgb"
+    assert payload["scenario_source"]["launch_mode"] == "native_descriptor"
+
+    spec_path = Path(payload["scenario_source"]["generated_spec_path"])
+    assert spec_path.exists()
+    assert payload["scenario_source"]["generated_xosc_path"] is None
+
+    spec_payload = json.loads(spec_path.read_text(encoding="utf-8"))
+    assert spec_payload["descriptor"]["traffic"]["enabled"] is True
+    assert spec_payload["descriptor"]["traffic"]["num_vehicles"] == 20
+    assert spec_payload["descriptor"]["traffic"]["num_walkers"] == 16
+    assert spec_payload["descriptor"]["traffic"]["seed"] == payload["traffic"]["seed"]
+    assert spec_payload["descriptor"]["traffic"]["injection_mode"] == "carla_api_near_ego"
+    assert spec_payload["launch_request"]["traffic"] == {"seed": payload["traffic"]["seed"]}
 
 
 def test_launch_endpoint_can_auto_queue_run(tmp_path: Path, monkeypatch) -> None:
     scenario_runner_root = tmp_path / "scenario_runner"
     (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
-    (scenario_runner_root / "scenario_runner.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
-    (
-        scenario_runner_root / "srunner" / "examples" / "FollowLeadingVehicle.xosc"
-    ).write_text(
+    (scenario_runner_root / "scenario_runner.py").write_text(
+        "#!/usr/bin/env python3\n", encoding="utf-8"
+    )
+    (scenario_runner_root / "srunner" / "examples" / "FollowLeadingVehicle.xosc").write_text(
         '<?xml version="1.0" encoding="UTF-8"?><OpenSCENARIO><RoadNetwork><LogicFile filepath="Town01"/></RoadNetwork><Storyboard/></OpenSCENARIO>',
         encoding="utf-8",
     )
-    carla_root = tmp_path / "carla"
-    _write_fake_carla_pythonapi(carla_root)
-
     monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
-    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
     get_settings.cache_clear()
 
     client = TestClient(app)
@@ -558,23 +663,17 @@ def test_launch_endpoint_can_auto_queue_run(tmp_path: Path, monkeypatch) -> None
     assert FileCommandQueue(get_settings().commands_root).count_pending() == 1
 
 
-def test_launch_endpoint_rejects_unknown_template_params(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_launch_endpoint_rejects_unknown_template_params(tmp_path: Path, monkeypatch) -> None:
     scenario_runner_root = tmp_path / "scenario_runner"
     (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
-    (scenario_runner_root / "scenario_runner.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
-    (
-        scenario_runner_root / "srunner" / "examples" / "FollowLeadingVehicle.xosc"
-    ).write_text(
+    (scenario_runner_root / "scenario_runner.py").write_text(
+        "#!/usr/bin/env python3\n", encoding="utf-8"
+    )
+    (scenario_runner_root / "srunner" / "examples" / "FollowLeadingVehicle.xosc").write_text(
         '<?xml version="1.0" encoding="UTF-8"?><OpenSCENARIO><ParameterDeclarations><ParameterDeclaration name="leadingSpeed" parameterType="double" value="2.0"/></ParameterDeclarations><RoadNetwork><LogicFile filepath="Town01"/></RoadNetwork><Storyboard/></OpenSCENARIO>',
         encoding="utf-8",
     )
-    carla_root = tmp_path / "carla"
-    _write_fake_carla_pythonapi(carla_root)
-
     monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
-    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
     get_settings.cache_clear()
 
     client = TestClient(app)
@@ -590,62 +689,3 @@ def test_launch_endpoint_rejects_unknown_template_params(
     assert resp.status_code == 422
     assert resp.json()["detail"]["code"] == "VALIDATION_ERROR"
     assert "unknownField" in resp.json()["detail"]["message"]
-
-
-def test_scenario_runner_pythonpath_includes_agents_and_carla_egg(
-    tmp_path: Path, monkeypatch
-) -> None:
-    scenario_runner_root = tmp_path / "scenario_runner"
-    (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
-    (scenario_runner_root / "scenario_runner.py").write_text(
-        "#!/usr/bin/env python3\n", encoding="utf-8"
-    )
-    carla_root = tmp_path / "carla"
-    _write_fake_carla_pythonapi(carla_root)
-
-    monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
-    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
-    get_settings.cache_clear()
-
-    entries = build_scenario_runner_pythonpath()
-    issues = scenario_runner_runtime_issues()
-
-    assert any(entry.endswith("scenario_runner") for entry in entries)
-    assert any(entry.endswith("scenario_runner/srunner") for entry in entries)
-    assert any(
-        entry.endswith("carla-0.9.16-py3.9-linux-x86_64.egg") for entry in entries
-    )
-    assert any(entry.endswith("PythonAPI/carla") for entry in entries)
-    assert issues == []
-
-
-def test_scenario_runner_pythonpath_supports_flat_carla_repo_layout(
-    tmp_path: Path, monkeypatch
-) -> None:
-    from app.scenario import official_runner
-
-    scenario_runner_root = tmp_path / "scenario_runner"
-    (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
-    (scenario_runner_root / "scenario_runner.py").write_text(
-        "#!/usr/bin/env python3\n", encoding="utf-8"
-    )
-    carla_root = tmp_path / "carla"
-    _write_fake_flat_carla_repo(carla_root)
-
-    monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
-    monkeypatch.setenv("SCENARIO_RUNNER_CARLA_ROOT", str(carla_root))
-    monkeypatch.setattr(
-        official_runner,
-        "_module_available",
-        lambda module_name: module_name == "carla",
-    )
-    get_settings.cache_clear()
-
-    entries = build_scenario_runner_pythonpath()
-    issues = scenario_runner_runtime_issues()
-
-    assert any(entry.endswith("scenario_runner") for entry in entries)
-    assert any(entry.endswith("scenario_runner/srunner") for entry in entries)
-    assert any(entry.endswith("/carla") for entry in entries)
-    assert not any(entry.endswith("/carla/source") for entry in entries)
-    assert issues == []

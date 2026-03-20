@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -67,90 +66,6 @@ OFFICIAL_OPENSCENARIO_PRESETS: tuple[OfficialOpenScenarioPreset, ...] = (
         description="官方 OpenSCENARIO 示例，运行过程中由场景脚本驱动天气变化。",
     ),
 )
-
-
-def scenario_runner_ready(settings: Settings | None = None) -> bool:
-    return not scenario_runner_runtime_issues(settings)
-
-
-def _module_available(module_name: str) -> bool:
-    return importlib.util.find_spec(module_name) is not None
-
-
-def _dedupe_paths(entries: list[Path]) -> list[str]:
-    unique_entries: list[str] = []
-    seen: set[str] = set()
-    for entry in entries:
-        normalized = str(entry)
-        if normalized in seen or not entry.exists():
-            continue
-        seen.add(normalized)
-        unique_entries.append(normalized)
-    return unique_entries
-
-
-def _carla_pythonpath_entries(carla_root: Path) -> list[Path]:
-    flat_agents_root = carla_root / "agents"
-    pythonapi_root = carla_root / "PythonAPI"
-    carla_python_root = pythonapi_root / "carla"
-    dist_root = carla_python_root / "dist"
-    egg_candidates = sorted(dist_root.glob("carla-*.egg")) if dist_root.exists() else []
-    entries: list[Path] = [*egg_candidates]
-    if carla_python_root.exists():
-        entries.append(carla_python_root)
-    if flat_agents_root.exists():
-        entries.append(carla_root)
-    return entries
-
-
-def scenario_runner_runtime_issues(settings: Settings | None = None) -> list[str]:
-    settings = settings or get_settings()
-    issues: list[str] = []
-
-    root = settings.scenario_runner_root
-    if root is None:
-        issues.append("缺少 SCENARIO_RUNNER_ROOT")
-    elif not (root / "scenario_runner.py").exists():
-        issues.append(f"找不到 scenario_runner.py: {root / 'scenario_runner.py'}")
-
-    carla_root = settings.scenario_runner_carla_root
-    if carla_root is None:
-        issues.append("缺少 SCENARIO_RUNNER_CARLA_ROOT")
-        return issues
-
-    flat_agents_root = carla_root / "agents"
-    carla_python_root = carla_root / "PythonAPI" / "carla"
-    agents_root = carla_python_root / "agents"
-    dist_root = carla_python_root / "dist"
-    egg_candidates = sorted(dist_root.glob("carla-*.egg")) if dist_root.exists() else []
-
-    if not agents_root.exists() and not flat_agents_root.exists() and not _module_available("agents"):
-        issues.append(
-            "找不到 agents 包目录: "
-            f"{agents_root} 或 {flat_agents_root}"
-        )
-
-    if not egg_candidates and not _module_available("carla"):
-        issues.append(
-            "未找到 CARLA Python API。请确认已安装 carla 包，或"
-            f" {dist_root} 下存在 carla-*.egg"
-        )
-
-    return issues
-
-
-def build_scenario_runner_pythonpath(settings: Settings | None = None) -> list[str]:
-    settings = settings or get_settings()
-    entries: list[Path] = []
-    if settings.scenario_runner_root is not None:
-        entries.append(settings.scenario_runner_root)
-        srunner_package_root = settings.scenario_runner_root / "srunner"
-        if srunner_package_root.exists():
-            entries.append(srunner_package_root)
-    if settings.scenario_runner_carla_root is not None:
-        entries.extend(_carla_pythonpath_entries(settings.scenario_runner_carla_root))
-    return _dedupe_paths(entries)
-
 
 def resolve_official_xosc_path(
     relative_xosc_path: str, settings: Settings | None = None
@@ -250,11 +165,13 @@ def build_official_openscenario_catalog_item(
         "display_name": preset.display_name,
         "description": preset.description,
         "default_map_name": map_name,
-        "execution_support": "scenario_runner",
-        "execution_backend": "scenario_runner",
+        "execution_support": "native",
+        "execution_backend": "native",
+        "web_hidden": True,
         "source": {
-            "provider": "scenario_runner",
-            "version": "external",
+            "provider": "native_xosc",
+            "version": "external_xosc",
+            "launch_mode": "openscenario",
             "relative_xosc_path": preset.relative_xosc_path,
             "resolved_xosc_path": str(xosc_path) if xosc_path is not None else None,
         },
@@ -272,7 +189,7 @@ def build_official_openscenario_catalog_item(
             "version": 1,
             "scenario_name": preset.scenario_id,
             "map_name": map_name,
-            "weather": {"preset": "ScenarioRunnerManaged"},
+            "weather": {"preset": "ClearNoon"},
             "sync": {"enabled": True, "fixed_delta_seconds": 0.05},
             "ego_vehicle": {
                 "blueprint": "vehicle.lincoln.mkz_2017",
@@ -287,12 +204,12 @@ def build_official_openscenario_catalog_item(
             },
             "traffic": {"enabled": False, "num_vehicles": 0, "num_walkers": 0},
             "sensors": {"enabled": False, "sensors": []},
-            "termination": {"timeout_seconds": 120, "success_condition": "scenario_runner"},
+            "termination": {"timeout_seconds": 120, "success_condition": "timeout"},
             "recorder": {"enabled": False},
             "debug": {"viewer_friendly": False},
             "metadata": {
-                "author": "scenario-runner",
-                "tags": ["scenario_runner", preset.scenario_id],
+                "author": "native-xosc",
+                "tags": ["native", "openscenario", preset.scenario_id],
                 "description": preset.description,
             },
         },

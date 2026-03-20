@@ -610,6 +610,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runs/{run_id}/sensor-capture/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 开始运行中的传感器采集
+         * @description 仅改变传感器采集状态，不影响场景运行本身。适合在需要保留真实传感器数据时手动开始采集。
+         */
+        post: operations["start_run_sensor_capture_runs__run_id__sensor_capture_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{run_id}/sensor-capture/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 停止运行中的传感器采集
+         * @description 停止真实传感器数据落盘，但不会停止当前场景。
+         */
+        post: operations["stop_run_sensor_capture_runs__run_id__sensor_capture_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs/{run_id}/start": {
         parameters: {
             query?: never;
@@ -679,7 +719,7 @@ export interface paths {
         };
         /**
          * 查询场景目录
-         * @description 返回统一由 ScenarioRunner 驱动的场景目录、环境预设和传感器模板。sample_descriptors 仅保留兼容字段，正常情况下为空。
+         * @description 返回由平台 native runtime 驱动的场景目录、环境预设和传感器模板。sample_descriptors 仅保留兼容字段，正常情况下为空。
          */
         get: operations["list_scenarios_scenarios_get"];
         put?: never;
@@ -699,7 +739,7 @@ export interface paths {
         };
         /**
          * 查询场景库目录
-         * @description 返回统一由 ScenarioRunner 驱动的场景目录。
+         * @description 返回由平台 native runtime 驱动的场景目录。
          */
         get: operations["list_scenario_catalog_endpoint_scenarios_catalog_get"];
         put?: never;
@@ -741,7 +781,7 @@ export interface paths {
         put?: never;
         /**
          * 按场景启动配置创建运行
-         * @description 前端只提交场景、地图、天气、传感器和背景交通参数。后端生成 per-run 的 ScenarioRunner 输入并创建 run，可按需自动加入执行队列。
+         * @description 前端只提交场景、地图、天气、传感器和背景交通参数。后端生成 per-run 的 native runtime 输入并创建 run，可按需自动加入执行队列。
          */
         post: operations["launch_scenario_scenarios_launch_post"];
         delete?: never;
@@ -1042,7 +1082,7 @@ export interface components {
             environment_preset_id: string;
             /**
              * Execution Backend
-             * @default scenario_runner
+             * @default native
              */
             execution_backend: string;
             /** Requested Map Name */
@@ -1290,8 +1330,11 @@ export interface components {
              * @default uvc_camera
              */
             dut_input_mode: string;
-            /** Gateway Id */
-            gateway_id: string;
+            /**
+             * Gateway Id
+             * @description 绑定的网关 ID。对于仅拉起 Host/Pi sidecar 的本地演示链路可为空。
+             */
+            gateway_id?: string | null;
             /**
              * Mode
              * @default camera_open_loop
@@ -1332,6 +1375,26 @@ export interface components {
             updated_at_utc: string | null;
             /** Vendor */
             vendor: string;
+        };
+        /** RecorderConfigPayload */
+        RecorderConfigPayload: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** RecorderRuntimeControlPayload */
+        RecorderRuntimeControlPayload: {
+            /** Active */
+            active: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Last Error */
+            last_error: string | null;
+            /** Output Path */
+            output_path: string | null;
+            /** Status */
+            status: string;
+            /** Updated At Utc */
+            updated_at_utc: string | null;
         };
         /** ReportExportRequest */
         ReportExportRequest: {
@@ -1578,6 +1641,10 @@ export interface components {
             /** Current Tick */
             current_tick: number | null;
             debug: components["schemas"]["RunDebugPayload"];
+            /** Device Metrics */
+            device_metrics?: {
+                [key: string]: unknown;
+            } | null;
             /** Dut Model */
             dut_model: string | null;
             /** End Time */
@@ -1599,6 +1666,7 @@ export interface components {
             project_id: string | null;
             /** Project Name */
             project_name: string | null;
+            recorder: components["schemas"]["RecorderConfigPayload"];
             /** Run Id */
             run_id: string;
             runtime_capabilities: components["schemas"]["RunRuntimeCapabilitiesPayload"];
@@ -1655,6 +1723,8 @@ export interface components {
         /** RunRuntimeControlPayload */
         RunRuntimeControlPayload: {
             debug: components["schemas"]["RunDebugPayload"] | null;
+            recorder?: components["schemas"]["RecorderRuntimeControlPayload"] | null;
+            sensor_capture?: components["schemas"]["SensorCaptureRuntimeControlPayload"] | null;
             /** Updated At Utc */
             updated_at_utc: string | null;
             weather: components["schemas"]["WeatherPayload"] | null;
@@ -1745,6 +1815,84 @@ export interface components {
             tags?: string[];
         } & {
             [key: string]: unknown;
+        };
+        /** SensorCaptureOutputPayload */
+        SensorCaptureOutputPayload: {
+            /**
+             * File Count
+             * @default 0
+             */
+            file_count: number;
+            /**
+             * Frame File Count
+             * @default 0
+             */
+            frame_file_count: number;
+            /** Latest Artifact Path */
+            latest_artifact_path?: string | null;
+            /**
+             * Record Count
+             * @default 0
+             */
+            record_count: number;
+            /** Relative Dir */
+            relative_dir: string;
+            /**
+             * Sample Count
+             * @default 0
+             */
+            sample_count: number;
+            /** Sensor Id */
+            sensor_id: string;
+        };
+        /** SensorCaptureRuntimeControlPayload */
+        SensorCaptureRuntimeControlPayload: {
+            /** Active */
+            active: boolean;
+            /** Auto Start */
+            auto_start: boolean;
+            /** Desired State */
+            desired_state: string;
+            /** Download Url */
+            download_url?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Last Error */
+            last_error: string | null;
+            /** Manifest */
+            manifest?: {
+                [key: string]: unknown;
+            } | null;
+            /** Manifest Path */
+            manifest_path?: string | null;
+            /** Output Root */
+            output_root: string | null;
+            /** Profile Name */
+            profile_name: string | null;
+            /**
+             * Saved Frames
+             * @default 0
+             */
+            saved_frames: number;
+            /**
+             * Saved Samples
+             * @default 0
+             */
+            saved_samples: number;
+            /** Sensor Count */
+            sensor_count: number;
+            /** Sensor Outputs */
+            sensor_outputs?: components["schemas"]["SensorCaptureOutputPayload"][];
+            /** Status */
+            status: string;
+            /** Updated At Utc */
+            updated_at_utc: string | null;
+            /** Worker Log Path */
+            worker_log_path?: string | null;
+            /** Worker Log Tail */
+            worker_log_tail?: string | null;
+            /** Worker State Path */
+            worker_state_path?: string | null;
         };
         /** SensorProfileListPayload */
         SensorProfileListPayload: {
@@ -1863,6 +2011,11 @@ export interface components {
         };
         /** SensorsConfigPayload */
         SensorsConfigPayload: {
+            /**
+             * Auto Start
+             * @default false
+             */
+            auto_start: boolean;
             /** Config Yaml Path */
             config_yaml_path: string | null;
             /** Enabled */
@@ -3043,6 +3196,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunEventListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_run_sensor_capture_runs__run_id__sensor_capture_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunEnvironmentStateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_run_sensor_capture_runs__run_id__sensor_capture_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunEnvironmentStateResponse"];
                 };
             };
             /** @description Validation Error */

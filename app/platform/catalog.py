@@ -99,11 +99,8 @@ def build_default_benchmark_definitions() -> list[BenchmarkDefinitionRecord]:
             default_evaluation_profile_name="yolo_open_loop_v1",
             planning_mode=BenchmarkPlanningMode.TIMED_SINGLE_SCENARIO,
             candidate_scenario_ids=[
-                "osc_follow_leading_vehicle",
-                "osc_lane_change_simple",
-                "osc_sync_arrival_intersection",
-                "osc_intersection_collision_avoidance",
-                "osc_pedestrian_crossing_front",
+                "town10_autonomous_demo",
+                "free_drive_sensor_collection",
             ],
             supports_duration_seconds=True,
             default_duration_seconds=1800,

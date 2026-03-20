@@ -6,9 +6,11 @@ from app.hil.gateway_agent import (
     GatewayAgentSettings,
     build_register_payload,
     determine_gateway_status,
+    is_gadget_video_name,
     parse_args,
     parse_csv,
     parse_tc358743_status,
+    read_dut_result_metrics,
 )
 
 
@@ -29,6 +31,7 @@ def make_settings(tmp_path: Path) -> GatewayAgentSettings:
         bridge_state_file=state_dir / "bridge_state.json",
         current_run_id_file=state_dir / "current_run_id",
         capture_runtime_file=state_dir / "capture_runtime.json",
+        dut_result_file=state_dir / "dut_result.json",
         agent_version="0.1.0",
         video_input_modes=("hdmi_x1301", "frame_stream"),
         dut_output_modes=("uvc_gadget",),
@@ -39,6 +42,14 @@ def make_settings(tmp_path: Path) -> GatewayAgentSettings:
 
 def test_parse_csv_trims_empty_items() -> None:
     assert parse_csv(" hdmi_x1301, frame_stream ,, ") == ("hdmi_x1301", "frame_stream")
+
+
+def test_is_gadget_video_name_accepts_legacy_and_configfs_uvc_names() -> None:
+    assert is_gadget_video_name("Webcam gadget")
+    assert is_gadget_video_name("UVC Gadget")
+    assert is_gadget_video_name("ConfigFS UVC Gadget")
+    assert not is_gadget_video_name("USB Camera")
+    assert not is_gadget_video_name("")
 
 
 def test_determine_gateway_status_ready_and_busy() -> None:
@@ -103,12 +114,46 @@ def test_parse_tc358743_status_extracts_signal_flags() -> None:
     assert metrics["hdmi_input_color_space"] == "RGB full range"
 
 
+def test_read_dut_result_metrics_flattens_nested_payload(tmp_path: Path) -> None:
+    result_path = tmp_path / "dut_result.json"
+    result_path.write_text(
+        """
+        {
+          "status": "COMPLETED",
+          "run_id": "run_demo_001",
+          "received_at_utc": "2026-03-16T12:00:00Z",
+          "model_name": "tensorrt_yolov5s",
+          "metrics": {
+            "output_fps": 14.8,
+            "avg_latency_ms": 67.5,
+            "processed_frames": 320,
+            "detection_count": 1410
+          }
+        }
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    metrics = read_dut_result_metrics(result_path)
+
+    assert metrics["dut_status"] == "COMPLETED"
+    assert metrics["dut_run_id"] == "run_demo_001"
+    assert metrics["dut_received_at_utc"] == "2026-03-16T12:00:00Z"
+    assert metrics["dut_model_name"] == "tensorrt_yolov5s"
+    assert metrics["output_fps"] == 14.8
+    assert metrics["avg_latency_ms"] == 67.5
+    assert metrics["processed_frames"] == 320
+    assert metrics["detection_count"] == 1410
+
+
 def test_parse_args_auto_detects_media_device(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("PI_GATEWAY_API_BASE_URL", "http://127.0.0.1:8000")
     monkeypatch.setenv("PI_GATEWAY_ID", "rpi5-x1301-01")
     monkeypatch.setenv("PI_GATEWAY_NAME", "bench-a")
     monkeypatch.delenv("PI_GATEWAY_MEDIA_DEVICE", raising=False)
-    monkeypatch.setattr("app.hil.gateway_agent.find_media_device", lambda driver_name: "/dev/media3")
+    monkeypatch.setattr(
+        "app.hil.gateway_agent.find_media_device", lambda driver_name: "/dev/media3"
+    )
 
     settings = parse_args(["--state-dir", str(tmp_path / "state"), "--once"])
 

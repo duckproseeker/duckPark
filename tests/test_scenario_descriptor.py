@@ -57,6 +57,7 @@ def test_descriptor_validation_with_custom_weather_and_sensors() -> None:
             },
             "sensors": {
                 "enabled": True,
+                "auto_start": False,
                 "profile_name": "front_rgb",
                 "sensors": [
                     {
@@ -76,5 +77,19 @@ def test_descriptor_validation_with_custom_weather_and_sensors() -> None:
 
     assert descriptor.weather.cloudiness == 70.0
     assert descriptor.sensors.enabled is True
+    assert descriptor.sensors.auto_start is False
     assert descriptor.sensors.profile_name == "front_rgb"
     assert descriptor.sensors.sensors[0].type == "sensor.camera.rgb"
+
+
+def test_descriptor_validation_rejects_sensor_auto_start_when_disabled() -> None:
+    with pytest.raises(PydanticValidationError):
+        validate_descriptor(
+            {
+                **VALID_DESCRIPTOR,
+                "sensors": {
+                    "enabled": False,
+                    "auto_start": True,
+                },
+            }
+        )

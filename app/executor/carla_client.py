@@ -8,11 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.scenario.maps import (
-    choose_preferred_available_map,
-    map_family_key,
-    normalize_map_tail,
-)
+from app.scenario.maps import choose_preferred_available_map, map_family_key, normalize_map_tail
 
 logger = logging.getLogger(__name__)
 
@@ -74,18 +70,20 @@ class CarlaClient:
     def spawned_actors(self) -> list[Any]:
         return self._spawned_actors
 
-    def connect(self) -> None:
+    def connect(self, *, connect_traffic_manager: bool = True) -> None:
         try:
             import carla  # type: ignore
         except ImportError as exc:
-            raise CarlaClientError(
-                "carla Python API not found in executor environment"
-            ) from exc
+            raise CarlaClientError("carla Python API not found in executor environment") from exc
 
         self._carla = carla
         self._client = carla.Client(self._host, self._port)
         self._client.set_timeout(self._timeout_seconds)
         self._world = self._client.get_world()
+        if not connect_traffic_manager:
+            self._tm = None
+            self._tm_unavailable_reason = "traffic manager connection disabled by caller"
+            return
         try:
             self._tm = self._client.get_trafficmanager(self._traffic_manager_port)
             self._tm_unavailable_reason = None
@@ -134,9 +132,14 @@ class CarlaClient:
         raise CarlaClientError(f"Map '{requested_map_name}' not found")
 
     def load_map(self, map_name: str) -> str:
-        if self._client is None:
+        if self._client is None or self._world is None:
             raise CarlaClientError("CARLA client is not connected")
         resolved_map_name = self.resolve_map_name(map_name)
+        current_map_name = str(self._world.get_map().name).strip().rstrip("/")
+        current_map_tail = self._normalize_map_name(current_map_name).lower()
+        resolved_map_tail = self._normalize_map_name(resolved_map_name).lower()
+        if current_map_name == resolved_map_name or current_map_tail == resolved_map_tail:
+            return current_map_name or resolved_map_name
         self._world = self._client.load_world(resolved_map_name)
         return resolved_map_name
 
@@ -235,9 +238,7 @@ class CarlaClient:
             round(payload["yaw"], 3),
         )
 
-    def _project_to_driving_lane(
-        self, requested_transform: Any
-    ) -> tuple[Any | None, float | None]:
+    def _project_to_driving_lane(self, requested_transform: Any) -> tuple[Any | None, float | None]:
         if self._world is None or self._carla is None:
             raise CarlaClientError("CARLA world is not ready")
 
@@ -375,10 +376,98 @@ class CarlaClient:
             f"Failed to spawn ego vehicle after trying {len(candidates)} candidate spawn points"
         )
 
+    def spawn_actor(
+        self,
+        blueprint: str,
+        spawn_point: dict[str, float],
+        *,
+        role_name: str,
+        actor_kind: str = "vehicle",
+    ) -> Any:
+        if self._world is None:
+            raise CarlaClientError("CARLA world is not ready")
+
+        blueprint_library = self._world.get_blueprint_library()
+        blueprint_obj = blueprint_library.find(blueprint)
+        if blueprint_obj.has_attribute("role_name"):
+            blueprint_obj.set_attribute("role_name", role_name)
+        if actor_kind == "walker" and blueprint_obj.has_attribute("is_invincible"):
+            blueprint_obj.set_attribute("is_invincible", "false")
+
+        actor = self._world.try_spawn_actor(blueprint_obj, self._build_transform(spawn_point))
+        if actor is None:
+            raise CarlaClientError(
+                f"Failed to spawn actor role={role_name} blueprint={blueprint}"
+            )
+        self._spawned_actors.append(actor)
+        return actor
+
     def set_vehicle_autopilot(self, vehicle: Any, enabled: bool) -> None:
         if vehicle is None:
             return
         vehicle.set_autopilot(enabled, self._traffic_manager_port)
+
+    def configure_tm_autopilot(
+        self,
+        vehicle: Any,
+        *,
+        enabled: bool,
+        target_speed_mps: float | None = None,
+        auto_lane_change: bool | None = None,
+        distance_between_vehicles: float | None = None,
+        ignore_vehicles_percentage: float | None = None,
+    ) -> None:
+        if vehicle is None:
+            return
+
+        self.set_vehicle_autopilot(vehicle, enabled)
+        if not enabled:
+            disable_constant_velocity = getattr(vehicle, "disable_constant_velocity", None)
+            if callable(disable_constant_velocity):
+                disable_constant_velocity()
+            return
+
+        if self._tm is not None:
+            if auto_lane_change is not None and hasattr(self._tm, "auto_lane_change"):
+                self._tm.auto_lane_change(vehicle, bool(auto_lane_change))
+            if (
+                distance_between_vehicles is not None
+                and hasattr(self._tm, "distance_to_leading_vehicle")
+            ):
+                self._tm.distance_to_leading_vehicle(vehicle, float(distance_between_vehicles))
+            if (
+                ignore_vehicles_percentage is not None
+                and hasattr(self._tm, "ignore_vehicles_percentage")
+            ):
+                self._tm.ignore_vehicles_percentage(
+                    vehicle, float(ignore_vehicles_percentage)
+                )
+            if (
+                target_speed_mps is not None
+                and hasattr(self._tm, "vehicle_percentage_speed_difference")
+            ):
+                speed_limit_kmh = max(float(getattr(vehicle, "get_speed_limit", lambda: 0.0)()), 1.0)
+                target_speed_kmh = max(0.0, float(target_speed_mps) * 3.6)
+                percentage = ((speed_limit_kmh - target_speed_kmh) / speed_limit_kmh) * 100.0
+                self._tm.vehicle_percentage_speed_difference(
+                    vehicle,
+                    max(-100.0, min(100.0, percentage)),
+                )
+            return
+
+        if target_speed_mps is None or self._carla is None:
+            return
+        forward = vehicle.get_transform().get_forward_vector()
+        vector3d = getattr(self._carla, "Vector3D", None)
+        if vector3d is None:
+            return
+        vehicle.set_target_velocity(
+            vector3d(
+                x=float(forward.x) * float(target_speed_mps),
+                y=float(forward.y) * float(target_speed_mps),
+                z=float(forward.z) * float(target_speed_mps),
+            )
+        )
 
     def find_actor_by_role_name(self, role_name: str) -> Any | None:
         if self._world is None:
@@ -423,16 +512,12 @@ class CarlaClient:
         )
         spawn_points = list(self._world.get_map().get_spawn_points())
         anchor_transform = (
-            self._build_transform(anchor_spawn_point)
-            if anchor_spawn_point is not None
-            else None
+            self._build_transform(anchor_spawn_point) if anchor_spawn_point is not None else None
         )
 
         if anchor_transform is not None:
             spawn_points.sort(
-                key=lambda transform: anchor_transform.location.distance(
-                    transform.location
-                )
+                key=lambda transform: anchor_transform.location.distance(transform.location)
             )
         else:
             spawn_points.sort(
@@ -448,9 +533,7 @@ class CarlaClient:
             if len(spawned) >= count:
                 break
             if anchor_transform is not None:
-                distance = float(
-                    anchor_transform.location.distance(spawn_point.location)
-                )
+                distance = float(anchor_transform.location.distance(spawn_point.location))
                 if distance < min_distance_from_anchor_m:
                     continue
 
@@ -487,9 +570,7 @@ class CarlaClient:
         spawn_points = list(self._world.get_map().get_spawn_points())
         rng = random.Random(seed) if seed is not None else random
         anchor_transform = (
-            self._build_transform(anchor_spawn_point)
-            if anchor_spawn_point is not None
-            else None
+            self._build_transform(anchor_spawn_point) if anchor_spawn_point is not None else None
         )
         if anchor_transform is not None:
             spawn_points = [
@@ -517,9 +598,7 @@ class CarlaClient:
 
         spawned: list[Any] = []
         for index, spawn_point in enumerate(spawn_points):
-            if self._abort_requested(should_abort) or self._deadline_exceeded(
-                deadline_monotonic
-            ):
+            if self._abort_requested(should_abort) or self._deadline_exceeded(deadline_monotonic):
                 break
             if len(spawned) >= count:
                 break
@@ -568,9 +647,7 @@ class CarlaClient:
             else [None]
         )
         for radius in search_radii:
-            if self._abort_requested(should_abort) or self._deadline_exceeded(
-                deadline_monotonic
-            ):
+            if self._abort_requested(should_abort) or self._deadline_exceeded(deadline_monotonic):
                 break
             if len(spawn_points) >= count:
                 break
@@ -596,9 +673,7 @@ class CarlaClient:
         spawned_walkers: list[Any] = []
         controller_blueprint = controller_blueprints[0] if controller_blueprints else None
         for index, spawn_point in enumerate(spawn_points):
-            if self._abort_requested(should_abort) or self._deadline_exceeded(
-                deadline_monotonic
-            ):
+            if self._abort_requested(should_abort) or self._deadline_exceeded(deadline_monotonic):
                 break
             walker_blueprint = walker_blueprints[index % len(walker_blueprints)]
             if seed is not None and walker_blueprints:
@@ -634,9 +709,7 @@ class CarlaClient:
 
             max_speed = 1.4
             if walker_blueprint.has_attribute("speed"):
-                recommended_values = walker_blueprint.get_attribute(
-                    "speed"
-                ).recommended_values
+                recommended_values = walker_blueprint.get_attribute("speed").recommended_values
                 numeric_values: list[float] = []
                 for value in recommended_values:
                     try:
@@ -691,17 +764,11 @@ class CarlaClient:
         if actor_kind == "vehicle":
             blueprints = self._world.get_blueprint_library().filter("vehicle.*")
         elif actor_kind == "barrier":
-            blueprints = self._world.get_blueprint_library().filter(
-                "static.prop.streetbarrier"
-            )
+            blueprints = self._world.get_blueprint_library().filter("static.prop.streetbarrier")
         else:
-            blueprints = self._world.get_blueprint_library().filter(
-                "walker.pedestrian.*"
-            )
+            blueprints = self._world.get_blueprint_library().filter("walker.pedestrian.*")
         if not blueprints and actor_kind != "barrier":
-            blueprints = self._world.get_blueprint_library().filter(
-                "static.prop.streetbarrier"
-            )
+            blueprints = self._world.get_blueprint_library().filter("static.prop.streetbarrier")
         if not blueprints:
             blueprints = self._world.get_blueprint_library().filter("vehicle.*")
         if not blueprints:
@@ -736,6 +803,17 @@ class CarlaClient:
         sim_time = float(snapshot.timestamp.elapsed_seconds)
         return CarlaTickResult(frame=frame, sim_time=sim_time)
 
+    def wait_for_tick(self, *, timeout_seconds: float | None = None) -> CarlaTickResult:
+        if self._world is None:
+            raise CarlaClientError("CARLA world is not ready")
+
+        snapshot = self._world.wait_for_tick(seconds=timeout_seconds)
+        timestamp = snapshot.timestamp
+        return CarlaTickResult(
+            frame=int(timestamp.frame),
+            sim_time=float(timestamp.elapsed_seconds),
+        )
+
     def start_recorder(self, recorder_path: Path) -> None:
         if self._client is None:
             raise CarlaClientError("CARLA client is not connected")
@@ -756,9 +834,7 @@ class CarlaClient:
         if self._client is None or self._carla is None:
             return
 
-        commands = [
-            self._carla.command.DestroyActor(actor.id) for actor in self._spawned_actors
-        ]
+        commands = [self._carla.command.DestroyActor(actor.id) for actor in self._spawned_actors]
         self._client.apply_batch(commands)
         self._spawned_actors.clear()
 

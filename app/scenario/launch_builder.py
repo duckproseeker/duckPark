@@ -10,10 +10,7 @@ from xml.etree import ElementTree
 from app.core.config import Settings
 from app.scenario.environment_presets import list_environment_presets
 from app.scenario.official_runner import resolve_official_xosc_path
-from app.scenario.template_registry import (
-    ScenarioTemplateScalar,
-    format_template_param_value,
-)
+from app.scenario.template_registry import ScenarioTemplateScalar, format_template_param_value
 from app.utils.file_utils import atomic_write_json, ensure_dir
 
 
@@ -28,13 +25,16 @@ class ScenarioLaunchArtifacts:
 
 def default_launch_weather() -> dict[str, Any]:
     for item in list_environment_presets():
-        if item.get("preset_id") == "clear_day":
+        if item.get("preset_id") == "clear_noon":
             return copy.deepcopy(item["weather"])
     return {"preset": "ClearNoon", "sun_altitude_angle": 68.0}
 
 
 def default_launch_capabilities(
-    *, map_editable: bool = False, sensor_profile_editable: bool = False
+    *,
+    map_editable: bool = False,
+    sensor_profile_editable: bool = False,
+    timeout_editable: bool = True,
 ) -> dict[str, Any]:
     return {
         "map_editable": map_editable,
@@ -42,13 +42,13 @@ def default_launch_capabilities(
         "traffic_vehicle_count_editable": True,
         "traffic_walker_count_editable": True,
         "sensor_profile_editable": sensor_profile_editable,
-        "timeout_editable": True,
+        "timeout_editable": timeout_editable,
         "max_vehicle_count": 48,
         "max_walker_count": 48,
         "notes": [
-            "前端只暴露场景配置项，底层生成 per-run 运行输入并统一交给 ScenarioRunner。",
-            "官方 OpenSCENARIO 当前锁定模板默认地图，避免 roadId 和道路拓扑不匹配导致场景崩溃。",
-            "hero 默认走平台内置自动驾驶控制，预留手动接管模式但当前不启用。",
+            "前端只暴露场景配置项，底层生成 per-run 运行输入并统一交给平台 native runtime。",
+            "轻量 OpenSCENARIO 会翻译成平台受控子集执行，不保证完整还原所有标准语义。",
+            "hero 默认走平台内置 TM 自动驾驶控制，预留手动接管模式但当前不启用。",
             "背景交通 seed 留空时会在创建 run 时自动生成，并回写到 per-run spec 里。",
         ],
     }
@@ -66,10 +66,11 @@ def build_launch_descriptor(
 ) -> dict[str, Any]:
     descriptor = copy.deepcopy(catalog_item["descriptor_template"])
     descriptor["map_name"] = (map_name or descriptor.get("map_name") or "").strip()
-    descriptor["weather"] = _resolve_launch_weather(
-        descriptor.get("weather", {}), weather
+    descriptor["weather"] = _resolve_launch_weather(descriptor.get("weather", {}), weather)
+    descriptor["traffic"] = _resolve_launch_traffic(
+        descriptor.get("traffic", {}),
+        traffic,
     )
-    descriptor["traffic"] = _resolve_launch_traffic(traffic)
     descriptor["sensors"] = _resolve_launch_sensors(descriptor.get("sensors", {}), sensors)
     if timeout_seconds is not None:
         descriptor.setdefault("termination", {})["timeout_seconds"] = timeout_seconds
@@ -91,7 +92,7 @@ def write_launch_artifacts(
     build_dir = ensure_dir(settings.scenario_builds_root / run_id)
     run_spec_path = build_dir / "scenario_launch_spec.json"
     source = catalog_item.get("source", {})
-    launch_mode = str(source.get("launch_mode") or "openscenario").strip() or "openscenario"
+    launch_mode = str(source.get("launch_mode") or "native_descriptor").strip() or "native_descriptor"
 
     xosc_path: Path | None = None
     config_path: Path | None = None
@@ -103,9 +104,7 @@ def write_launch_artifacts(
         config_path = build_dir / "generated_scenario_config.xml"
         additional_scenario_path = Path(str(source.get("additional_scenario_path") or "").strip())
         if not additional_scenario_path.exists():
-            raise RuntimeError(
-                f"找不到 Python Scenario 实现: {additional_scenario_path}"
-            )
+            raise RuntimeError(f"找不到 Python Scenario 实现: {additional_scenario_path}")
 
         _write_generated_python_scenario_config(
             output_path=config_path,
@@ -122,7 +121,7 @@ def write_launch_artifacts(
         generated_source_payload = {
             "config_path": str(config_path),
         }
-    else:
+    elif launch_mode == "openscenario":
         xosc_path = build_dir / "generated_scenario.xosc"
         relative_xosc_path = str(source.get("relative_xosc_path") or "").strip()
         template_xosc_path = resolve_official_xosc_path(relative_xosc_path, settings)
@@ -137,9 +136,7 @@ def write_launch_artifacts(
             map_name=str(descriptor["map_name"]),
             weather=descriptor.get("weather", {}),
             template_params=template_params,
-            timeout_seconds=int(
-                descriptor.get("termination", {}).get("timeout_seconds") or 30
-            ),
+            timeout_seconds=int(descriptor.get("termination", {}).get("timeout_seconds") or 30),
         )
         template_source_payload = {
             "relative_xosc_path": relative_xosc_path,
@@ -147,6 +144,11 @@ def write_launch_artifacts(
         }
         generated_source_payload = {
             "xosc_path": str(xosc_path),
+        }
+    else:
+        template_source_payload = {
+            "scenario_id": catalog_item["scenario_id"],
+            "provider": str(source.get("provider") or "native"),
         }
 
     atomic_write_json(
@@ -177,9 +179,12 @@ def build_generated_scenario_source(
     template_params: dict[str, ScenarioTemplateScalar],
 ) -> dict[str, Any]:
     template_source = catalog_item.get("source", {})
-    launch_mode = str(template_source.get("launch_mode") or "openscenario").strip() or "openscenario"
+    launch_mode = (
+        str(template_source.get("launch_mode") or "native_descriptor").strip()
+        or "native_descriptor"
+    )
     payload = {
-        "provider": "scenario_runner",
+        "provider": str(template_source.get("provider") or "native"),
         "version": "generated",
         "generated_spec_path": str(artifacts.run_spec_path),
         "template_params": template_params,
@@ -189,26 +194,38 @@ def build_generated_scenario_source(
         payload.update(
             {
                 "scenario_class": template_source.get("scenario_class"),
-                "additional_scenario_path": str(artifacts.additional_scenario_path)
-                if artifacts.additional_scenario_path is not None
-                else None,
-                "generated_config_path": str(artifacts.config_path)
-                if artifacts.config_path is not None
-                else None,
+                "additional_scenario_path": (
+                    str(artifacts.additional_scenario_path)
+                    if artifacts.additional_scenario_path is not None
+                    else None
+                ),
+                "generated_config_path": (
+                    str(artifacts.config_path) if artifacts.config_path is not None else None
+                ),
             }
         )
     else:
         payload.update(
             {
-                "relative_xosc_path": None,
-                "resolved_xosc_path": str(artifacts.xosc_path)
-                if artifacts.xosc_path is not None
-                else None,
-                "template_relative_xosc_path": template_source.get("relative_xosc_path"),
-                "template_resolved_xosc_path": template_source.get("resolved_xosc_path"),
-                "generated_xosc_path": str(artifacts.xosc_path)
-                if artifacts.xosc_path is not None
-                else None,
+                "relative_xosc_path": (
+                    None if launch_mode != "openscenario" else template_source.get("relative_xosc_path")
+                ),
+                "resolved_xosc_path": (
+                    str(artifacts.xosc_path) if artifacts.xosc_path is not None else None
+                ),
+                "template_relative_xosc_path": (
+                    template_source.get("relative_xosc_path")
+                    if launch_mode == "openscenario"
+                    else None
+                ),
+                "template_resolved_xosc_path": (
+                    template_source.get("resolved_xosc_path")
+                    if launch_mode == "openscenario"
+                    else None
+                ),
+                "generated_xosc_path": (
+                    str(artifacts.xosc_path) if artifacts.xosc_path is not None else None
+                ),
             }
         )
     return payload
@@ -233,19 +250,27 @@ def _resolve_launch_weather(
     return base_weather
 
 
-def _resolve_launch_traffic(traffic: dict[str, Any] | None) -> dict[str, Any]:
-    requested = traffic if isinstance(traffic, dict) else {}
-    num_vehicles = max(0, int(requested.get("num_vehicles") or 0))
-    num_walkers = max(0, int(requested.get("num_walkers") or 0))
-    raw_seed = requested.get("seed")
+def _resolve_launch_traffic(
+    template_traffic: dict[str, Any],
+    override_traffic: dict[str, Any] | None,
+) -> dict[str, Any]:
+    traffic = copy.deepcopy(template_traffic) if isinstance(template_traffic, dict) else {}
+    override = override_traffic if isinstance(override_traffic, dict) else {}
+    if override:
+        traffic.update(copy.deepcopy(override))
+
+    num_vehicles = max(0, int(traffic.get("num_vehicles") or 0))
+    num_walkers = max(0, int(traffic.get("num_walkers") or 0))
+    raw_seed = traffic.get("seed")
     seed = None if raw_seed in {None, ""} else max(0, int(raw_seed))
     enabled = num_vehicles > 0 or num_walkers > 0
+    injection_mode = str(traffic.get("injection_mode") or "").strip()
     return {
         "enabled": enabled,
         "num_vehicles": num_vehicles,
         "num_walkers": num_walkers,
         "seed": seed,
-        "injection_mode": "carla_api_near_ego" if enabled else "disabled",
+        "injection_mode": (injection_mode or "carla_api_near_ego" if enabled else "disabled"),
     }
 
 
@@ -259,6 +284,7 @@ def _resolve_launch_sensors(
         sensors.update(copy.deepcopy(override))
 
     enabled = bool(sensors.get("enabled"))
+    auto_start = bool(sensors.get("auto_start", False))
     profile_name = str(sensors.get("profile_name") or "").strip() or None
     config_yaml_path = str(sensors.get("config_yaml_path") or "").strip() or None
     sensor_items = sensors.get("sensors", [])
@@ -267,6 +293,7 @@ def _resolve_launch_sensors(
 
     return {
         "enabled": enabled,
+        "auto_start": auto_start,
         "profile_name": profile_name,
         "config_yaml_path": config_yaml_path,
         "sensors": copy.deepcopy(sensor_items),
@@ -293,7 +320,7 @@ def _resolve_launch_metadata(
     for value in [
         *(metadata.get("tags", []) if isinstance(metadata.get("tags"), list) else []),
         *(override.get("tags", []) if isinstance(override.get("tags"), list) else []),
-        "scenario_runner",
+        "native",
         str(catalog_item["scenario_id"]),
         "scenario_launch",
     ]:
@@ -347,17 +374,13 @@ def _write_generated_python_scenario_config(
 
     weather = descriptor.get("weather", {})
     weather_attrs = {
-        key: str(value)
-        for key, value in weather.items()
-        if value is not None and key != "preset"
+        key: str(value) for key, value in weather.items() if value is not None and key != "preset"
     }
     if weather_attrs:
         ElementTree.SubElement(scenario_node, "weather", weather_attrs)
 
     free_drive_attrs = {
-        "timeout_seconds": str(
-            descriptor.get("termination", {}).get("timeout_seconds") or 120
-        ),
+        "timeout_seconds": str(descriptor.get("termination", {}).get("timeout_seconds") or 120),
         "controller_module": str(
             Path(__file__).resolve().parent / "controllers" / "duckpark_autopilot.py"
         ),
@@ -463,7 +486,9 @@ def _apply_platform_actor_controller(
     entity_ref: str,
     target_speed_mps: float,
 ) -> None:
-    controller_module_path = Path(__file__).resolve().parent / "controllers" / "duckpark_autopilot.py"
+    controller_module_path = (
+        Path(__file__).resolve().parent / "controllers" / "duckpark_autopilot.py"
+    )
     if not controller_module_path.exists():
         return
 
@@ -491,9 +516,7 @@ def _apply_platform_actor_controller(
             {"name": f"DuckParkAutoPilot_{entity_ref}"},
         )
         controller_properties = ElementTree.SubElement(controller, "Properties")
-        override_action = ElementTree.SubElement(
-            controller_action, "OverrideControllerValueAction"
-        )
+        override_action = ElementTree.SubElement(controller_action, "OverrideControllerValueAction")
 
     if override_action is None:
         controller_action = private_actions.find("./PrivateAction/ControllerAction")
@@ -502,9 +525,7 @@ def _apply_platform_actor_controller(
             if private_action is None:
                 private_action = ElementTree.SubElement(private_actions, "PrivateAction")
             controller_action = ElementTree.SubElement(private_action, "ControllerAction")
-        override_action = ElementTree.SubElement(
-            controller_action, "OverrideControllerValueAction"
-        )
+        override_action = ElementTree.SubElement(controller_action, "OverrideControllerValueAction")
 
     for tag in ("Throttle", "Brake", "Clutch", "ParkingBrake", "SteeringWheel", "Gear"):
         if override_action.find(tag) is None:
@@ -531,16 +552,12 @@ def _apply_platform_actor_controller(
     module_property.set("value", str(controller_module_path))
 
     if traffic_manager_port_property is None:
-        traffic_manager_port_property = ElementTree.SubElement(
-            controller_properties, "Property"
-        )
+        traffic_manager_port_property = ElementTree.SubElement(controller_properties, "Property")
         traffic_manager_port_property.set("name", "traffic_manager_port")
     traffic_manager_port_property.set("value", str(settings.traffic_manager_port))
 
     if target_speed_property is None:
-        target_speed_property = ElementTree.SubElement(
-            controller_properties, "Property"
-        )
+        target_speed_property = ElementTree.SubElement(controller_properties, "Property")
         target_speed_property.set("name", "target_speed_mps")
     target_speed_property.set("value", f"{float(target_speed_mps):.1f}")
 
@@ -654,7 +671,9 @@ def _apply_weather(root: ElementTree.Element, weather: dict[str, Any]) -> None:
             "Environment",
         ],
     )
-    environment.set("name", environment.attrib.get("name", "LaunchEnvironment") or "LaunchEnvironment")
+    environment.set(
+        "name", environment.attrib.get("name", "LaunchEnvironment") or "LaunchEnvironment"
+    )
 
     time_of_day = _ensure_child(environment, "TimeOfDay")
     time_of_day.set("animation", "false")
@@ -712,9 +731,7 @@ def _apply_weather(root: ElementTree.Element, weather: dict[str, Any]) -> None:
     )
 
 
-def _ensure_child_path(
-    root: ElementTree.Element, path: list[str]
-) -> ElementTree.Element:
+def _ensure_child_path(root: ElementTree.Element, path: list[str]) -> ElementTree.Element:
     current = root
     for tag in path:
         current = _ensure_child(current, tag)

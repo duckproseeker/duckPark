@@ -41,6 +41,7 @@ class GatewayAgentSettings:
     bridge_state_file: Path
     current_run_id_file: Path
     capture_runtime_file: Path
+    dut_result_file: Path
     agent_version: str
     video_input_modes: tuple[str, ...]
     dut_output_modes: tuple[str, ...]
@@ -80,6 +81,10 @@ def parse_args(argv: list[str] | None = None) -> GatewayAgentSettings:
         default=os.getenv("PI_GATEWAY_STATE_DIR"),
     )
     parser.add_argument(
+        "--dut-result-file",
+        default=os.getenv("PI_GATEWAY_DUT_RESULT_FILE"),
+    )
+    parser.add_argument(
         "--agent-version",
         default=os.getenv("PI_GATEWAY_AGENT_VERSION", AGENT_VERSION),
     )
@@ -109,6 +114,9 @@ def parse_args(argv: list[str] | None = None) -> GatewayAgentSettings:
     default_state_dir = project_root / "run_data" / DEFAULT_STATE_DIR_NAME
     state_dir = Path(args.state_dir or default_state_dir)
     state_dir.mkdir(parents=True, exist_ok=True)
+    dut_result_file = (
+        Path(args.dut_result_file) if args.dut_result_file else state_dir / "dut_result.json"
+    )
     requested_media_device = (args.media_device or "").strip()
     media_device = requested_media_device or find_media_device("rp1-cfe") or "/dev/media0"
 
@@ -126,6 +134,7 @@ def parse_args(argv: list[str] | None = None) -> GatewayAgentSettings:
         bridge_state_file=state_dir / "bridge_state.json",
         current_run_id_file=state_dir / "current_run_id",
         capture_runtime_file=state_dir / "capture_runtime.json",
+        dut_result_file=dut_result_file,
         agent_version=args.agent_version.strip(),
         video_input_modes=parse_csv(args.video_input_modes),
         dut_output_modes=parse_csv(args.dut_output_modes),
@@ -222,7 +231,27 @@ def find_media_device(driver_name: str) -> str | None:
     return None
 
 
+def is_gadget_video_name(name: str | None) -> bool:
+    if not name:
+        return False
+    normalized = name.strip().lower()
+    if not normalized:
+        return False
+    return "gadget" in normalized or "uvc" in normalized
+
+
 def find_gadget_video_device() -> str | None:
+    for sysfs_device in sorted(Path("/sys/class/video4linux").glob("video*")):
+        name_path = sysfs_device / "name"
+        if not name_path.exists():
+            continue
+        try:
+            name = name_path.read_text(encoding="utf-8", errors="ignore").replace("\x00", "")
+        except OSError:
+            continue
+        if is_gadget_video_name(name):
+            return f"/dev/{sysfs_device.name}"
+
     output = run_command(["v4l2-ctl", "--list-devices"])
     if not output:
         return None
@@ -236,7 +265,7 @@ def find_gadget_video_device() -> str | None:
         if not raw_line.startswith("\t"):
             current_block = line
             continue
-        if current_block and ("gadget.0" in current_block or ".usb" in current_block):
+        if current_block and is_gadget_video_name(current_block):
             device = line.strip()
             if device.startswith("/dev/video"):
                 return device
@@ -311,6 +340,47 @@ def detect_capture_link_enabled(media_device: str) -> bool | None:
     return "ENABLED" in flags.split(",")
 
 
+def normalize_dut_result_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
+
+    nested_metrics = payload.get("metrics")
+    if isinstance(nested_metrics, dict):
+        metrics.update(nested_metrics)
+
+    for key, value in payload.items():
+        if key == "metrics":
+            continue
+        if key == "status":
+            metrics["dut_status"] = value
+        elif key == "run_id":
+            metrics["dut_run_id"] = value
+        elif key == "received_at_utc":
+            metrics["dut_received_at_utc"] = value
+        elif key == "error_reason":
+            metrics["dut_error_reason"] = value
+        elif key == "model_name":
+            metrics["dut_model_name"] = value
+        elif key == "input_topic":
+            metrics["dut_input_topic"] = value
+        elif key == "output_topic":
+            metrics["dut_output_topic"] = value
+        elif key == "camera_device":
+            metrics["dut_camera_device"] = value
+        elif key == "source_host":
+            metrics["dut_source_host"] = value
+        else:
+            metrics[key] = value
+
+    return metrics
+
+
+def read_dut_result_metrics(path: Path) -> dict[str, Any]:
+    payload = read_json_file(path)
+    if not payload:
+        return {}
+    return normalize_dut_result_payload(payload)
+
+
 def detect_local_address(api_base_url: str) -> str | None:
     parsed = parse.urlparse(api_base_url)
     if not parsed.hostname:
@@ -383,6 +453,7 @@ def collect_gateway_metrics(settings: GatewayAgentSettings) -> tuple[dict[str, A
     gadget_state = read_json_file(settings.gadget_state_file)
     bridge_state = read_json_file(settings.bridge_state_file)
     capture_runtime = read_capture_runtime(settings.capture_runtime_file) or {}
+    dut_result_metrics = read_dut_result_metrics(settings.dut_result_file)
     current_run_id = read_text_file(settings.current_run_id_file)
 
     gadget_video_device = (
@@ -426,6 +497,7 @@ def collect_gateway_metrics(settings: GatewayAgentSettings) -> tuple[dict[str, A
         metrics.update(parse_tc358743_status(hdmi_status_output))
     metrics.update(gadget_state)
     metrics.update(bridge_state)
+    metrics.update(dut_result_metrics)
     return metrics, current_run_id
 
 
@@ -448,9 +520,7 @@ def post_json(
             response_text = response.read().decode("utf-8")
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(
-            f"HTTP {exc.code} calling {route}: {detail or exc.reason}"
-        ) from exc
+        raise RuntimeError(f"HTTP {exc.code} calling {route}: {detail or exc.reason}") from exc
     except error.URLError as exc:
         raise RuntimeError(f"Network error calling {route}: {exc.reason}") from exc
 
@@ -473,9 +543,7 @@ def get_json(
     url = f"{api_base_url}{route}"
     if query_params:
         normalized = {
-            key: value
-            for key, value in query_params.items()
-            if value is not None and value != ""
+            key: value for key, value in query_params.items() if value is not None and value != ""
         }
         if normalized:
             url = f"{url}?{parse.urlencode(normalized)}"
@@ -487,9 +555,7 @@ def get_json(
             response_text = response.read().decode("utf-8")
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(
-            f"HTTP {exc.code} calling {route}: {detail or exc.reason}"
-        ) from exc
+        raise RuntimeError(f"HTTP {exc.code} calling {route}: {detail or exc.reason}") from exc
     except error.URLError as exc:
         raise RuntimeError(f"Network error calling {route}: {exc.reason}") from exc
 
@@ -558,7 +624,9 @@ def reconcile_capture_runtime(settings: GatewayAgentSettings) -> None:
     runtime = read_capture_runtime(settings.capture_runtime_file)
     desired_capture = fetch_running_capture(settings)
 
-    if runtime and (desired_capture is None or desired_capture["capture_id"] != runtime["capture_id"]):
+    if runtime and (
+        desired_capture is None or desired_capture["capture_id"] != runtime["capture_id"]
+    ):
         if is_process_running(int(runtime.get("pid", 0) or 0)):
             stop_capture_process(runtime)
         sync_capture_progress(settings, runtime)

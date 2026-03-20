@@ -38,6 +38,27 @@ def test_build_template_parameter_schema_applies_overrides() -> None:
     ]
 
 
+def test_build_template_parameter_schema_for_demo_template() -> None:
+    schema = build_template_parameter_schema("town10_autonomous_demo", [])
+
+    assert schema == [
+        {
+            "field": "targetSpeedMps",
+            "label": "自车目标速度",
+            "description": "演示模板下平台自动驾驶的目标巡航速度。",
+            "type": "number",
+            "parameter_type": "string",
+            "required": False,
+            "default": 8.0,
+            "min": 2.0,
+            "max": 16.0,
+            "step": 0.5,
+            "unit": "m/s",
+            "options": [],
+        }
+    ]
+
+
 def test_normalize_template_params_uses_defaults_and_rejects_unknown_fields() -> None:
     schema = build_template_parameter_schema(
         "osc_follow_leading_vehicle",

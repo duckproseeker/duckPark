@@ -22,7 +22,7 @@ from app.orchestrator.run_manager import RunManager
 from app.scenario.environment_presets import list_environment_presets
 from app.scenario.library import list_scenario_catalog
 from app.scenario.maps import display_map_name
-from app.scenario.sensor_profiles import load_sensor_profiles
+from app.scenario.sensor_profiles import build_sensor_config_from_profile, load_sensor_profiles
 from app.storage.artifact_store import ArtifactStore
 from app.storage.benchmark_definition_store import BenchmarkDefinitionStore
 from app.storage.benchmark_task_store import BenchmarkTaskStore
@@ -72,6 +72,17 @@ def _metric_number(source: dict[str, Any] | None, keys: list[str]) -> float | No
             except ValueError:
                 continue
     return None
+
+
+def _optional_markdown_metric(
+    label: str, value: Any, *, unit: str = "", code: bool = True
+) -> str | None:
+    if value is None or value == "":
+        return None
+    rendered = f"{value}{unit}"
+    if code:
+        rendered = f"`{rendered}`"
+    return f"- {label}: {rendered}"
 
 
 def _metadata_tag_value(metadata: dict[str, Any] | None, prefix: str) -> str | None:
@@ -187,9 +198,7 @@ class PlatformService:
         requested_project_id = project_id.strip() if project_id and project_id.strip() else None
         resolved_project_id = requested_project_id or self._definition_project_id(definition)
         if not resolved_project_id:
-            raise ValidationError(
-                f"模板 {definition.benchmark_definition_id} 缺少默认归档项目"
-            )
+            raise ValidationError(f"模板 {definition.benchmark_definition_id} 缺少默认归档项目")
         project = self._project_store.get(resolved_project_id)
         if project.project_id not in definition.project_ids:
             raise ValidationError(
@@ -220,17 +229,11 @@ class PlatformService:
             if _run_matches_project(run, project.project_id):
                 runs_by_id.setdefault(run.run_id, run)
 
-        recent_runs = sorted(
-            runs_by_id.values(), key=lambda item: item.updated_at, reverse=True
-        )
+        recent_runs = sorted(runs_by_id.values(), key=lambda item: item.updated_at, reverse=True)
         gateways = sorted(
             self._gateway_store.list(), key=lambda item: item.updated_at, reverse=True
         )
-        runnable_scenarios = [
-            item
-            for item in list_scenario_catalog()
-            if item.get("execution_support") == "scenario_runner"
-        ]
+        runnable_scenarios = self._runnable_scenarios()
         active_run_count = len(
             [
                 run
@@ -266,14 +269,19 @@ class PlatformService:
     def get_benchmark_definition(self, benchmark_definition_id: str):
         return self._benchmark_definition_store.get(benchmark_definition_id)
 
-    def _scenario_catalog_index(self) -> dict[str, dict[str, Any]]:
-        return {item["scenario_id"]: item for item in list_scenario_catalog()}
+    def _scenario_catalog_index(
+        self, *, include_hidden: bool = True
+    ) -> dict[str, dict[str, Any]]:
+        return {
+            item["scenario_id"]: item
+            for item in list_scenario_catalog(include_hidden=include_hidden)
+        }
 
     def _runnable_scenarios(self) -> list[dict[str, Any]]:
         return [
             item
             for item in list_scenario_catalog()
-            if item.get("execution_support") == "scenario_runner"
+            if str(item.get("execution_support") or "").strip() in {"native"}
         ]
 
     def _environment_preset_index(self) -> dict[str, dict[str, Any]]:
@@ -281,8 +289,7 @@ class PlatformService:
 
     def _sensor_profile_index(self) -> dict[str, dict[str, Any]]:
         return {
-            item["profile_name"]: item
-            for item in load_sensor_profiles(self._sensor_profiles_root)
+            item["profile_name"]: item for item in load_sensor_profiles(self._sensor_profiles_root)
         }
 
     def _evaluation_profile_index(self) -> dict[str, dict[str, Any]]:
@@ -313,9 +320,11 @@ class PlatformService:
     def _build_task_summary(
         self, task: BenchmarkTaskRecord, runs: list[RunRecord]
     ) -> dict[str, Any]:
-        metrics_payloads = [
-            self._artifact_store.read_metrics(run.run_id) or {} for run in runs
-        ]
+        metrics_payloads = [self._artifact_store.read_metrics(run.run_id) or {} for run in runs]
+        run_device_metrics = {
+            run.run_id: self._artifact_store.read_device_metrics(run.run_id) or {}
+            for run in runs
+        }
         fps_values = []
         for metrics in metrics_payloads:
             achieved_tick_rate_hz = metrics.get("achieved_tick_rate_hz")
@@ -326,9 +335,7 @@ class PlatformService:
             run for run in runs if run.status.value in {"COMPLETED", "FAILED", "CANCELED"}
         ]
         completed_runs = [run for run in runs if run.status.value == "COMPLETED"]
-        anomaly_runs = [
-            run for run in runs if run.status.value in {"FAILED", "CANCELED"}
-        ]
+        anomaly_runs = [run for run in runs if run.status.value in {"FAILED", "CANCELED"}]
 
         gateway_metrics: dict[str, Any] = {}
         if task.hil_config and task.hil_config.get("gateway_id"):
@@ -355,17 +362,22 @@ class PlatformService:
             (
                 run
                 for run in runs
-                if run.status.value
-                in {"STARTING", "RUNNING", "PAUSED", "STOPPING"}
+                if run.status.value in {"STARTING", "RUNNING", "PAUSED", "STOPPING"}
             ),
             None,
         )
+        if active_run is not None and run_device_metrics.get(active_run.run_id):
+            gateway_metrics = run_device_metrics[active_run.run_id]
+        else:
+            latest_run_snapshot = max(
+                [snapshot for snapshot in run_device_metrics.values() if snapshot],
+                key=lambda snapshot: str(snapshot.get("gateway_last_heartbeat_at_utc") or ""),
+                default=None,
+            )
+            if latest_run_snapshot is not None:
+                gateway_metrics = latest_run_snapshot
         next_run = next(
-            (
-                run
-                for run in runs
-                if run.status.value in {"CREATED", "QUEUED"}
-            ),
+            (run for run in runs if run.status.value in {"CREATED", "QUEUED"}),
             None,
         )
         ordered_runs: list[dict[str, Any]] = []
@@ -385,9 +397,7 @@ class PlatformService:
                         else run.scenario_name
                     ),
                     "display_map_name": (
-                        matrix_entry.display_map_name
-                        if matrix_entry is not None
-                        else run.map_name
+                        matrix_entry.display_map_name if matrix_entry is not None else run.map_name
                     ),
                     "execution_backend": (
                         matrix_entry.execution_backend
@@ -395,8 +405,7 @@ class PlatformService:
                         else run.execution_backend
                     ),
                     "status": run.status.value,
-                    "is_active": active_run is not None
-                    and active_run.run_id == run.run_id,
+                    "is_active": active_run is not None and active_run.run_id == run.run_id,
                     "is_next": next_run is not None and next_run.run_id == run.run_id,
                     "started_at_utc": to_iso8601(run.started_at),
                     "ended_at_utc": to_iso8601(run.ended_at),
@@ -416,13 +425,16 @@ class PlatformService:
                     [
                         run
                         for run in runs
-                        if run.status.value
-                        in {"STARTING", "RUNNING", "PAUSED", "STOPPING"}
+                        if run.status.value in {"STARTING", "RUNNING", "PAUSED", "STOPPING"}
                     ]
                 ),
             },
             "metrics": {
-                "fps": _average(fps_values),
+                "fps": _average(fps_values)
+                or _metric_number(
+                    gateway_metrics,
+                    ["output_fps", "inference_fps", "render_fps", "input_fps", "fps"],
+                ),
                 "latency_ms": _metric_number(
                     gateway_metrics,
                     ["avg_latency_ms", "latency_ms", "p95_latency_ms"],
@@ -440,13 +452,9 @@ class PlatformService:
                     gateway_metrics, ["frame_drop_rate", "drop_rate"]
                 ),
                 "pass_rate": (
-                    (len(completed_runs) / len(terminal_runs)) * 100
-                    if terminal_runs
-                    else None
+                    (len(completed_runs) / len(terminal_runs)) * 100 if terminal_runs else None
                 ),
-                "anomaly_rate": (
-                    (len(anomaly_runs) / len(runs)) * 100 if runs else None
-                ),
+                "anomaly_rate": ((len(anomaly_runs) / len(runs)) * 100 if runs else None),
             },
             "scenario_breakdown": dict(scenario_breakdown),
             "gateway_snapshot": gateway_metrics,
@@ -456,16 +464,10 @@ class PlatformService:
                 "completed_run_ids": [
                     run.run_id for run in runs if run.status.value == "COMPLETED"
                 ],
-                "failed_run_ids": [
-                    run.run_id for run in runs if run.status.value == "FAILED"
-                ],
-                "canceled_run_ids": [
-                    run.run_id for run in runs if run.status.value == "CANCELED"
-                ],
+                "failed_run_ids": [run.run_id for run in runs if run.status.value == "FAILED"],
+                "canceled_run_ids": [run.run_id for run in runs if run.status.value == "CANCELED"],
                 "queued_run_ids": [
-                    run.run_id
-                    for run in runs
-                    if run.status.value in {"CREATED", "QUEUED"}
+                    run.run_id for run in runs if run.status.value in {"CREATED", "QUEUED"}
                 ],
                 "ordered_runs": ordered_runs,
             },
@@ -522,9 +524,7 @@ class PlatformService:
                 resolved_evaluation_profile_name
             )
             if evaluation_profile is None:
-                raise ValidationError(
-                    f"未知评测协议: {resolved_evaluation_profile_name}"
-                )
+                raise ValidationError(f"未知评测协议: {resolved_evaluation_profile_name}")
 
         resolved_selected_scenario_ids = _dedupe_strings(selected_scenario_ids or [])
         resolved_requested_duration_seconds = run_duration_seconds
@@ -546,7 +546,7 @@ class PlatformService:
         if not scenario_matrix:
             raise ValidationError("当前模板没有生成任何可执行队列")
 
-        scenario_catalog = self._scenario_catalog_index()
+        scenario_catalog = self._scenario_catalog_index(include_hidden=True)
         normalized_dut_model = dut_model.strip() if dut_model and dut_model.strip() else None
 
         now = now_utc()
@@ -573,10 +573,14 @@ class PlatformService:
             if scenario is None:
                 raise ValidationError(f"未知场景: {scenario_id}")
             execution_support = str(scenario.get("execution_support", "")).strip()
-            execution_backend = str(
-                scenario.get("execution_backend", execution_support or "scenario_runner")
-            ).strip() or "scenario_runner"
-            if execution_support != "scenario_runner":
+            execution_backend = (
+                str(
+                    scenario.get("execution_backend", execution_support or "native")
+                ).strip()
+                or "native"
+            )
+            launch_capabilities = scenario.get("launch_capabilities", {})
+            if execution_support not in {"native"}:
                 raise ValidationError(f"场景 {scenario_id} 当前不可执行")
 
             resolved_map_name = requested_map_name or str(scenario["default_map_name"])
@@ -585,25 +589,39 @@ class PlatformService:
 
             environment_preset = None
             if environment_preset_id:
-                raise ValidationError(
-                    f"场景 {scenario_id} 当前由官方 ScenarioRunner 执行，"
-                    "不支持平台环境预设覆盖"
-                )
+                environment_preset = self._environment_preset_index().get(environment_preset_id)
+                if environment_preset is None:
+                    raise ValidationError(f"未知环境预设: {environment_preset_id}")
+                descriptor["weather"] = _clone_json(environment_preset["weather"])
 
             sensor_profile = None
+            template_sensor_profile_name = str(
+                descriptor.get("sensors", {}).get("profile_name") or ""
+            ).strip()
             if sensor_profile_name:
-                raise ValidationError(
-                    f"场景 {scenario_id} 当前由官方 ScenarioRunner 执行，"
-                    "不支持平台侧传感器模板注入"
-                )
+                if sensor_profile_name == template_sensor_profile_name:
+                    sensor_profile = None
+                elif launch_capabilities.get("sensor_profile_editable", False):
+                    sensor_profile = self._sensor_profile_index().get(sensor_profile_name)
+                    if sensor_profile is None:
+                        raise ValidationError(f"未知传感器模板: {sensor_profile_name}")
+                    resolved_sensor_config = build_sensor_config_from_profile(
+                        self._sensor_profiles_root,
+                        sensor_profile_name,
+                    )
+                    if resolved_sensor_config is None:
+                        raise ValidationError(f"未知传感器模板: {sensor_profile_name}")
+                    descriptor["sensors"] = resolved_sensor_config
+                else:
+                    raise ValidationError(
+                        f"场景 {scenario_id} 当前不支持平台侧传感器模板注入"
+                    )
             elif "sensors" not in descriptor:
                 descriptor["sensors"] = {"enabled": False, "sensors": []}
 
             termination = dict(descriptor.get("termination") or {})
             resolved_timeout_seconds = int(
-                requested_timeout_seconds
-                or termination.get("timeout_seconds")
-                or 30
+                requested_timeout_seconds or termination.get("timeout_seconds") or 30
             )
             termination["timeout_seconds"] = resolved_timeout_seconds
             descriptor["termination"] = termination
@@ -612,17 +630,15 @@ class PlatformService:
             existing_tags = list(metadata.get("tags") or [])
             metadata["author"] = "chip-benchmark-platform"
             metadata["dut_model"] = normalized_dut_model
-            metadata["description"] = (
-                " / ".join(
-                    part
-                    for part in [
-                        project.name,
-                        normalized_dut_model,
-                        scenario["display_name"],
-                        display_map_name(resolved_map_name),
-                    ]
-                    if part
-                )
+            metadata["description"] = " / ".join(
+                part
+                for part in [
+                    project.name,
+                    normalized_dut_model,
+                    scenario["display_name"],
+                    display_map_name(resolved_map_name),
+                ]
+                if part
             )
             metadata["tags"] = list(
                 dict.fromkeys(
@@ -667,19 +683,17 @@ class PlatformService:
                     sensor_profile_name=(
                         sensor_profile["profile_name"]
                         if sensor_profile is not None
-                        else str(
-                            descriptor.get("sensors", {}).get("profile_name")
-                            or "disabled"
-                        )
+                        else str(descriptor.get("sensors", {}).get("profile_name") or "disabled")
                     ),
                     requested_timeout_seconds=requested_timeout_seconds,
                     resolved_timeout_seconds=resolved_timeout_seconds,
                 )
             )
 
-        if auto_start:
-            for run_id in created_run_ids:
-                self._run_manager.start_run(run_id)
+        if auto_start and created_run_ids:
+            # Only activate the queue head. The remaining runs stay in CREATED and are
+            # surfaced by the benchmark-task execution queue until CARLA is free again.
+            self._run_manager.start_run(created_run_ids[0])
 
         task = BenchmarkTaskRecord(
             benchmark_task_id=benchmark_task_id,
@@ -777,7 +791,9 @@ class PlatformService:
 
         candidate_ids = _dedupe_strings(definition.candidate_scenario_ids)
         if candidate_ids:
-            allowed_ids = [scenario_id for scenario_id in candidate_ids if scenario_id in runnable_index]
+            allowed_ids = [
+                scenario_id for scenario_id in candidate_ids if scenario_id in runnable_index
+            ]
         else:
             allowed_ids = [item["scenario_id"] for item in runnable_scenarios]
 
@@ -802,9 +818,7 @@ class PlatformService:
             resolved_ids = ensure_allowed(selected_scenario_ids)
             if len(resolved_ids) != 1:
                 raise ValidationError("功耗热稳评测需要且仅允许选择 1 个高负载场景")
-            resolved_duration_seconds = (
-                run_duration_seconds or definition.default_duration_seconds
-            )
+            resolved_duration_seconds = run_duration_seconds or definition.default_duration_seconds
             if not resolved_duration_seconds:
                 raise ValidationError("功耗热稳评测需要提供运行时长")
             return (
@@ -842,9 +856,7 @@ class PlatformService:
     ) -> list[ReportRecord]:
         items = self._report_store.list()
         if benchmark_task_id is not None:
-            items = [
-                item for item in items if item.benchmark_task_id == benchmark_task_id
-            ]
+            items = [item for item in items if item.benchmark_task_id == benchmark_task_id]
         if project_id is not None:
             items = [item for item in items if item.project_id == project_id]
         return sorted(items, key=lambda item: item.updated_at, reverse=True)
@@ -855,15 +867,9 @@ class PlatformService:
         benchmark_tasks = [
             task for task in self.list_benchmark_tasks() if task.project_id in project_ids
         ]
-        reports = [
-            report for report in self.list_reports() if report.project_id in project_ids
-        ]
+        reports = [report for report in self.list_reports() if report.project_id in project_ids]
         recent_failures = sorted(
-            [
-                run
-                for run in self._run_store.list()
-                if run.status.value in {"FAILED", "CANCELED"}
-            ],
+            [run for run in self._run_store.list() if run.status.value in {"FAILED", "CANCELED"}],
             key=lambda item: item.updated_at,
             reverse=True,
         )
@@ -874,9 +880,7 @@ class PlatformService:
         ]
         reported_task_ids = {report.benchmark_task_id for report in reports}
         pending_report_tasks = [
-            task
-            for task in exportable_tasks
-            if task.benchmark_task_id not in reported_task_ids
+            task for task in exportable_tasks if task.benchmark_task_id not in reported_task_ids
         ]
 
         return {
@@ -905,9 +909,7 @@ class PlatformService:
         online_gateways = [
             gateway for gateway in gateways if gateway.status.value in {"READY", "BUSY"}
         ]
-        running_captures = [
-            capture for capture in captures if capture.status.value == "RUNNING"
-        ]
+        running_captures = [capture for capture in captures if capture.status.value == "RUNNING"]
 
         return {
             "summary": {
@@ -979,9 +981,7 @@ class PlatformService:
                     ]
                 ),
                 "linked_benchmark_task_count": len(benchmark_tasks),
-                "input_fps": _metric_number(
-                    gateway.metrics, ["input_fps", "fps", "camera_fps"]
-                ),
+                "input_fps": _metric_number(gateway.metrics, ["input_fps", "fps", "camera_fps"]),
                 "output_fps": _metric_number(
                     gateway.metrics, ["output_fps", "inference_fps", "render_fps"]
                 ),
@@ -1027,15 +1027,14 @@ class PlatformService:
             "created_at_utc": now.isoformat(),
             "summary": task.summary,
             "run_ids": task.run_ids,
-            "scenario_matrix": [
-                item.model_dump(mode="json") for item in task.scenario_matrix
-            ],
+            "scenario_matrix": [item.model_dump(mode="json") for item in task.scenario_matrix],
         }
 
         with json_path.open("w", encoding="utf-8") as handle:
             json.dump(report_payload, handle, ensure_ascii=False, indent=2)
 
         metrics = task.summary.get("metrics", {})
+        gateway_snapshot = task.summary.get("gateway_snapshot", {})
         counts = task.summary.get("counts", {})
         markdown_lines = [
             f"# {task.project_name} / {task.benchmark_name}",
@@ -1059,9 +1058,66 @@ class PlatformService:
             f"- 场景通过率(%): `{metrics.get('pass_rate')}`",
             f"- 异常率(%): `{metrics.get('anomaly_rate')}`",
             "",
-            "## 场景矩阵",
-            "",
         ]
+        dut_snapshot_lines = [
+            _optional_markdown_metric("Gateway ID", gateway_snapshot.get("gateway_id")),
+            _optional_markdown_metric("Gateway 状态", gateway_snapshot.get("gateway_status")),
+            _optional_markdown_metric(
+                "模型",
+                gateway_snapshot.get("dut_model_name") or gateway_snapshot.get("model_name"),
+            ),
+            _optional_markdown_metric("DUT 状态", gateway_snapshot.get("dut_status")),
+            _optional_markdown_metric(
+                "推理输出 FPS",
+                _metric_number(
+                    gateway_snapshot,
+                    ["output_fps", "inference_fps", "render_fps"],
+                ),
+            ),
+            _optional_markdown_metric(
+                "平均延迟(ms)",
+                _metric_number(
+                    gateway_snapshot,
+                    ["avg_latency_ms", "latency_ms", "p95_latency_ms"],
+                ),
+            ),
+            _optional_markdown_metric(
+                "P95 延迟(ms)",
+                _metric_number(gateway_snapshot, ["p95_latency_ms"]),
+            ),
+            _optional_markdown_metric(
+                "功耗(W)",
+                _metric_number(
+                    gateway_snapshot,
+                    ["power_w", "soc_power_w", "board_power_w", "total_power_w"],
+                ),
+            ),
+            _optional_markdown_metric(
+                "温度(°C)",
+                _metric_number(
+                    gateway_snapshot,
+                    ["temperature_c", "soc_temp_c", "cpu_temp_c", "board_temp_c"],
+                ),
+            ),
+            _optional_markdown_metric("处理帧数", gateway_snapshot.get("processed_frames")),
+            _optional_markdown_metric("检测目标数", gateway_snapshot.get("detection_count")),
+            _optional_markdown_metric("相机设备", gateway_snapshot.get("dut_camera_device")),
+            _optional_markdown_metric("输入话题", gateway_snapshot.get("dut_input_topic")),
+            _optional_markdown_metric("输出话题", gateway_snapshot.get("dut_output_topic")),
+            _optional_markdown_metric(
+                "最近心跳",
+                gateway_snapshot.get("gateway_last_heartbeat_at_utc"),
+            ),
+            _optional_markdown_metric("最近结果时间", gateway_snapshot.get("dut_received_at_utc")),
+            _optional_markdown_metric("错误原因", gateway_snapshot.get("dut_error_reason")),
+        ]
+        dut_snapshot_lines = [line for line in dut_snapshot_lines if line is not None]
+        if dut_snapshot_lines:
+            markdown_lines.extend(["## DUT 推理快照", ""])
+            markdown_lines.extend(dut_snapshot_lines)
+            markdown_lines.append("")
+
+        markdown_lines.extend(["## 场景矩阵", ""])
         for entry in task.scenario_matrix:
             markdown_lines.append(
                 f"- {entry.scenario_display_name}: {entry.display_map_name} / {entry.environment_name} / {entry.sensor_profile_name}"

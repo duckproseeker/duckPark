@@ -1,5 +1,19 @@
 # 场景模板与运行请求设计
 
+## 当前状态
+
+这份文档最初写于“官方 ScenarioRunner 仍是唯一执行主链”的阶段，下面不少段落保留了当时的设计背景。
+
+截至当前版本，active path 已经调整为：
+
+- 官方 `.xosc` 继续作为输入格式保留
+- 平台模板场景走 `native_descriptor`
+- 官方 `.xosc` 场景走 `openscenario`
+- 两类请求最终都由平台自己的 native runtime 执行
+- OpenSCENARIO 当前只保证平台受控子集，不承诺完整覆盖所有标准语义
+
+阅读下面内容时，如果看到“ScenarioRunner 唯一主链”之类的表述，应把它理解为历史设计背景，而不是现行实现。
+
 ## 背景
 
 当前平台已经支持通过 `GET /scenarios/catalog` 展示可运行场景，并通过 `POST /scenarios/launch` 生成 per-run 的 `scenario_launch_spec.json` 与 `generated_scenario.xosc`。
@@ -9,21 +23,21 @@
 1. 前端虽然已经只暴露“场景、地图、天气、背景车/人、超时”这些业务维度，但场景能力边界还不够明确。
 2. 后端当前主要围绕官方 OpenSCENARIO 样例工作，后续如果引入 Python Scenario，自定义模板还缺少稳定的抽象层。
 
-这份文档把下一阶段的目标定成“统一场景模板层”。前端永远只选择“跑什么场景”，底层到底通过 Python Scenario 还是 OpenSCENARIO 启动，由后端和 executor 决定。
+这份文档把下一阶段的目标定成“统一场景模板层”。前端永远只选择“跑什么场景”，底层到底通过 native descriptor 还是 OpenSCENARIO 启动，由后端和 executor 决定。
 
 ## 目标
 
-- 前端只暴露业务配置，不暴露 `--scenario`、`--openscenario` 等 ScenarioRunner 细节。
+- 前端只暴露业务配置，不暴露底层 runtime 细节。
 - 每次运行都先落一份稳定的 canonical run spec，再生成 per-run 的执行文件。
 - 每个场景模板都声明自己的能力边界，避免“任意场景都能任意换图、任意改参数”的误导。
-- 保持 ScenarioRunner 作为唯一执行主链路。
+- 保持“模板层统一、执行后端隐藏”这条边界。
 
 ## 非目标
 
 - 不接入 `--route` 模式。
 - 不把“后台如何启动”做成前端选项。
 - 不要求所有场景都改成 OpenSCENARIO。
-- 不在这一步引入新的全局状态管理或新的执行器。
+- 不在这一步引入新的前端状态管理分叉。
 
 ## 用户侧心智模型
 
@@ -39,7 +53,7 @@
 
 用户不需要知道：
 
-- 底层是 Python Scenario 还是 OpenSCENARIO
+- 底层最终是 native descriptor 还是受控子集 OpenSCENARIO 翻译
 - 是否生成了中间 `.xosc`
 - 背景交通是通过脚本启动还是通过 CARLA API 注入
 
@@ -51,9 +65,9 @@
 
 后端模板层至少需要隐藏这几个实现差异：
 
-- `backend_kind = python`
-- `backend_kind = openscenario`
-- `generated_artifacts = [xosc, json, yaml, logs]`
+- `launch_mode = native_descriptor`
+- `launch_mode = openscenario`
+- `generated_artifacts = [json, xosc, logs]`
 
 ### 2. canonical run spec 才是真源
 
@@ -256,18 +270,22 @@ run_data/scenario_builds/<run_id>/generated_scenario.xosc
 
 ### 3. executor
 
-executor 只需要做两类事：
+当前 active path 下，executor 的职责已经收敛为：
 
-- 按 `execution_plan` 启动 ScenarioRunner
-- 管理运行期间的背景交通与清理
+- 按 `execution_plan` 启动平台 native runtime
+- 在 native runtime 内完成地图加载、参与者生成、TM autopilot、事件触发与清理
+- 管理运行期间的背景交通、recorder、HIL sidecar 与 heartbeat
 
 推荐时序：
 
-1. 启动 ScenarioRunner 主进程
-2. 等待 world reload 完成
-3. 注入背景交通
-4. 持续写 heartbeat
-5. 回收背景交通和临时进程
+1. 解析 canonical run spec，决定 `native_descriptor` 还是 `openscenario`
+2. 连接 CARLA，加载地图和天气
+3. 生成 hero / scenario actors
+4. 启动 TM autopilot 和背景交通
+5. 进入 native runtime tick loop，持续写 heartbeat
+6. 停止 recorder / HIL sidecar，回收 actor 和临时资源
+
+如果后续仍保留官方 ScenarioRunner，也应只作为严格语义验证或重场景回归链路，而不是默认演示执行主链。
 
 ## 关于 `generate_traffic.py` 的建议
 
@@ -319,7 +337,7 @@ executor 只需要做两类事：
 
 - `scenario_id`: `lead_vehicle_brake_v1`
 - 推荐底层：`openscenario`
-- 适用原因：结构简单，适合保持和官方样例兼容
+- 适用原因：结构简单，适合保留为受控子集 OpenSCENARIO 输入
 - 默认地图：`Town01`
 - 关键参数：
   - `lead_vehicle_initial_gap_m`
@@ -329,8 +347,8 @@ executor 只需要做两类事：
 ### 2. 行人鬼探头
 
 - `scenario_id`: `ped_occluded_crossing_v1`
-- 推荐底层：`python`
-- 适用原因：遮挡、触发条件和判定逻辑往往需要更强行为控制
+- 推荐底层：`native_descriptor`
+- 适用原因：遮挡、触发条件和判定逻辑更适合直接落到平台 native runtime
 - 默认地图：`Town03`
 - 关键参数：
   - `trigger_distance_m`
@@ -341,8 +359,8 @@ executor 只需要做两类事：
 ### 3. 对向闯红灯
 
 - `scenario_id`: `oncoming_red_light_violation_v1`
-- 推荐底层：`python`
-- 适用原因：信号状态、路口冲突判定和时间窗控制更适合 Python Scenario
+- 推荐底层：`native_descriptor`
+- 适用原因：信号状态、路口冲突判定和时间窗控制更适合平台原生执行图
 - 默认地图：`Town05`
 - 关键参数：
   - `violator_entry_delay_s`
@@ -352,8 +370,8 @@ executor 只需要做两类事：
 ### 4. 邻车 cut-in
 
 - `scenario_id`: `adjacent_vehicle_cut_in_v1`
-- 推荐底层：`python`
-- 适用原因：相对速度、插入间隙与触发阈值更适合行为树控制
+- 推荐底层：`native_descriptor`
+- 适用原因：相对速度、插入间隙与触发阈值更适合平台原生行为编排
 - 默认地图：`Town04`
 - 关键参数：
   - `cut_in_side`
@@ -363,7 +381,7 @@ executor 只需要做两类事：
 ### 5. 无保护左转
 
 - `scenario_id`: `unprotected_left_turn_v1`
-- 推荐底层：`python`
+- 推荐底层：`native_descriptor`
 - 适用原因：冲突区、优先级和通过判定复杂
 - 默认地图：`Town05`
 - 关键参数：

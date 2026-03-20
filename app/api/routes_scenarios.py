@@ -40,6 +40,31 @@ router = APIRouter(tags=["场景管理"])
 def _derive_traffic_seed(run_id: str) -> int:
     return int(hashlib.sha1(run_id.encode("utf-8")).hexdigest()[:8], 16) % 2147483647
 
+
+def _explicit_traffic_payload(request: ScenarioLaunchRequest) -> dict[str, int] | None:
+    if "traffic" not in request.model_fields_set:
+        return None
+    traffic_fields = set(getattr(request.traffic, "model_fields_set", set()))
+    if not traffic_fields:
+        return None
+    return request.traffic.model_dump(
+        mode="json",
+        exclude_none=True,
+        include=traffic_fields,
+    )
+
+
+def _default_hil_config_for_launch(catalog_item: dict[str, object]) -> dict[str, str] | None:
+    if not str(catalog_item.get("scenario_id") or "").strip():
+        return None
+    return {
+        "mode": "camera_open_loop",
+        "video_source": "hdmi_x1301",
+        "dut_input_mode": "uvc_camera",
+        "result_ingest_mode": "http_push",
+    }
+
+
 def fetch_available_maps() -> list[dict[str, str]]:
     settings = get_settings()
     client = CarlaClient(
@@ -75,13 +100,11 @@ def _sensor_profile_list_payload(settings_root) -> SensorProfileListPayload:
     "/scenarios",
     response_model=ApiResponse,
     summary="查询场景目录",
-    description="返回统一由 ScenarioRunner 驱动的场景目录、环境预设和传感器模板。sample_descriptors 仅保留兼容字段，正常情况下为空。",
+    description="返回由平台 native runtime 驱动的场景目录、环境预设和传感器模板。sample_descriptors 仅保留兼容字段，正常情况下为空。",
 )
 def list_scenarios() -> ApiResponse:
     project_root = get_settings().project_root
-    sample_files = sorted(
-        (project_root / "configs" / "scenarios").glob("sample_*.yaml")
-    )
+    sample_files = sorted((project_root / "configs" / "scenarios").glob("sample_*.yaml"))
     return ApiResponse(
         success=True,
         data={
@@ -97,7 +120,7 @@ def list_scenarios() -> ApiResponse:
     "/scenarios/catalog",
     response_model=ApiResponse,
     summary="查询场景库目录",
-    description="返回统一由 ScenarioRunner 驱动的场景目录。",
+    description="返回由平台 native runtime 驱动的场景目录。",
 )
 def list_scenario_catalog_endpoint() -> ApiResponse:
     return ApiResponse(success=True, data={"items": list_scenario_catalog()})
@@ -158,7 +181,9 @@ def save_sensor_profile_endpoint(
             profile_name=request.profile_name,
             display_name=request.display_name,
             description=request.description,
-            sensors=[sensor.model_dump(mode="json", exclude_none=True) for sensor in request.sensors],
+            sensors=[
+                sensor.model_dump(mode="json", exclude_none=True) for sensor in request.sensors
+            ],
             metadata=request.metadata,
             vehicle_model=request.vehicle_model,
         )
@@ -185,7 +210,7 @@ def list_maps() -> ApiResponse:
     "/scenarios/launch",
     response_model=RunResponse,
     summary="按场景启动配置创建运行",
-    description="前端只提交场景、地图、天气、传感器和背景交通参数。后端生成 per-run 的 ScenarioRunner 输入并创建 run，可按需自动加入执行队列。",
+    description="前端只提交场景、地图、天气、传感器和背景交通参数。后端生成 per-run 的 native runtime 输入并创建 run，可按需自动加入执行队列。",
 )
 def launch_scenario(request: ScenarioLaunchRequest) -> RunResponse:
     manager = get_run_manager()
@@ -196,19 +221,18 @@ def launch_scenario(request: ScenarioLaunchRequest) -> RunResponse:
             status_code=422,
             detail={
                 "code": "VALIDATION_ERROR",
-                "message": (
-                    f"未知场景: '{request.scenario_id}'。"
-                    f"可用场景: {available_ids}"
-                ),
+                "message": (f"未知场景: '{request.scenario_id}'。" f"可用场景: {available_ids}"),
             },
         )
 
     settings = get_settings()
     run_id = manager.build_run_id()
     launch_request = request.model_dump(mode="json", exclude_none=True)
-    launch_request.setdefault("traffic", {})
-    if launch_request["traffic"].get("seed") is None:
-        launch_request["traffic"]["seed"] = _derive_traffic_seed(run_id)
+    explicit_traffic = _explicit_traffic_payload(request)
+    if explicit_traffic is None:
+        launch_request.pop("traffic", None)
+    else:
+        launch_request["traffic"] = explicit_traffic
     launch_capabilities = catalog_item.get("launch_capabilities", {})
     resolved_map_name = (
         request.map_name
@@ -231,15 +255,13 @@ def launch_scenario(request: ScenarioLaunchRequest) -> RunResponse:
         if launch_capabilities.get("sensor_profile_editable", False)
         else None
     )
-    template_sensor_profile_name = str(
-        catalog_item.get("descriptor_template", {})
-        .get("sensors", {})
-        .get("profile_name")
-        or ""
-    ).strip() or None
-    resolved_sensor_profile_name = (
-        requested_sensor_profile_name or template_sensor_profile_name
+    template_sensor_profile_name = (
+        str(
+            catalog_item.get("descriptor_template", {}).get("sensors", {}).get("profile_name") or ""
+        ).strip()
+        or None
     )
+    resolved_sensor_profile_name = requested_sensor_profile_name or template_sensor_profile_name
     resolved_sensors = None
     if resolved_sensor_profile_name is not None:
         if get_sensor_profile(settings.sensor_profiles_root, resolved_sensor_profile_name) is None:
@@ -258,20 +280,36 @@ def launch_scenario(request: ScenarioLaunchRequest) -> RunResponse:
     descriptor = build_launch_descriptor(
         catalog_item,
         map_name=resolved_map_name,
-        weather=request.weather.model_dump(mode="json", exclude_none=True)
-        if request.weather is not None
-        else None,
-        traffic=launch_request["traffic"],
+        weather=(
+            request.weather.model_dump(mode="json", exclude_none=True)
+            if request.weather is not None
+            else None
+        ),
+        traffic=explicit_traffic,
         sensors=resolved_sensors,
         timeout_seconds=request.timeout_seconds,
-        metadata=request.metadata.model_dump(mode="json", exclude_none=True)
-        if request.metadata is not None
-        else None,
+        metadata=(
+            request.metadata.model_dump(mode="json", exclude_none=True)
+            if request.metadata is not None
+            else None
+        ),
     )
+    descriptor_traffic = descriptor.get("traffic", {})
+    if (
+        isinstance(descriptor_traffic, dict)
+        and bool(descriptor_traffic.get("enabled"))
+        and descriptor_traffic.get("seed") is None
+    ):
+        derived_seed = _derive_traffic_seed(run_id)
+        descriptor_traffic["seed"] = derived_seed
+        descriptor["traffic"] = descriptor_traffic
+        launch_request.setdefault("traffic", {})
+        launch_request["traffic"]["seed"] = derived_seed
 
     artifacts = None
     run_created = False
     try:
+        resolved_hil_config = _default_hil_config_for_launch(catalog_item)
         artifacts = write_launch_artifacts(
             settings=settings,
             run_id=run_id,
@@ -288,7 +326,8 @@ def launch_scenario(request: ScenarioLaunchRequest) -> RunResponse:
         run = manager.create_run(
             descriptor_payload=descriptor,
             run_id=run_id,
-            execution_backend="scenario_runner",
+            hil_config=resolved_hil_config,
+            execution_backend=str(catalog_item.get("execution_backend") or "native"),
             scenario_source=generated_source,
             config_snapshot_extra={
                 "launch_request": launch_request,

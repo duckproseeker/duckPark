@@ -46,6 +46,14 @@ def _normalize_env_value(value: str) -> str:
     return normalized
 
 
+def _bool_from_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    normalized = raw.strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
+
+
 def _load_env_file(env_file: Path) -> None:
     if not env_file.exists():
         return
@@ -93,8 +101,19 @@ class Settings:
     scenario_builds_root: Path
     sensor_profiles_root: Path
     scenario_runner_root: Path | None
-    scenario_runner_carla_root: Path | None
-    scenario_runner_python: str
+    hil_runtime_root: Path
+    hil_runtime_workdir: Path
+    hil_orchestration_enabled: bool
+    hil_command_timeout_seconds: float
+    hil_platform_base_url: str | None
+    hil_host_carla_start_command: str | None
+    hil_host_carla_stop_command: str | None
+    hil_host_display_start_command: str | None
+    hil_host_display_stop_command: str | None
+    hil_pi_start_command: str | None
+    hil_pi_stop_command: str | None
+    hil_jetson_start_command: str | None
+    hil_jetson_stop_command: str | None
 
 
 @lru_cache(maxsize=1)
@@ -166,16 +185,19 @@ def get_settings() -> Settings:
         Path("/ros2_ws/carla_workspace/scenario_runner"),
         Path("/workspace/scenario_runner"),
     )
-    scenario_runner_carla_root = _existing_path(
-        os.getenv("SCENARIO_RUNNER_CARLA_ROOT"),
+    hil_runtime_root = _path_from_env(
+        "HIL_RUNTIME_ROOT",
+        project_root.parent / "hil_runtime",
         base_dir=project_root,
     )
-    if scenario_runner_carla_root is None and scenario_runner_root is not None:
-        scenario_runner_carla_root = _first_existing_path(
-            scenario_runner_root.parent / "carla",
-            Path("/ros2_ws/carla_workspace/carla"),
-            Path("/workspace/carla"),
-        )
+    hil_runtime_workdir = _path_from_env(
+        "HIL_RUNTIME_WORKDIR",
+        project_root.parent,
+        base_dir=project_root,
+    )
+    hil_platform_base_url = os.getenv("HIL_PLATFORM_BASE_URL")
+    if hil_platform_base_url is not None:
+        hil_platform_base_url = hil_platform_base_url.strip() or None
 
     return Settings(
         project_root=project_root,
@@ -205,6 +227,19 @@ def get_settings() -> Settings:
         scenario_builds_root=scenario_builds_root,
         sensor_profiles_root=sensor_profiles_root,
         scenario_runner_root=scenario_runner_root,
-        scenario_runner_carla_root=scenario_runner_carla_root,
-        scenario_runner_python=os.getenv("SCENARIO_RUNNER_PYTHON", "python3"),
+        hil_runtime_root=hil_runtime_root,
+        hil_runtime_workdir=hil_runtime_workdir,
+        hil_orchestration_enabled=_bool_from_env("HIL_ORCHESTRATION_ENABLED", True),
+        hil_command_timeout_seconds=float(
+            os.getenv("HIL_COMMAND_TIMEOUT_SECONDS", "90.0")
+        ),
+        hil_platform_base_url=hil_platform_base_url,
+        hil_host_carla_start_command=os.getenv("HIL_HOST_CARLA_START_COMMAND"),
+        hil_host_carla_stop_command=os.getenv("HIL_HOST_CARLA_STOP_COMMAND"),
+        hil_host_display_start_command=os.getenv("HIL_HOST_DISPLAY_START_COMMAND"),
+        hil_host_display_stop_command=os.getenv("HIL_HOST_DISPLAY_STOP_COMMAND"),
+        hil_pi_start_command=os.getenv("HIL_PI_START_COMMAND"),
+        hil_pi_stop_command=os.getenv("HIL_PI_STOP_COMMAND"),
+        hil_jetson_start_command=os.getenv("HIL_JETSON_START_COMMAND"),
+        hil_jetson_stop_command=os.getenv("HIL_JETSON_STOP_COMMAND"),
     )

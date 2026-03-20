@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import argparse
 import json
 import logging
+import os
+import signal
+import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +21,208 @@ class SensorRecorderResult:
     profile_name: str | None
     sensor_count: int
     output_root: Path
+
+
+class SensorRecorderProcess:
+    """Run the CARLA sensor attachment lifecycle in a dedicated worker process."""
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        timeout_seconds: float,
+        output_root: Path,
+        *,
+        startup_timeout_seconds: float = 15.0,
+        shutdown_timeout_seconds: float = 10.0,
+        python_executable: str | None = None,
+        worker_module: str = "app.executor.sensor_recorder_worker",
+    ) -> None:
+        self._host = host
+        self._port = port
+        self._timeout_seconds = timeout_seconds
+        self._output_root = output_root
+        self._startup_timeout_seconds = startup_timeout_seconds
+        self._shutdown_timeout_seconds = shutdown_timeout_seconds
+        self._python_executable = python_executable or sys.executable
+        self._worker_module = worker_module
+
+        self._worker_root = output_root / "_worker"
+        self._descriptor_path = self._worker_root / "descriptor.json"
+        self._state_path = self._worker_root / "state.json"
+        self._log_path = self._worker_root / "worker.log"
+
+        self._process: subprocess.Popen[str] | None = None
+        self._log_handle: TextIO | None = None
+        self._stop_requested = False
+
+    def start(self, descriptor: Any, *, hero_role_name: str = "hero") -> SensorRecorderResult:
+        if self._process is not None:
+            raise RuntimeError("sensor recorder worker already started")
+
+        self._prepare_worker_files(descriptor)
+        self._log_handle = self._log_path.open("w", encoding="utf-8")
+        self._process = subprocess.Popen(
+            self._build_command(hero_role_name),
+            stdout=self._log_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        )
+
+        deadline = time.monotonic() + self._startup_timeout_seconds
+        while time.monotonic() < deadline:
+            state = self._read_state()
+            if state is not None:
+                status = str(state.get("status") or "").strip().lower()
+                if status == "ready":
+                    return SensorRecorderResult(
+                        profile_name=self._read_optional_text(state.get("profile_name")),
+                        sensor_count=max(0, int(state.get("sensor_count") or 0)),
+                        output_root=Path(
+                            str(state.get("output_root") or self._output_root)
+                        ).expanduser(),
+                    )
+                if status == "error":
+                    error_message = self._worker_error_message(
+                        default="sensor recorder worker failed before becoming ready"
+                    )
+                    self.stop()
+                    raise RuntimeError(error_message)
+
+            if self._process.poll() is not None:
+                error_message = self._worker_error_message(
+                    default=(
+                        "sensor recorder worker exited before becoming ready "
+                        f"(code={self._process.returncode})"
+                    )
+                )
+                self.stop()
+                raise RuntimeError(error_message)
+
+            time.sleep(0.1)
+
+        timeout_message = self._worker_error_message(
+            default=(
+                "sensor recorder worker did not become ready within "
+                f"{self._startup_timeout_seconds:.1f}s"
+            )
+        )
+        self.stop()
+        raise RuntimeError(timeout_message)
+
+    def unexpected_exit_error(self) -> str | None:
+        if self._process is None:
+            return None
+        return_code = self._process.poll()
+        if return_code is None or self._stop_requested:
+            return None
+        if return_code == 0:
+            return None
+        return self._worker_error_message(
+            default=f"sensor recorder worker exited unexpectedly (code={return_code})"
+        )
+
+    def stop(self) -> None:
+        self._stop_requested = True
+        if self._process is not None and self._process.poll() is None:
+            self._process.terminate()
+            try:
+                self._process.wait(timeout=self._shutdown_timeout_seconds)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
+                try:
+                    self._process.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    pass
+        if self._log_handle is not None:
+            try:
+                self._log_handle.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self._log_handle = None
+
+    def _prepare_worker_files(self, descriptor: Any) -> None:
+        self._worker_root.mkdir(parents=True, exist_ok=True)
+        descriptor_payload = self._descriptor_to_payload(descriptor)
+        self._descriptor_path.write_text(
+            json.dumps(descriptor_payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        if self._state_path.exists():
+            self._state_path.unlink()
+        if self._log_path.exists():
+            self._log_path.unlink()
+
+    def _build_command(self, hero_role_name: str) -> list[str]:
+        return [
+            self._python_executable,
+            "-m",
+            self._worker_module,
+            "--host",
+            self._host,
+            "--port",
+            str(self._port),
+            "--timeout-seconds",
+            str(self._timeout_seconds),
+            "--output-root",
+            str(self._output_root),
+            "--descriptor-path",
+            str(self._descriptor_path),
+            "--state-path",
+            str(self._state_path),
+            "--hero-role-name",
+            hero_role_name,
+        ]
+
+    @staticmethod
+    def _descriptor_to_payload(descriptor: Any) -> dict[str, Any]:
+        if hasattr(descriptor, "to_dict"):
+            payload = descriptor.to_dict()
+        elif hasattr(descriptor, "model_dump"):
+            payload = descriptor.model_dump(mode="json")
+        else:
+            raise RuntimeError("descriptor must expose to_dict() or model_dump()")
+        if not isinstance(payload, dict):
+            raise RuntimeError("descriptor payload must be a mapping")
+        return payload
+
+    def _read_state(self) -> dict[str, Any] | None:
+        if not self._state_path.exists():
+            return None
+        try:
+            payload = json.loads(self._state_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    @staticmethod
+    def _read_optional_text(value: Any) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    def _worker_error_message(self, *, default: str) -> str:
+        state = self._read_state() or {}
+        explicit_error = self._read_optional_text(state.get("error"))
+        message = explicit_error or default
+        log_tail = self._read_log_tail()
+        if log_tail:
+            return f"{message}. worker_log_tail={log_tail}"
+        return message
+
+    def _read_log_tail(self, max_lines: int = 8) -> str | None:
+        if not self._log_path.exists():
+            return None
+        try:
+            lines = self._log_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return None
+        if not lines:
+            return None
+        tail = " | ".join(line.strip() for line in lines[-max_lines:] if line.strip())
+        return tail or None
 
 
 class SensorRecorder:
@@ -330,3 +537,108 @@ class SensorRecorder:
             handle.write(json.dumps(payload, ensure_ascii=False))
             handle.write("\n")
             handle.flush()
+
+
+def run_sensor_recorder_worker(
+    *,
+    host: str,
+    port: int,
+    timeout_seconds: float,
+    output_root: Path,
+    descriptor_path: Path,
+    state_path: Path,
+    hero_role_name: str = "hero",
+) -> int:
+    from app.scenario.validators import validate_descriptor
+
+    stop_requested = threading.Event()
+    recorder: SensorRecorder | None = None
+
+    def _request_stop(_signum: int, _frame: Any) -> None:
+        stop_requested.set()
+
+    signal.signal(signal.SIGTERM, _request_stop)
+    signal.signal(signal.SIGINT, _request_stop)
+
+    try:
+        payload = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise RuntimeError("sensor recorder descriptor must be a mapping")
+        descriptor = validate_descriptor(payload)
+        recorder = SensorRecorder(
+            host=host,
+            port=port,
+            timeout_seconds=timeout_seconds,
+            output_root=output_root,
+        )
+        result = recorder.start(descriptor, hero_role_name=hero_role_name)
+        _write_worker_state(
+            state_path,
+            {
+                "status": "ready",
+                "profile_name": result.profile_name,
+                "sensor_count": result.sensor_count,
+                "output_root": str(result.output_root),
+            },
+        )
+        while not stop_requested.wait(0.5):
+            pass
+        return 0
+    except Exception as exc:  # noqa: BLE001
+        _write_worker_state(
+            state_path,
+            {
+                "status": "error",
+                "error": str(exc),
+            },
+        )
+        return 1
+    finally:
+        if recorder is not None:
+            try:
+                recorder.stop()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("sensor recorder worker cleanup failed: %s", exc)
+        if stop_requested.is_set():
+            _write_worker_state(
+                state_path,
+                {
+                    "status": "stopped",
+                },
+            )
+
+
+def _write_worker_state(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_suffix(f"{path.suffix}.tmp")
+    temp_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    temp_path.replace(path)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="CARLA sensor recorder worker")
+    parser.add_argument("--host", required=True)
+    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--timeout-seconds", type=float, required=True)
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--descriptor-path", type=Path, required=True)
+    parser.add_argument("--state-path", type=Path, required=True)
+    parser.add_argument("--hero-role-name", default="hero")
+    args = parser.parse_args(argv)
+
+    return run_sensor_recorder_worker(
+        host=args.host,
+        port=args.port,
+        timeout_seconds=args.timeout_seconds,
+        output_root=args.output_root,
+        descriptor_path=args.descriptor_path,
+        state_path=args.state_path,
+        hero_role_name=args.hero_role_name,
+    )
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -7,8 +7,9 @@ def test_get_settings_loads_env_local_relative_to_project_root(
     tmp_path, monkeypatch
 ) -> None:
     project_root = tmp_path / "env_project"
+    hil_runtime_root = tmp_path / "custom_hil_runtime"
     (project_root / "external" / "scenario_runner").mkdir(parents=True, exist_ok=True)
-    (project_root / "external" / "carla").mkdir(parents=True, exist_ok=True)
+    hil_runtime_root.mkdir(parents=True, exist_ok=True)
     (project_root / ".env.local").write_text(
         "\n".join(
             [
@@ -19,7 +20,11 @@ def test_get_settings_loads_env_local_relative_to_project_root(
                 "COMMANDS_ROOT=./custom/commands",
                 "ARTIFACTS_ROOT=./custom/artifacts",
                 "SCENARIO_RUNNER_ROOT=./external/scenario_runner",
-                "SCENARIO_RUNNER_CARLA_ROOT=./external/carla",
+                "HIL_RUNTIME_ROOT=../custom_hil_runtime",
+                "HIL_COMMAND_TIMEOUT_SECONDS=123",
+                "HIL_ORCHESTRATION_ENABLED=false",
+                "HIL_PLATFORM_BASE_URL=http://192.168.110.151:8000",
+                "HIL_PI_START_COMMAND=ssh pi start",
             ]
         ),
         encoding="utf-8",
@@ -33,7 +38,11 @@ def test_get_settings_loads_env_local_relative_to_project_root(
         "COMMANDS_ROOT",
         "ARTIFACTS_ROOT",
         "SCENARIO_RUNNER_ROOT",
-        "SCENARIO_RUNNER_CARLA_ROOT",
+        "HIL_RUNTIME_ROOT",
+        "HIL_COMMAND_TIMEOUT_SECONDS",
+        "HIL_ORCHESTRATION_ENABLED",
+        "HIL_PLATFORM_BASE_URL",
+        "HIL_PI_START_COMMAND",
     ]:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("PROJECT_ROOT", str(project_root))
@@ -48,4 +57,8 @@ def test_get_settings_loads_env_local_relative_to_project_root(
     assert settings.commands_root == project_root / "custom" / "commands"
     assert settings.artifacts_root == project_root / "custom" / "artifacts"
     assert settings.scenario_runner_root == project_root / "external" / "scenario_runner"
-    assert settings.scenario_runner_carla_root == project_root / "external" / "carla"
+    assert settings.hil_runtime_root.resolve() == hil_runtime_root.resolve()
+    assert settings.hil_command_timeout_seconds == 123.0
+    assert settings.hil_orchestration_enabled is False
+    assert settings.hil_platform_base_url == "http://192.168.110.151:8000"
+    assert settings.hil_pi_start_command == "ssh pi start"
