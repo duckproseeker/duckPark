@@ -15,6 +15,7 @@ from app.core.errors import AppError, NotFoundError, ValidationError
 from app.core.models import GatewayRecord
 from app.hil.evaluation_profiles import list_evaluation_profiles
 from app.hil.gateway_registry import GatewayRegistry
+from app.storage.artifact_store import ArtifactStore
 from app.storage.gateway_store import GatewayStore
 from app.utils.time_utils import to_iso8601
 
@@ -24,7 +25,10 @@ router = APIRouter(tags=["网关管理"])
 @lru_cache(maxsize=1)
 def get_gateway_registry() -> GatewayRegistry:
     settings = get_settings()
-    return GatewayRegistry(GatewayStore(settings.gateways_root))
+    return GatewayRegistry(
+        GatewayStore(settings.gateways_root),
+        artifact_store=ArtifactStore(settings.artifacts_root),
+    )
 
 
 def gateway_to_payload(gateway: GatewayRecord) -> dict[str, Any]:

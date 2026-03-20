@@ -172,7 +172,13 @@ function buildScenarioSections(
         { label: '背景车辆', value: `${vehicleCount}` },
         { label: '背景行人', value: `${walkerCount}` },
         { label: '随机种子', value: trafficSeedLabel },
-        { label: '最长运行时长', value: `${timeoutSeconds} s` }
+        {
+          label: '最长运行时长',
+          value:
+            item.launch_capabilities.timeout_editable === false
+              ? '手动停止'
+              : `${timeoutSeconds} s`
+        }
       ]
     },
     {
@@ -306,7 +312,7 @@ export function ScenarioSetsPage() {
   });
 
   const runnableScenarios = (catalogQuery.data ?? []).filter(
-    (item) => item.execution_support === 'scenario_runner'
+    (item) => item.execution_support === 'native' || item.execution_support === 'scenario_runner'
   );
   const environmentPresets = environmentPresetsQuery.data ?? [];
   const sensorProfiles = sensorProfilesQuery.data ?? [];
@@ -478,7 +484,7 @@ export function ScenarioSetsPage() {
           <div>
             <span className="project-console__eyebrow">场景控制层 / 场景工作台</span>
             <h1>场景启动台</h1>
-            <p>前端只负责选择地图、天气、背景参与者和剧本参数，底层的 per-run XOSC 由后端生成并统一交给 ScenarioRunner。</p>
+            <p>前端只负责选择地图、天气、背景参与者和剧本参数，底层的 per-run XOSC 或 native spec 由后端生成并统一交给平台 native runtime。</p>
           </div>
 
           <div className="project-console__header-actions">
@@ -653,7 +659,9 @@ export function ScenarioSetsPage() {
                           value={timeoutSeconds}
                         />
                         <small className="text-xs text-slate-500">
-                          用于重写场景剧本的最大观察时长，场景会按仿真时间结束。
+                          {selectedCapabilities?.timeout_editable === false
+                            ? '该演示场景默认长驻运行，请在执行页使用 Stop 手动结束。'
+                            : '用于重写场景剧本的最大观察时长，场景会按仿真时间结束。'}
                         </small>
                       </label>
 
@@ -672,7 +680,7 @@ export function ScenarioSetsPage() {
                         <div>
                           <span className="project-console__section-label">剧本参数</span>
                           <p className="text-sm text-slate-500">
-                            这些字段由场景模板定义，会直接写入 per-run 的 ScenarioRunner 输入文件。
+                            这些字段由场景模板定义，会直接写入 per-run 的 runtime 输入文件。
                           </p>
                         </div>
 
@@ -820,7 +828,7 @@ export function ScenarioSetsPage() {
                             : '创建场景运行'}
                       </button>
                       <span className="inline-flex items-center rounded-full bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-600">
-                        统一进入 ScenarioRunner 执行链路
+                        统一进入平台 native 执行链路
                       </span>
                     </div>
                   </div>

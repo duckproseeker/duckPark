@@ -11,7 +11,9 @@ import {
   getRunEnvironment,
   getRunEvents,
   getRunViewer,
+  startRunSensorCapture,
   startRun,
+  stopRunSensorCapture,
   stopRun,
   updateRunEnvironment
 } from '../../api/runs';
@@ -31,7 +33,8 @@ import {
   findProjectRecord,
   getRunBenchmarkId,
   getRunDutModel,
-  getRunProjectId
+  getRunProjectId,
+  metricNumber
 } from '../../lib/platform';
 import { buildViewerSocketUrl } from '../../lib/viewer';
 
@@ -281,6 +284,22 @@ export function ExecutionDetailPage() {
     }
   });
 
+  const startSensorCaptureMutation = useMutation({
+    mutationFn: () => startRunSensorCapture(runId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['runs', runId, 'environment'] });
+      void queryClient.invalidateQueries({ queryKey: ['runs', runId, 'events'] });
+    }
+  });
+
+  const stopSensorCaptureMutation = useMutation({
+    mutationFn: () => stopRunSensorCapture(runId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['runs', runId, 'environment'] });
+      void queryClient.invalidateQueries({ queryKey: ['runs', runId, 'events'] });
+    }
+  });
+
   const run = runQuery.data;
   const project = run ? findProjectRecord(projectsQuery.data ?? [], getRunProjectId(run)) : null;
   const benchmark = run
@@ -291,7 +310,31 @@ export function ExecutionDetailPage() {
     : null;
   const dutModel = run ? getRunDutModel(run) : null;
   const fps = run ? deriveRunFps(run) : null;
+  const deviceMetrics = run?.device_metrics ?? null;
+  const deviceOutputFps = metricNumber(deviceMetrics, ['output_fps', 'inference_fps', 'render_fps']);
+  const deviceLatencyMs = metricNumber(deviceMetrics, ['avg_latency_ms', 'latency_ms', 'p95_latency_ms']);
+  const devicePowerW = metricNumber(deviceMetrics, ['power_w', 'soc_power_w', 'board_power_w', 'total_power_w']);
+  const deviceTemperatureC = metricNumber(deviceMetrics, ['temperature_c', 'soc_temp_c', 'cpu_temp_c', 'board_temp_c']);
+  const deviceProcessedFrames = metricNumber(deviceMetrics, ['processed_frames']);
+  const deviceDetectionCount = metricNumber(deviceMetrics, ['detection_count']);
   const events = eventsQuery.data ?? [];
+  const runtimeControl = environmentQuery.data?.runtime_control ?? null;
+  const sensorCaptureControl = runtimeControl?.sensor_capture ?? null;
+  const recorderControl = runtimeControl?.recorder ?? null;
+  const sensorOutputSummaries = sensorCaptureControl?.sensor_outputs ?? [];
+  const sensorCaptureManifest = sensorCaptureControl?.manifest ?? null;
+  const sensorCaptureDownloadUrl = sensorCaptureControl?.download_url ?? null;
+  const runActive = ['STARTING', 'RUNNING', 'PAUSED', 'STOPPING'].includes(run?.status ?? '');
+  const sensorCaptureStatus =
+    sensorCaptureControl?.status ?? (run?.sensors?.enabled ? 'STOPPED' : 'DISABLED');
+  const canStartSensorCapture =
+    runActive &&
+    Boolean(sensorCaptureControl?.enabled ?? run?.sensors?.enabled) &&
+    !['RUNNING', 'STARTING'].includes(sensorCaptureStatus);
+  const canStopSensorCapture =
+    runActive &&
+    Boolean(sensorCaptureControl?.enabled ?? run?.sensors?.enabled) &&
+    ['RUNNING', 'STARTING', 'STOPPING'].includes(sensorCaptureStatus);
 
   const viewerSnapshotUrl =
     viewerQuery.data?.snapshot_url && selectedViewerView
@@ -326,6 +369,18 @@ export function ExecutionDetailPage() {
       { label: '绑定设备', value: run.hil_config?.gateway_id ?? '-' },
       { label: '天气预设', value: run.weather?.preset ?? '-' },
       { label: '传感器模板', value: run.sensors?.profile_name ?? '-' },
+      {
+        label: '传感器采集',
+        value: run.sensors?.enabled
+          ? run.sensors?.auto_start
+            ? '自动开始'
+            : '手动开始'
+          : '未启用'
+      },
+      {
+        label: 'CARLA recorder',
+        value: run.recorder?.enabled ? '默认开启' : '未启用'
+      },
       { label: '创建时间', value: formatDateTime(run.created_at_utc) },
       { label: '开始时间', value: formatDateTime(run.started_at_utc) },
       { label: '结束时间', value: formatDateTime(run.ended_at_utc) },
@@ -539,6 +594,72 @@ export function ExecutionDetailPage() {
             />
           </div>
 
+          {(run.hil_config || deviceMetrics) && (
+            <Panel
+              title="DUT 推理快照"
+              subtitle="优先展示归档到当前 run 的 Jetson 指标，避免设备最新态串到历史执行。"
+            >
+              {deviceMetrics ? (
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <MetricCard
+                      accent="orange"
+                      label="输出 FPS"
+                      value={deviceOutputFps !== null ? deviceOutputFps.toFixed(1) : '待接入'}
+                      hint="Jetson 推理输出吞吐"
+                    />
+                    <MetricCard
+                      accent="violet"
+                      label="平均延迟"
+                      value={deviceLatencyMs !== null ? `${deviceLatencyMs.toFixed(1)} ms` : '待接入'}
+                      hint="avg_latency_ms"
+                    />
+                    <MetricCard
+                      accent="teal"
+                      label="功耗"
+                      value={devicePowerW !== null ? `${devicePowerW.toFixed(1)} W` : '待接入'}
+                      hint="board / soc power"
+                    />
+                    <MetricCard
+                      accent="blue"
+                      label="温度"
+                      value={
+                        deviceTemperatureC !== null
+                          ? `${deviceTemperatureC.toFixed(1)} °C`
+                          : '待接入'
+                      }
+                      hint="board / soc temperature"
+                    />
+                  </div>
+
+                  <KeyValueGrid
+                    items={[
+                      { label: '处理帧数', value: deviceProcessedFrames ?? '-' },
+                      { label: '检测目标数', value: deviceDetectionCount ?? '-' },
+                      { label: 'Gateway ID', value: String(deviceMetrics.gateway_id ?? '-') },
+                      { label: 'Gateway 状态', value: String(deviceMetrics.gateway_status ?? '-') },
+                      {
+                        label: '最近心跳',
+                        value:
+                          typeof deviceMetrics.gateway_last_heartbeat_at_utc === 'string'
+                            ? formatDateTime(deviceMetrics.gateway_last_heartbeat_at_utc)
+                            : '-'
+                      },
+                      { label: 'DUT 状态', value: String(deviceMetrics.dut_status ?? '-') },
+                      { label: '模型名称', value: String(deviceMetrics.dut_model_name ?? deviceMetrics.model_name ?? '-') },
+                      { label: '输入源', value: String(deviceMetrics.dut_input_topic ?? deviceMetrics.dut_camera_device ?? '-') }
+                    ]}
+                  />
+                </div>
+              ) : (
+                <EmptyState
+                  title="等待 DUT 指标"
+                  description="run 已绑定 HIL 设备，但当前还没有归档到该 run 的 Jetson 推理快照。"
+                />
+              )}
+            </Panel>
+          )}
+
           <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.35fr)_420px]">
             <div className="flex flex-col gap-5">
               <Panel title="执行摘要">
@@ -724,6 +845,165 @@ export function ExecutionDetailPage() {
                     }
                   }
                 />
+              </Panel>
+
+              <Panel
+                title="数据记录控制"
+                subtitle="CARLA recorder 默认用于轻量复现；真实传感器采集需要在运行中手动开始和停止。"
+              >
+                <div className="space-y-4">
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <div className="rounded-[20px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
+                            CARLA Recorder
+                          </span>
+                          <strong className="mt-2 block text-sm text-navy-900">
+                            {recorderControl?.enabled ? '轻量复现记录已启用' : '当前 run 未启用'}
+                          </strong>
+                        </div>
+                        <StatusPill status={recorderControl?.status ?? 'DISABLED'} />
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-secondaryGray-600">
+                        {recorderControl?.enabled
+                          ? '默认记录世界关键状态，产物更轻，适合后续复现。'
+                          : '当前运行没有启用 recorder。'}
+                      </p>
+                      <div className="mt-3 space-y-1 text-xs text-secondaryGray-600">
+                        <p>输出路径: {recorderControl?.output_path ?? '-'}</p>
+                        <p>最近错误: {recorderControl?.last_error ?? '-'}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[20px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
+                            Sensor Capture
+                          </span>
+                          <strong className="mt-2 block text-sm text-navy-900">
+                            {sensorCaptureControl?.enabled
+                              ? '真实传感器数据按需落盘'
+                              : '当前 run 未挂载可采集传感器'}
+                          </strong>
+                        </div>
+                        <StatusPill status={sensorCaptureStatus} />
+                      </div>
+                      <div className="mt-3 space-y-1 text-xs text-secondaryGray-600">
+                        <p>模板: {sensorCaptureControl?.profile_name ?? run.sensors?.profile_name ?? '-'}</p>
+                        <p>传感器数量: {sensorCaptureControl?.sensor_count ?? run.sensors?.sensors?.length ?? 0}</p>
+                        <p>输出目录: {sensorCaptureControl?.output_root ?? '-'}</p>
+                        <p>已落盘帧数: {sensorCaptureControl?.saved_frames ?? 0}</p>
+                        <p>已落盘样本: {sensorCaptureControl?.saved_samples ?? 0}</p>
+                        <p>Manifest 路径: {sensorCaptureControl?.manifest_path ?? '-'}</p>
+                        <p>Worker 日志尾巴: {sensorCaptureControl?.worker_log_tail ?? '-'}</p>
+                        <p>最近错误: {sensorCaptureControl?.last_error ?? '-'}</p>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          className="horizon-button"
+                          disabled={!canStartSensorCapture || startSensorCaptureMutation.isPending}
+                          onClick={() => startSensorCaptureMutation.mutate()}
+                          type="button"
+                        >
+                          {startSensorCaptureMutation.isPending ? '请求中...' : '开始采集'}
+                        </button>
+                        <button
+                          className="horizon-button-secondary"
+                          disabled={!canStopSensorCapture || stopSensorCaptureMutation.isPending}
+                          onClick={() => stopSensorCaptureMutation.mutate()}
+                          type="button"
+                        >
+                          {stopSensorCaptureMutation.isPending ? '请求中...' : '停止采集'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <div className="rounded-[20px] border border-secondaryGray-200 bg-white px-4 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
+                            Capture Evidence
+                          </span>
+                          <strong className="mt-2 block text-sm text-navy-900">
+                            用目录和样本数确认传感器确实在录
+                          </strong>
+                        </div>
+                        {sensorCaptureDownloadUrl ? (
+                          <a
+                            className="horizon-button-secondary"
+                            href={sensorCaptureDownloadUrl}
+                          >
+                            下载目录
+                          </a>
+                        ) : null}
+                      </div>
+
+                      {sensorOutputSummaries.length > 0 ? (
+                        <div className="mt-4 grid gap-3">
+                          {sensorOutputSummaries.map((item) => (
+                            <div
+                              key={item.sensor_id}
+                              className="rounded-[16px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-3"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <strong className="text-sm text-navy-900">{item.sensor_id}</strong>
+                                <span className="text-xs font-semibold text-secondaryGray-500">
+                                  {item.sample_count} samples
+                                </span>
+                              </div>
+                              <div className="mt-2 space-y-1 text-xs text-secondaryGray-600">
+                                <p>目录: {item.relative_dir}</p>
+                                <p>文件数: {item.file_count}</p>
+                                <p>帧文件: {item.frame_file_count}</p>
+                                <p>记录行数: {item.record_count}</p>
+                                <p>最新产物: {item.latest_artifact_path ?? '-'}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-4 text-sm leading-6 text-secondaryGray-600">
+                          采集开始后，这里会显示各传感器目录、样本数和最新产物，用来判断“viewer 有画面但没数据”的误判。
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="rounded-[20px] border border-secondaryGray-200 bg-white px-4 py-4">
+                      <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
+                        Manifest
+                      </span>
+                      <strong className="mt-2 block text-sm text-navy-900">
+                        以 worker 实际写出的清单为准
+                      </strong>
+                      <div className="mt-3 space-y-1 text-xs text-secondaryGray-600">
+                        <p>Manifest 路径: {sensorCaptureControl?.manifest_path ?? '-'}</p>
+                        <p>Worker 状态文件: {sensorCaptureControl?.worker_state_path ?? '-'}</p>
+                        <p>Worker 日志文件: {sensorCaptureControl?.worker_log_path ?? '-'}</p>
+                      </div>
+                      <div className="mt-4">
+                        <JsonBlock
+                          compact
+                          value={
+                            sensorCaptureManifest ?? {
+                              message: 'manifest 尚未生成，通常说明采集还没真正开始或 worker 已提前失败。'
+                            }
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {(startSensorCaptureMutation.error || stopSensorCaptureMutation.error) && (
+                    <p className="text-sm text-rose-600">
+                      {startSensorCaptureMutation.error?.message ??
+                        stopSensorCaptureMutation.error?.message}
+                    </p>
+                  )}
+                </div>
               </Panel>
 
               {!monitorMode && (

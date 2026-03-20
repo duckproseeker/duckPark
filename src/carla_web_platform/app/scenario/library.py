@@ -11,14 +11,19 @@ from app.scenario.template_registry import (
 )
 
 
-def list_scenario_catalog() -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = []
-    source_items = [
+def _catalog_source_items() -> list[dict[str, Any]]:
+    return [
         *list_platform_scenario_catalog(),
         *list_official_openscenario_catalog(),
     ]
-    for item in source_items:
+
+
+def list_scenario_catalog(*, include_hidden: bool = False) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for item in _catalog_source_items():
         enriched = dict(item)
+        if bool(enriched.get("web_hidden")) and not include_hidden:
+            continue
         existing_capabilities = enriched.get("launch_capabilities")
         if not isinstance(existing_capabilities, dict):
             existing_capabilities = default_launch_capabilities(map_editable=False)
@@ -32,9 +37,11 @@ def list_scenario_catalog() -> list[dict[str, Any]]:
     return items
 
 
-def get_scenario_catalog_item(scenario_id: str) -> dict[str, Any] | None:
+def get_scenario_catalog_item(
+    scenario_id: str, *, include_hidden: bool = True
+) -> dict[str, Any] | None:
     normalized = scenario_id.strip()
-    for item in list_scenario_catalog():
+    for item in list_scenario_catalog(include_hidden=include_hidden):
         if item["scenario_id"] == normalized:
             return item
     return None

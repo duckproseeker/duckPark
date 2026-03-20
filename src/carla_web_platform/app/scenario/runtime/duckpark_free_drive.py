@@ -3,9 +3,7 @@ from __future__ import annotations
 import time
 
 import py_trees
-from srunner.scenariomanager.scenarioatomics.atomic_behaviors import (
-    ChangeActorControl,
-)
+from srunner.scenariomanager.scenarioatomics.atomic_behaviors import ChangeAutoPilot
 from srunner.scenariomanager.scenarioatomics.atomic_criteria import CollisionTest
 from srunner.scenarios.basic_scenario import BasicScenario
 
@@ -42,11 +40,14 @@ class DuckparkFreeDrive(BasicScenario):
         _ = randomize
         params = config.other_parameters.get("duckpark_free_drive", {})
         self.timeout = float(params.get("timeout_seconds") or timeout or 120.0)
-        self._controller_module = str(params.get("controller_module") or "").strip()
-        self._controller_args = {
-            "traffic_manager_port": str(params.get("traffic_manager_port") or "8010"),
-            "target_speed_mps": str(params.get("target_speed_mps") or "10.0"),
-            "roaming_seed": str(params.get("roaming_seed") or "0"),
+        target_speed_mps = float(params.get("target_speed_mps") or 10.0)
+        self._autopilot_parameters = {
+            # ScenarioRunner expects km/h here and internally derives the TM speed delta
+            # from the vehicle's live road speed limit.
+            "max_speed": target_speed_mps * 3.6,
+            "distance_between_vehicles": 3.0,
+            "auto_lane_change": True,
+            "ignore_vehicles_percentage": 0.0,
         }
         super().__init__(
             "DuckparkFreeDrive",
@@ -63,12 +64,12 @@ class DuckparkFreeDrive(BasicScenario):
 
     def _create_behavior(self):
         sequence = py_trees.composites.Sequence("DuckparkFreeDrive")
-        if self.ego_vehicles and self._controller_module:
+        if self.ego_vehicles:
             sequence.add_child(
-                ChangeActorControl(
+                ChangeAutoPilot(
                     self.ego_vehicles[0],
-                    control_py_module=self._controller_module,
-                    args=self._controller_args,
+                    activate=True,
+                    parameters=dict(self._autopilot_parameters),
                 )
             )
         sequence.add_child(WallClockTimeout(self.timeout))

@@ -55,3 +55,27 @@ def test_artifact_layout_created() -> None:
     assert (run_dir / "status.json").exists()
     assert (run_dir / "recorder").exists()
     assert (run_dir / "outputs").exists()
+
+
+def test_device_metrics_can_be_written_and_read() -> None:
+    settings = get_settings()
+    store = ArtifactStore(settings.artifacts_root)
+    manager = RunManager(
+        run_store=RunStore(settings.runs_root),
+        artifact_store=store,
+        command_queue=FileCommandQueue(settings.commands_root),
+    )
+
+    run = manager.create_run(descriptor_payload=VALID_DESCRIPTOR)
+    payload = {
+        "gateway_id": "gw_demo",
+        "gateway_status": "READY",
+        "output_fps": 16.4,
+        "avg_latency_ms": 59.2,
+        "processed_frames": 144,
+    }
+
+    store.write_device_metrics(run.run_id, payload)
+
+    assert store.read_device_metrics(run.run_id) == payload
+    assert (Path(run.artifact_dir) / "outputs" / "hil" / "device_metrics.json").exists()

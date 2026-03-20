@@ -152,9 +152,51 @@ export interface SensorSpec {
 
 export interface SensorsConfig {
   enabled: boolean;
+  auto_start: boolean;
   profile_name?: string | null;
   config_yaml_path?: string | null;
   sensors: SensorSpec[];
+}
+
+export interface SensorCaptureRuntimeControl {
+  enabled: boolean;
+  auto_start: boolean;
+  desired_state: string;
+  active: boolean;
+  status: string;
+  profile_name: string | null;
+  sensor_count: number;
+  output_root: string | null;
+  manifest_path: string | null;
+  manifest: Record<string, unknown> | null;
+  saved_frames: number;
+  saved_samples: number;
+  sensor_outputs: SensorCaptureOutputSummary[];
+  worker_state_path: string | null;
+  worker_log_path: string | null;
+  worker_log_tail: string | null;
+  download_url: string | null;
+  last_error: string | null;
+  updated_at_utc: string | null;
+}
+
+export interface SensorCaptureOutputSummary {
+  sensor_id: string;
+  relative_dir: string;
+  sample_count: number;
+  file_count: number;
+  frame_file_count: number;
+  record_count: number;
+  latest_artifact_path: string | null;
+}
+
+export interface RecorderRuntimeControl {
+  enabled: boolean;
+  active: boolean;
+  status: string;
+  output_path: string | null;
+  last_error: string | null;
+  updated_at_utc: string | null;
 }
 
 export interface ScenarioCatalogItem {
@@ -164,8 +206,8 @@ export interface ScenarioCatalogItem {
   description: string;
   category: string;
   default_map_name: string;
-  execution_support: 'scenario_runner';
-  execution_backend: 'scenario_runner';
+  execution_support: 'native' | 'scenario_runner';
+  execution_backend: 'native' | 'scenario_runner';
   launch_capabilities: ScenarioLaunchCapabilities;
   source: {
     provider: string;
@@ -409,12 +451,23 @@ export type ReportsWorkspace = Omit<
 
 export type RunRecord = Omit<
   Present<RunRecordSchema>,
-  'execution_backend' | 'metadata' | 'weather' | 'sensors' | 'debug' | 'runtime_capabilities'
+  | 'execution_backend'
+  | 'metadata'
+  | 'weather'
+  | 'sensors'
+  | 'recorder'
+  | 'debug'
+  | 'runtime_capabilities'
+  | 'device_metrics'
 > & {
   execution_backend: 'native' | 'scenario_runner';
+  device_metrics: Record<string, unknown> | null;
   metadata: RunMetadata;
   weather: WeatherConfig;
   sensors: SensorsConfig;
+  recorder: {
+    enabled: boolean;
+  };
   debug: {
     viewer_friendly?: boolean | null;
   };
@@ -559,12 +612,14 @@ export type RunEnvironmentState = Omit<
   weather: WeatherConfig | null;
   runtime_control: Omit<
     Present<Exclude<RunEnvironmentStateSchema['runtime_control'], undefined>>,
-    'weather' | 'debug'
+    'weather' | 'debug' | 'sensor_capture' | 'recorder'
   > & {
     weather: WeatherConfig | null;
     debug: {
       viewer_friendly?: boolean | null;
     } | null;
+    sensor_capture: SensorCaptureRuntimeControl | null;
+    recorder: RecorderRuntimeControl | null;
   };
 };
 

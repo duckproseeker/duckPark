@@ -270,7 +270,7 @@ export function StudioPage() {
   });
 
   return (
-    <div className="page-stack">
+    <div className="page-stack studio-page">
       <PageHeader
         title="Studio"
         description="把传感器模板作为运维资产维护。场景页只选择 profile_name，具体坐标、分辨率和高级参数都在这里按车型固定。"
@@ -307,7 +307,7 @@ export function StudioPage() {
           title="模板列表"
           subtitle="左侧管理模板资产，右侧编辑具体传感器参数。"
           actions={
-            sensorProfilesQuery.isLoading ? <span className="text-xs text-slate-400">加载中...</span> : null
+            sensorProfilesQuery.isLoading ? <span className="studio-panel-status">加载中...</span> : null
           }
         >
           {sensorProfilesQuery.isError ? (
@@ -318,28 +318,23 @@ export function StudioPage() {
           ) : sensorProfiles.length === 0 ? (
             <EmptyState title="还没有模板" description="先创建一个和车型绑定的传感器模板。" />
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="studio-template-list">
               {sensorProfiles.map((profile) => (
                 <button
+                  aria-pressed={selectedProfileName === profile.profile_name}
                   key={profile.profile_name}
                   className={[
-                    'rounded-[18px] border p-4 text-left transition',
-                    selectedProfileName === profile.profile_name
-                      ? 'border-brand-200 bg-brand-50/70'
-                      : 'border-secondaryGray-200 bg-secondaryGray-50/60 hover:-translate-y-0.5 hover:shadow-card'
+                    'studio-template-card',
+                    selectedProfileName === profile.profile_name ? 'studio-template-card--active' : ''
                   ].join(' ')}
                   onClick={() => selectProfile(profile)}
                   type="button"
                 >
-                  <strong className="block text-sm font-extrabold text-navy-900">
-                    {profile.display_name}
-                  </strong>
-                  <p className="mt-2 text-xs leading-5 text-secondaryGray-600">
-                    {profile.vehicle_model ?? '未绑定车型'}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold text-secondaryGray-600">
-                    <span className="rounded-full bg-white px-3 py-1">{profile.profile_name}</span>
-                    <span className="rounded-full bg-white px-3 py-1">
+                  <strong className="studio-template-card__title">{profile.display_name}</strong>
+                  <p className="studio-template-card__subtitle">{profile.vehicle_model ?? '未绑定车型'}</p>
+                  <div className="studio-template-card__meta">
+                    <span className="studio-template-card__badge">{profile.profile_name}</span>
+                    <span className="studio-template-card__badge">
                       {profile.sensors.length} sensors
                     </span>
                   </div>
@@ -411,7 +406,7 @@ export function StudioPage() {
               />
             </label>
 
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="studio-sensor-toolbar">
               <button className="horizon-button-secondary" onClick={() => addSensor('sensor.camera.rgb')} type="button">
                 添加 RGB 相机
               </button>
@@ -423,23 +418,21 @@ export function StudioPage() {
               </button>
             </div>
 
-            <div className="mt-5 flex flex-col gap-4">
+            <div className="studio-sensor-stack">
               {editor.sensors.map((sensor, index) => (
                 <section
                   key={`${sensor.id || 'sensor'}-${index}`}
-                  className="rounded-[20px] border border-secondaryGray-200 bg-secondaryGray-50/60 p-4"
+                  className="studio-sensor-card"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="studio-sensor-card__header">
                     <div>
-                      <strong className="block text-sm font-extrabold text-navy-900">
-                        传感器 {index + 1}
-                      </strong>
-                      <p className="mt-1 text-xs text-secondaryGray-600">
+                      <strong className="studio-sensor-card__title">传感器 {index + 1}</strong>
+                      <p className="studio-sensor-card__subtitle">
                         建议按车型固定相对坐标，场景运行时只选模板名。
                       </p>
                     </div>
                     <button
-                      className="text-sm font-semibold text-rose-500"
+                      className="studio-button-danger"
                       disabled={editor.sensors.length <= 1}
                       onClick={() => removeSensor(index)}
                       type="button"
@@ -510,25 +503,25 @@ export function StudioPage() {
             </div>
 
             {saveMutation.error ? (
-              <p className="mt-4 text-sm text-rose-500">{saveMutation.error.message}</p>
+              <p className="studio-inline-feedback studio-inline-feedback--error">{saveMutation.error.message}</p>
             ) : null}
             {saveMutation.data ? (
-              <p className="mt-4 text-sm text-emerald-400">
+              <p className="studio-inline-feedback studio-inline-feedback--success">
                 已保存模板 {saveMutation.data.display_name}，场景页会在刷新后使用最新参数。
               </p>
             ) : null}
           </Panel>
 
           <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <Panel title="当前保存态" subtitle="便于对照 YAML 文件和最近一次保存结果。">
+            <Panel className="studio-preview-panel" title="当前保存态" subtitle="便于对照 YAML 文件和最近一次保存结果。">
               {selectedProfile ? (
-                <pre className="json-block json-block--compact">{selectedProfile.raw_yaml}</pre>
+                <pre className="json-block json-block--compact studio-preview-block">{selectedProfile.raw_yaml}</pre>
               ) : (
                 <EmptyState title="还没有已保存模板" description="先选择或创建一个传感器模板。" />
               )}
             </Panel>
 
-            <Panel title="待保存预览" subtitle="这里展示的是即将发给后端的 payload。">
+            <Panel className="studio-preview-panel" title="待保存预览" subtitle="这里展示的是即将发给后端的 payload。">
               <JsonBlock compact value={previewPayload} />
             </Panel>
           </div>
@@ -538,10 +531,7 @@ export function StudioPage() {
               selectedProfileScenarioDefaults.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {selectedProfileScenarioDefaults.map((item: ScenarioCatalogItem) => (
-                    <span
-                      key={item.scenario_id}
-                      className="rounded-full bg-secondaryGray-50 px-3 py-2 text-xs font-semibold text-secondaryGray-600"
-                    >
+                    <span key={item.scenario_id} className="studio-usage-chip">
                       {item.display_name}
                     </span>
                   ))}

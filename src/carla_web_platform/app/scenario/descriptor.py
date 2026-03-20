@@ -80,6 +80,7 @@ class TrafficConfig(BaseModel):
 
 class SensorsConfig(BaseModel):
     enabled: bool = False
+    auto_start: bool = False
     profile_name: str | None = None
     config_yaml_path: str | None = None
     sensors: list[SensorSpec] = Field(default_factory=list)
@@ -88,6 +89,8 @@ class SensorsConfig(BaseModel):
     def validate_enabled_state(self) -> SensorsConfig:
         if self.enabled and not self.sensors and not self.profile_name:
             raise ValueError("enabled sensors require sensors[] or profile_name")
+        if self.auto_start and not self.enabled:
+            raise ValueError("auto_start sensors require sensors.enabled=true")
         return self
 
 

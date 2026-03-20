@@ -91,6 +91,7 @@ def build_sensor_config_from_profile(
 
     return {
         "enabled": True,
+        "auto_start": False,
         "profile_name": profile["profile_name"],
         "config_yaml_path": profile["source_path"],
         "sensors": copy.deepcopy(profile["sensors"]),

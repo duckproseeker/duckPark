@@ -111,7 +111,7 @@ class RunRecord(BaseModel):
     hil_config: dict[str, Any] | None = None
     evaluation_profile: dict[str, Any] | None = None
     artifact_dir: str
-    execution_backend: str = "scenario_runner"
+    execution_backend: str = "native"
     scenario_source: dict[str, Any] | None = None
 
 
@@ -195,7 +195,7 @@ class BenchmarkTaskMatrixEntry(BaseModel):
     scenario_id: str
     scenario_name: str
     scenario_display_name: str
-    execution_backend: str = "scenario_runner"
+    execution_backend: str = "native"
     requested_map_name: str
     resolved_map_name: str
     display_map_name: str

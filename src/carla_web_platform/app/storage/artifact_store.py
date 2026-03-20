@@ -49,6 +49,18 @@ class ArtifactStore:
         with path.open("r", encoding="utf-8") as handle:
             return json.load(handle)
 
+    def write_device_metrics(self, run_id: str, payload: dict[str, Any]) -> None:
+        path = ensure_dir(self.run_dir(run_id) / "outputs" / "hil") / "device_metrics.json"
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+
+    def read_device_metrics(self, run_id: str) -> dict[str, Any] | None:
+        path = self.run_dir(run_id) / "outputs" / "hil" / "device_metrics.json"
+        if not path.exists():
+            return None
+        with path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+
     def append_event(self, event: RunEvent) -> None:
         path = self.run_dir(event.run_id) / "events.jsonl"
         with path.open("a", encoding="utf-8") as handle:

@@ -1,0 +1,323 @@
+from __future__ import annotations
+
+import os
+import subprocess
+from dataclasses import dataclass
+from typing import Any, Callable
+
+from app.core.models import EventLevel
+from app.utils.time_utils import now_utc
+
+
+@dataclass(frozen=True)
+class HilRuntimeStep:
+    step_id: str
+    label: str
+    start_command: str | None = None
+    stop_command: str | None = None
+
+
+class HilRuntimeOrchestrator:
+    def __init__(
+        self,
+        settings: Any,
+        *,
+        event_callback: Callable[[str, str, str], None] | Callable[..., None] | None = None,
+        log_callback: Callable[[str, str], None] | None = None,
+    ) -> None:
+        self._settings = settings
+        self._event_callback = event_callback
+        self._log_callback = log_callback
+
+    def applies_to_run(self, run: Any) -> bool:
+        if not self._settings.hil_orchestration_enabled:
+            return False
+        hil_config = run.hil_config or {}
+        return bool(hil_config) and str(hil_config.get("mode") or "").strip().lower() == "camera_open_loop"
+
+    def start_pipeline(
+        self,
+        run_id: str,
+        run: Any,
+        descriptor: Any,
+    ) -> list[HilRuntimeStep]:
+        if not self.applies_to_run(run):
+            return []
+
+        steps = self._resolve_steps()
+        if not any(step.start_command for step in steps):
+            self._emit_event(
+                run_id,
+                "HIL_RUNTIME_SKIPPED",
+                "当前 run 绑定了 HIL，但没有配置可执行的 sidecar 启动命令",
+                level=EventLevel.WARNING,
+            )
+            return []
+
+        env = self._build_command_env(run_id, run, descriptor)
+        started_steps: list[HilRuntimeStep] = []
+        for step in steps:
+            if not step.start_command:
+                self._emit_event(
+                    run_id,
+                    "HIL_RUNTIME_STEP_SKIPPED",
+                    f"{step.label} 未配置启动命令，跳过",
+                    payload={"step_id": step.step_id},
+                    level=EventLevel.WARNING,
+                )
+                continue
+
+            self._emit_event(
+                run_id,
+                "HIL_RUNTIME_STEP_STARTING",
+                f"正在启动 {step.label}",
+                payload={"step_id": step.step_id},
+            )
+            self._run_shell_command(run_id, step, step.start_command, env, phase="start")
+            started_steps.append(step)
+            self._emit_event(
+                run_id,
+                "HIL_RUNTIME_STEP_READY",
+                f"{step.label} 已启动",
+                payload={"step_id": step.step_id},
+            )
+        return started_steps
+
+    def stop_pipeline(
+        self,
+        run_id: str,
+        run: Any,
+        descriptor: Any,
+        started_steps: list[HilRuntimeStep],
+    ) -> None:
+        if not self.applies_to_run(run):
+            return
+
+        env = self._build_command_env(run_id, run, descriptor)
+        for step in reversed(started_steps):
+            if not step.stop_command:
+                self._emit_event(
+                    run_id,
+                    "HIL_RUNTIME_STEP_STOP_SKIPPED",
+                    f"{step.label} 未配置停止命令，保留运行态",
+                    payload={"step_id": step.step_id},
+                    level=EventLevel.WARNING,
+                )
+                continue
+
+            self._emit_event(
+                run_id,
+                "HIL_RUNTIME_STEP_STOPPING",
+                f"正在停止 {step.label}",
+                payload={"step_id": step.step_id},
+            )
+            try:
+                self._run_shell_command(
+                    run_id,
+                    step,
+                    step.stop_command,
+                    env,
+                    phase="stop",
+                )
+            except RuntimeError as exc:
+                self._emit_event(
+                    run_id,
+                    "HIL_RUNTIME_STEP_STOP_FAILED",
+                    f"{step.label} 停止失败，run 将继续结束",
+                    payload={"step_id": step.step_id, "error": str(exc)},
+                    level=EventLevel.WARNING,
+                )
+            else:
+                self._emit_event(
+                    run_id,
+                    "HIL_RUNTIME_STEP_STOPPED",
+                    f"{step.label} 已停止",
+                    payload={"step_id": step.step_id},
+                )
+
+    def _resolve_steps(self) -> list[HilRuntimeStep]:
+        return [
+            HilRuntimeStep(
+                step_id="host_carla",
+                label="Host CARLA",
+                start_command=self._command_or_default(
+                    self._settings.hil_host_carla_start_command,
+                    self._default_host_carla_start_command(),
+                ),
+                stop_command=self._command_or_default(
+                    self._settings.hil_host_carla_stop_command,
+                    self._default_host_carla_stop_command(),
+                ),
+            ),
+            HilRuntimeStep(
+                step_id="host_display",
+                label="Host Native Follow Display",
+                start_command=self._command_or_default(
+                    self._settings.hil_host_display_start_command,
+                    self._default_host_display_start_command(),
+                ),
+                stop_command=self._command_or_default(
+                    self._settings.hil_host_display_stop_command,
+                    self._default_host_display_stop_command(),
+                ),
+            ),
+            HilRuntimeStep(
+                step_id="pi_pipeline",
+                label="Pi HDMI RTP Pipeline",
+                start_command=self._normalize_command(self._settings.hil_pi_start_command),
+                stop_command=self._normalize_command(self._settings.hil_pi_stop_command),
+            ),
+            HilRuntimeStep(
+                step_id="jetson_pipeline",
+                label="Jetson Inference Pipeline",
+                start_command=self._normalize_command(self._settings.hil_jetson_start_command),
+                stop_command=self._normalize_command(self._settings.hil_jetson_stop_command),
+            ),
+        ]
+
+    @staticmethod
+    def _normalize_command(command: str | None) -> str | None:
+        if command is None:
+            return None
+        normalized = command.strip()
+        return normalized or None
+
+    def _command_or_default(self, configured: str | None, default: str | None) -> str | None:
+        normalized = self._normalize_command(configured)
+        if normalized is not None:
+            return normalized
+        return default
+
+    def _default_host_carla_start_command(self) -> str | None:
+        if not self._settings.hil_runtime_root.exists():
+            return None
+        return "bash hil_runtime/host/scripts/start_carla_headed.sh"
+
+    def _default_host_carla_stop_command(self) -> str | None:
+        if not self._settings.hil_runtime_root.exists():
+            return None
+        return "docker rm -f \"${CARLA_HEADED_CONTAINER_NAME:-carla-headed}\" >/dev/null 2>&1 || true"
+
+    def _default_host_display_start_command(self) -> str | None:
+        if not self._settings.hil_runtime_root.exists():
+            return None
+        return (
+            "CARLA_FRONT_RGB_PREVIEW_BACKGROUND=1 "
+            "bash hil_runtime/host/scripts/start_carla_front_rgb_preview.sh "
+            "--display-mode native_follow "
+            "--map-name \"$DUCKPARK_HIL_MAP_NAME\" "
+            "--no-spawn-ego-if-missing "
+            "--no-enable-autopilot "
+            "--traffic-vehicles 0 "
+            "--wait-for-role-seconds 90"
+        )
+
+    def _default_host_display_stop_command(self) -> str | None:
+        if not self._settings.hil_runtime_root.exists():
+            return None
+        return (
+            "docker exec \"${CARLA_FRONT_RGB_PREVIEW_CONTAINER:-ros2-dev}\" "
+            "pkill -f 'python3 hil_runtime/host/scripts/carla_front_rgb_preview.py' "
+            ">/dev/null 2>&1 || true"
+        )
+
+    def _build_command_env(
+        self,
+        run_id: str,
+        run: Any,
+        descriptor: Any,
+    ) -> dict[str, str]:
+        hil_config = run.hil_config or {}
+        env = os.environ.copy()
+        env["PROJECT_ROOT"] = str(self._settings.project_root)
+        env["DUCKPARK_SRC_ROOT"] = str(self._settings.project_root.parent)
+        env["DUCKPARK_PLATFORM_ROOT"] = str(self._settings.project_root)
+        env["DUCKPARK_HIL_RUNTIME_ROOT"] = str(self._settings.hil_runtime_root)
+        env["DUCKPARK_HIL_RUN_ID"] = run_id
+        env["DUCKPARK_HIL_SCENARIO_NAME"] = str(run.scenario_name)
+        env["DUCKPARK_HIL_MAP_NAME"] = str(run.map_name)
+        env["DUCKPARK_HIL_GATEWAY_ID"] = str(hil_config.get("gateway_id") or "")
+        env["DUCKPARK_HIL_MODE"] = str(hil_config.get("mode") or "")
+        env["DUCKPARK_HIL_VIDEO_SOURCE"] = str(hil_config.get("video_source") or "")
+        env["DUCKPARK_HIL_DUT_INPUT_MODE"] = str(hil_config.get("dut_input_mode") or "")
+        env["DUCKPARK_HIL_RESULT_INGEST_MODE"] = str(
+            hil_config.get("result_ingest_mode") or ""
+        )
+        env["DUCKPARK_HIL_TIMEOUT_SECONDS"] = str(descriptor.termination.timeout_seconds)
+        env["DUCKPARK_HIL_FIXED_DELTA_SECONDS"] = str(descriptor.sync.fixed_delta_seconds)
+        env["DUCKPARK_HIL_WEATHER_PRESET"] = str(descriptor.weather.preset)
+        env["DUCKPARK_HIL_PLATFORM_BASE_URL"] = (
+            self._settings.hil_platform_base_url
+            or f"http://127.0.0.1:{self._settings.api_port}"
+        )
+        return env
+
+    def _run_shell_command(
+        self,
+        run_id: str,
+        step: HilRuntimeStep,
+        command: str,
+        env: dict[str, str],
+        *,
+        phase: str,
+    ) -> None:
+        self._append_log(
+            run_id,
+            f"[hil_runtime:{step.step_id}] {phase} command: {command}",
+        )
+        try:
+            completed = subprocess.run(
+                ["bash", "-lc", command],
+                cwd=str(self._settings.hil_runtime_workdir),
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=self._settings.hil_command_timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            self._append_log(
+                run_id,
+                (
+                    f"[hil_runtime:{step.step_id}] {phase} timeout after "
+                    f"{self._settings.hil_command_timeout_seconds:.1f}s"
+                ),
+            )
+            raise RuntimeError(
+                f"{step.label} {phase} command timed out after "
+                f"{self._settings.hil_command_timeout_seconds:.1f}s"
+            ) from exc
+
+        if completed.stdout:
+            for line in completed.stdout.splitlines():
+                self._append_log(run_id, f"[hil_runtime:{step.step_id}] stdout {line}")
+        if completed.stderr:
+            for line in completed.stderr.splitlines():
+                self._append_log(run_id, f"[hil_runtime:{step.step_id}] stderr {line}")
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"{step.label} {phase} command failed with exit code {completed.returncode}"
+            )
+
+    def _append_log(self, run_id: str, line: str) -> None:
+        if self._log_callback is not None:
+            self._log_callback(run_id, line)
+
+    def _emit_event(
+        self,
+        run_id: str,
+        event_type: str,
+        message: str,
+        *,
+        payload: dict[str, Any] | None = None,
+        level: EventLevel = EventLevel.INFO,
+    ) -> None:
+        if self._event_callback is None:
+            return
+        self._event_callback(
+            run_id,
+            event_type,
+            message,
+            payload=payload or {"emitted_at_utc": now_utc().isoformat()},
+            level=level,
+        )

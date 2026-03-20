@@ -33,6 +33,11 @@
   - DUT 型号不在首页和项目页写死
   - 由测试人员在创建任务时录入
   - 任务与报告会显式带出 DUT 型号
+- 场景运行时：
+  - 默认执行链已经切到平台 `native runtime`
+  - 官方 `.xosc` 现在作为输入格式进入平台受控子集解析，而不是直接交给 `scenario_runner.py`
+  - 当前受控子集重点覆盖地图、天气、参与者生成、时间/距离触发、`ChangeAutoPilot` 和简单 `KeepVelocity`
+  - 不承诺完整覆盖全部 OpenSCENARIO 语义
 
 ## 技术栈
 
@@ -61,10 +66,26 @@ carla_web_platform/
       pages/              # 页面级功能
       lib/                # 指标与格式化辅助
   configs/                # 场景、传感器等配置
-  scripts/                # 启动与运维脚本
+  scripts/                # 平台本身的启动、契约导出、远端部署脚本
   docker/                 # Docker 构建与 compose
   tests/                  # 后端 API 与行为测试
+../hil_runtime/           # sibling: Host / Pi / Jetson 的运行时脚本、systemd 模板、链路文档
 ```
+
+## HIL 运行资产分层
+
+为避免继续把 Host / Pi / Jetson 的部署脚本都堆在 `carla_web_platform/` 下面，当前约定如下：
+
+- `carla_web_platform/`
+  - 只保留平台产品代码、平台自身启动脚本、API 契约导出和远端平台部署脚本
+- `../hil_runtime/host/`
+  - 主机侧 CARLA headed 启动、前视预览与 HDMI 演示入口
+- `../hil_runtime/pi/`
+  - 树莓派 HDMI 注入、UVC gadget、gateway agent、systemd 模板和示例环境变量
+- `../hil_runtime/jetson/`
+  - Jetson detector 启动脚本、metrics 上报、C++ detector 源码
+- `../hil_runtime/docs/`
+  - Pi -> Jetson 链路、真机排障与演示记录
 
 ## 关键数据模型
 
@@ -116,9 +137,18 @@ carla_web_platform/
 - `GET /scenarios/catalog`
 - `POST /scenarios/launch`
 
+当前约定：
+
+- 平台模板场景走 `native_descriptor`
+- 官方 `.xosc` 场景走 `openscenario`
+- 两者最终都由平台 executor 内的 native runtime 执行
+
 设计说明见：
 
 - `docs/scenario-template-design.md`
+- `docs/host-bringup.md`
+- `docs/api-contract-maintenance.md`
+- `../hil_runtime/docs/pi_jetson_rtp_pipeline.md`
 
 ### 测评任务
 
@@ -210,6 +240,46 @@ docker compose -f docker/docker-compose.yml up -d --build
 - 平台 UI：`http://127.0.0.1:8000/ui`
 - Swagger：`http://127.0.0.1:8000/docs`
 
+## 远端部署
+
+当前协作约束：
+
+- 本机只负责改代码和跑本地验证
+- 正式环境在 `192.168.110.151`
+- 主开发容器是 `ros2-dev`
+- CARLA server 在另一个容器里，通常通过 `~/startCarla.sh` 启动
+- 远端 smoke 现在默认验证平台 native runtime，而不是 ScenarioRunner 主链
+
+远端运维说明见：
+
+- `docs/remote-ops.md`
+- `docs/host-bringup.md`
+
+注意：
+
+- 这里的 `remote_cleanup.sh` / `remote_deploy.sh` 只针对 `src/carla_web_platform/`
+- `src/hil_runtime/` 下的 host / Pi / Jetson 运行资产需要按目标机器单独同步
+- 如果要把主机上的 Web、headed CARLA、native follow 显示链一起拉起来，直接看 `docs/host-bringup.md`
+
+常用命令：
+
+```bash
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+REMOTE_PASSWORD='***' bash scripts/remote_cleanup.sh
+REMOTE_PASSWORD='***' bash scripts/remote_cleanup.sh --prune-top-level
+REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode scenario
+REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode capture
+```
+
+Makefile 包装：
+
+```bash
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+make remote-clean
+SMOKE_MODE=basic make remote-deploy
+SMOKE_MODE=scenario make remote-deploy
+```
+
 ## 常用命令
 
 ### 后端
@@ -229,6 +299,18 @@ npm run check-types
 npm run build
 ```
 
+### 契约同步
+
+```bash
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+make contract-sync
+```
+
+接口维护说明见：
+
+- `docs/api-contract-maintenance.md`
+- `docs/remote-ops.md`
+
 ## 最小联调流程
 
 1. 启动平台后端和 executor。
@@ -246,3 +328,4 @@ npm run build
 - 功耗、温度、mAP、延迟等指标依赖网关或评测侧真实回传；未接入时前端会显示“待接入”。
 - 报告导出当前仅提供 `JSON` / `Markdown`，尚未提供 PDF。
 - `make lint` 可能受仓库内既有 Ruff 存量问题影响，提交前应先区分新增问题与历史问题。
+- CARLA recorder 当前状态链路已接通，但 recorder 文件落盘仍依赖 CARLA server 容器和 executor 容器之间的共享路径设计，不能只以“状态为 RUNNING”判断产物已经可用。

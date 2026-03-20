@@ -19,6 +19,21 @@ _FLOAT_PARAMETER_TYPES = {"double", "float"}
 _BOOLEAN_PARAMETER_TYPES = {"bool", "boolean"}
 
 _SCENARIO_TEMPLATE_OVERRIDES: dict[str, dict[str, Any]] = {
+    "town10_autonomous_demo": {
+        "category": "demo",
+        "parameters": {
+            "targetSpeedMps": {
+                "label": "自车目标速度",
+                "description": "演示模板下平台自动驾驶的目标巡航速度。",
+                "type": "number",
+                "default": 8.0,
+                "min": 2.0,
+                "max": 16.0,
+                "step": 0.5,
+                "unit": "m/s",
+            }
+        },
+    },
     "free_drive_sensor_collection": {
         "category": "data_collection",
         "parameters": {

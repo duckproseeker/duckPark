@@ -16,6 +16,15 @@ from app.storage.gateway_store import GatewayStore
 from app.storage.run_store import RunStore
 from app.utils.time_utils import now_utc
 
+SUPPORTED_EXECUTION_BACKENDS = {"native"}
+ACTIVE_RUN_CONFLICT_STATUSES = {
+    RunStatus.QUEUED,
+    RunStatus.STARTING,
+    RunStatus.RUNNING,
+    RunStatus.PAUSED,
+    RunStatus.STOPPING,
+}
+
 
 class RunManager:
     """Control-plane orchestrator: create/list/query runs and issue lifecycle commands."""
@@ -60,6 +69,15 @@ class RunManager:
     def build_run_id(self) -> str:
         return f"run_{now_utc().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
+    @staticmethod
+    def _resolved_gateway_id(hil_config: dict[str, Any] | None) -> str:
+        if not hil_config:
+            return ""
+        gateway_value = hil_config.get("gateway_id")
+        if gateway_value is None:
+            return ""
+        return str(gateway_value).strip()
+
     def create_run(
         self,
         descriptor_payload: dict[str, Any] | None = None,
@@ -94,16 +112,20 @@ class RunManager:
                 f"可用场景: {available_scenarios}"
             )
         execution_support = str(scenario_catalog_item.get("execution_support", "")).strip()
-        if execution_support != "scenario_runner":
+        if execution_support not in SUPPORTED_EXECUTION_BACKENDS:
             raise ValidationError(
                 f"场景 {descriptor.scenario_name} 当前不可执行，execution_support={execution_support}"
             )
         execution_backend_value = str(
             execution_backend
             or scenario_catalog_item.get(
-                "execution_backend", execution_support or "scenario_runner"
+                "execution_backend", execution_support or "native"
             )
-        ).strip() or "scenario_runner"
+        ).strip() or "native"
+        if execution_backend_value not in SUPPORTED_EXECUTION_BACKENDS:
+            raise ValidationError(
+                f"场景 {descriptor.scenario_name} 当前不可执行，execution_backend={execution_backend_value}"
+            )
         scenario_source_value = (
             dict(scenario_source)
             if isinstance(scenario_source, dict)
@@ -111,7 +133,7 @@ class RunManager:
         )
 
         if hil_config and self._gateway_store is not None:
-            gateway_id = str(hil_config.get("gateway_id", "")).strip()
+            gateway_id = self._resolved_gateway_id(hil_config)
             if gateway_id:
                 self._gateway_store.get(gateway_id)
 
@@ -153,7 +175,7 @@ class RunManager:
                 "scenario_name": descriptor.scenario_name,
                 "map_name": descriptor.map_name,
                 "execution_backend": execution_backend_value,
-                "gateway_id": (hil_config or {}).get("gateway_id"),
+                "gateway_id": self._resolved_gateway_id(hil_config) or None,
                 "evaluation_profile": (evaluation_profile or {}).get("profile_name"),
             },
         )
@@ -164,6 +186,21 @@ class RunManager:
         if run.status != RunStatus.CREATED:
             raise ConflictError(
                 f"Run {run_id} 仅能从 CREATED 启动，当前状态为 {run.status.value}"
+            )
+
+        conflicting_run = next(
+            (
+                candidate
+                for candidate in self._run_store.list()
+                if candidate.run_id != run_id and candidate.status in ACTIVE_RUN_CONFLICT_STATUSES
+            ),
+            None,
+        )
+        if conflicting_run is not None:
+            raise ConflictError(
+                "当前已有活跃运行占用 CARLA："
+                f"{conflicting_run.run_id} ({conflicting_run.status.value})。"
+                "请先停止或取消当前运行，再启动新的场景。"
             )
 
         run = self._run_store.transition(run_id, RunStatus.QUEUED)

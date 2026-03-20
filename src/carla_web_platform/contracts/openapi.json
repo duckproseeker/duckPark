@@ -722,7 +722,7 @@
             "type": "string"
           },
           "execution_backend": {
-            "default": "scenario_runner",
+            "default": "native",
             "title": "Execution Backend",
             "type": "string"
           },
@@ -1540,8 +1540,16 @@
             "type": "string"
           },
           "gateway_id": {
-            "title": "Gateway Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "绑定的网关 ID。对于仅拉起 Host/Pi sidecar 的本地演示链路可为空。",
+            "title": "Gateway Id"
           },
           "mode": {
             "default": "camera_open_loop",
@@ -1559,9 +1567,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "gateway_id"
-        ],
         "title": "HilConfigPayload",
         "type": "object"
       },
@@ -1649,6 +1654,78 @@
           "updated_at_utc"
         ],
         "title": "ProjectPayload",
+        "type": "object"
+      },
+      "RecorderConfigPayload": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "RecorderConfigPayload",
+        "type": "object"
+      },
+      "RecorderRuntimeControlPayload": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "output_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At Utc"
+          }
+        },
+        "required": [
+          "enabled",
+          "active",
+          "status",
+          "output_path",
+          "last_error",
+          "updated_at_utc"
+        ],
+        "title": "RecorderRuntimeControlPayload",
         "type": "object"
       },
       "ReportExportRequest": {
@@ -2374,6 +2451,18 @@
           "debug": {
             "$ref": "#/components/schemas/RunDebugPayload"
           },
+          "device_metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Metrics"
+          },
           "dut_model": {
             "anyOf": [
               {
@@ -2481,6 +2570,9 @@
               }
             ],
             "title": "Project Name"
+          },
+          "recorder": {
+            "$ref": "#/components/schemas/RecorderConfigPayload"
           },
           "run_id": {
             "title": "Run Id",
@@ -2642,6 +2734,7 @@
           "weather",
           "traffic",
           "sensors",
+          "recorder",
           "debug",
           "runtime_capabilities",
           "sim_time",
@@ -2713,6 +2806,26 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/RunDebugPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorder": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecorderRuntimeControlPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sensor_capture": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SensorCaptureRuntimeControlPayload"
               },
               {
                 "type": "null"
@@ -3003,6 +3116,225 @@
           }
         },
         "title": "ScenarioMetadataPayload",
+        "type": "object"
+      },
+      "SensorCaptureOutputPayload": {
+        "properties": {
+          "file_count": {
+            "default": 0,
+            "title": "File Count",
+            "type": "integer"
+          },
+          "frame_file_count": {
+            "default": 0,
+            "title": "Frame File Count",
+            "type": "integer"
+          },
+          "latest_artifact_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Artifact Path"
+          },
+          "record_count": {
+            "default": 0,
+            "title": "Record Count",
+            "type": "integer"
+          },
+          "relative_dir": {
+            "title": "Relative Dir",
+            "type": "string"
+          },
+          "sample_count": {
+            "default": 0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "sensor_id": {
+            "title": "Sensor Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sensor_id",
+          "relative_dir"
+        ],
+        "title": "SensorCaptureOutputPayload",
+        "type": "object"
+      },
+      "SensorCaptureRuntimeControlPayload": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "auto_start": {
+            "title": "Auto Start",
+            "type": "boolean"
+          },
+          "desired_state": {
+            "title": "Desired State",
+            "type": "string"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "manifest": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest"
+          },
+          "manifest_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Path"
+          },
+          "output_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Root"
+          },
+          "profile_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Name"
+          },
+          "saved_frames": {
+            "default": 0,
+            "title": "Saved Frames",
+            "type": "integer"
+          },
+          "saved_samples": {
+            "default": 0,
+            "title": "Saved Samples",
+            "type": "integer"
+          },
+          "sensor_count": {
+            "title": "Sensor Count",
+            "type": "integer"
+          },
+          "sensor_outputs": {
+            "items": {
+              "$ref": "#/components/schemas/SensorCaptureOutputPayload"
+            },
+            "title": "Sensor Outputs",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At Utc"
+          },
+          "worker_log_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Log Path"
+          },
+          "worker_log_tail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Log Tail"
+          },
+          "worker_state_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker State Path"
+          }
+        },
+        "required": [
+          "enabled",
+          "auto_start",
+          "desired_state",
+          "active",
+          "status",
+          "profile_name",
+          "sensor_count",
+          "output_root",
+          "last_error",
+          "updated_at_utc"
+        ],
+        "title": "SensorCaptureRuntimeControlPayload",
         "type": "object"
       },
       "SensorProfileListPayload": {
@@ -3394,6 +3726,11 @@
       },
       "SensorsConfigPayload": {
         "properties": {
+          "auto_start": {
+            "default": false,
+            "title": "Auto Start",
+            "type": "boolean"
+          },
           "config_yaml_path": {
             "anyOf": [
               {
@@ -5199,6 +5536,92 @@
         ]
       }
     },
+    "/runs/{run_id}/sensor-capture/start": {
+      "post": {
+        "description": "仅改变传感器采集状态，不影响场景运行本身。适合在需要保留真实传感器数据时手动开始采集。",
+        "operationId": "start_run_sensor_capture_runs__run_id__sensor_capture_start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunEnvironmentStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "开始运行中的传感器采集",
+        "tags": [
+          "运行管理"
+        ]
+      }
+    },
+    "/runs/{run_id}/sensor-capture/stop": {
+      "post": {
+        "description": "停止真实传感器数据落盘，但不会停止当前场景。",
+        "operationId": "stop_run_sensor_capture_runs__run_id__sensor_capture_stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunEnvironmentStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "停止运行中的传感器采集",
+        "tags": [
+          "运行管理"
+        ]
+      }
+    },
     "/runs/{run_id}/start": {
       "post": {
         "description": "将 run 放入执行队列，状态从 CREATED 变为 QUEUED。",
@@ -5330,7 +5753,7 @@
     },
     "/scenarios": {
       "get": {
-        "description": "返回统一由 ScenarioRunner 驱动的场景目录、环境预设和传感器模板。sample_descriptors 仅保留兼容字段，正常情况下为空。",
+        "description": "返回由平台 native runtime 驱动的场景目录、环境预设和传感器模板。sample_descriptors 仅保留兼容字段，正常情况下为空。",
         "operationId": "list_scenarios_scenarios_get",
         "responses": {
           "200": {
@@ -5352,7 +5775,7 @@
     },
     "/scenarios/catalog": {
       "get": {
-        "description": "返回统一由 ScenarioRunner 驱动的场景目录。",
+        "description": "返回由平台 native runtime 驱动的场景目录。",
         "operationId": "list_scenario_catalog_endpoint_scenarios_catalog_get",
         "responses": {
           "200": {
@@ -5396,7 +5819,7 @@
     },
     "/scenarios/launch": {
       "post": {
-        "description": "前端只提交场景、地图、天气、传感器和背景交通参数。后端生成 per-run 的 ScenarioRunner 输入并创建 run，可按需自动加入执行队列。",
+        "description": "前端只提交场景、地图、天气、传感器和背景交通参数。后端生成 per-run 的 native runtime 输入并创建 run，可按需自动加入执行队列。",
         "operationId": "launch_scenario_scenarios_launch_post",
         "requestBody": {
           "content": {

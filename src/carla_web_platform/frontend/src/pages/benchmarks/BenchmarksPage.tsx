@@ -163,7 +163,7 @@ export function BenchmarksPage() {
   const gateways = gatewaysQuery.data ?? [];
   const evaluationProfiles = profilesQuery.data ?? [];
   const runnableScenarios = (catalogQuery.data ?? []).filter(
-    (item) => item.execution_support === 'scenario_runner'
+    (item) => item.execution_support === 'native' || item.execution_support === 'scenario_runner'
   );
 
   const selectedDefinition = workflow.benchmarkDefinitionId

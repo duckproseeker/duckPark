@@ -55,19 +55,28 @@ class RunSummary(BaseModel):
 
 class HilConfigPayload(BaseModel):
     mode: str = Field(default="camera_open_loop")
-    gateway_id: str
+    gateway_id: str | None = Field(
+        default=None,
+        description="绑定的网关 ID。对于仅拉起 Host/Pi sidecar 的本地演示链路可为空。",
+    )
     video_source: str = Field(default="hdmi_x1301")
     dut_input_mode: str = Field(default="uvc_camera")
     result_ingest_mode: str = Field(default="http_push")
 
-    @field_validator(
-        "mode", "gateway_id", "video_source", "dut_input_mode", "result_ingest_mode"
-    )
+    @field_validator("mode", "video_source", "dut_input_mode", "result_ingest_mode")
     @classmethod
     def validate_non_empty_text(cls, value: str) -> str:
         if not value or not value.strip():
             raise ValueError("field must not be empty")
         return value.strip()
+
+    @field_validator("gateway_id")
+    @classmethod
+    def validate_optional_gateway_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
 
 class EvaluationProfilePayload(BaseModel):
@@ -319,9 +328,7 @@ class CreateBenchmarkTaskRequest(BaseModel):
     project_id: str | None = None
     benchmark_definition_id: str
     dut_model: str | None = None
-    scenario_matrix: list[BenchmarkTaskScenarioMatrixItemPayload] = Field(
-        default_factory=list
-    )
+    scenario_matrix: list[BenchmarkTaskScenarioMatrixItemPayload] = Field(default_factory=list)
     selected_scenario_ids: list[str] = Field(default_factory=list)
     run_duration_seconds: int | None = Field(default=None, ge=1, le=86400)
     hil_config: HilConfigPayload | None = None
@@ -419,9 +426,14 @@ class SensorSpecPayload(BaseModel):
 
 class SensorsConfigPayload(BaseModel):
     enabled: bool
+    auto_start: bool = False
     profile_name: str | None
     config_yaml_path: str | None
     sensors: list[SensorSpecPayload]
+
+
+class RecorderConfigPayload(BaseModel):
+    enabled: bool
 
 
 class SensorProfilePayload(BaseModel):
@@ -504,6 +516,7 @@ class RunPayload(BaseModel):
     artifact_dir: str
     execution_backend: str
     scenario_source: dict[str, Any] | None
+    device_metrics: dict[str, Any] | None = None
     project_id: str | None
     project_name: str | None
     benchmark_definition_id: str | None
@@ -514,6 +527,7 @@ class RunPayload(BaseModel):
     weather: WeatherPayload
     traffic: TrafficPayload
     sensors: SensorsConfigPayload
+    recorder: RecorderConfigPayload
     debug: RunDebugPayload
     runtime_capabilities: RunRuntimeCapabilitiesPayload
     sim_time: float | None
@@ -534,9 +548,52 @@ class RunEventPayload(BaseModel):
     payload: dict[str, Any]
 
 
+class SensorCaptureOutputPayload(BaseModel):
+    sensor_id: str
+    relative_dir: str
+    sample_count: int = 0
+    file_count: int = 0
+    frame_file_count: int = 0
+    record_count: int = 0
+    latest_artifact_path: str | None = None
+
+
+class SensorCaptureRuntimeControlPayload(BaseModel):
+    enabled: bool
+    auto_start: bool
+    desired_state: str
+    active: bool
+    status: str
+    profile_name: str | None
+    sensor_count: int
+    output_root: str | None
+    manifest_path: str | None = None
+    manifest: dict[str, Any] | None = None
+    saved_frames: int = 0
+    saved_samples: int = 0
+    sensor_outputs: list[SensorCaptureOutputPayload] = Field(default_factory=list)
+    worker_state_path: str | None = None
+    worker_log_path: str | None = None
+    worker_log_tail: str | None = None
+    download_url: str | None = None
+    last_error: str | None
+    updated_at_utc: str | None
+
+
+class RecorderRuntimeControlPayload(BaseModel):
+    enabled: bool
+    active: bool
+    status: str
+    output_path: str | None
+    last_error: str | None
+    updated_at_utc: str | None
+
+
 class RunRuntimeControlPayload(BaseModel):
     weather: WeatherPayload | None
     debug: RunDebugPayload | None
+    sensor_capture: SensorCaptureRuntimeControlPayload | None = None
+    recorder: RecorderRuntimeControlPayload | None = None
     updated_at_utc: str | None
 
 
@@ -604,7 +661,7 @@ class BenchmarkTaskScenarioMatrixEntryPayload(BaseModel):
     scenario_id: str
     scenario_name: str
     scenario_display_name: str
-    execution_backend: str = "scenario_runner"
+    execution_backend: str = "native"
     requested_map_name: str
     resolved_map_name: str
     display_map_name: str
@@ -671,9 +728,7 @@ class BenchmarkTaskExecutionQueuePayload(BaseModel):
 class BenchmarkTaskSummaryPayload(BaseModel):
     counts: BenchmarkTaskSummaryCountsPayload | None = None
     metrics: BenchmarkTaskSummaryMetricsPayload | None = None
-    scenario_breakdown: (
-        dict[str, BenchmarkTaskScenarioBreakdownPayload] | None
-    ) = None
+    scenario_breakdown: dict[str, BenchmarkTaskScenarioBreakdownPayload] | None = None
     gateway_snapshot: dict[str, Any] | None = None
     execution_queue: BenchmarkTaskExecutionQueuePayload | None = None
 
