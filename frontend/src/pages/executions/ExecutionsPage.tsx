@@ -5,8 +5,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { listBenchmarkTasks, rerunBenchmarkTask, stopBenchmarkTask } from '../../api/benchmarks';
 import { getRunEvents, getRunViewer, listRuns, stopRun } from '../../api/runs';
-import { getSystemStatus } from '../../api/system';
-import type { BenchmarkTaskRecord, RunRecord } from '../../api/types';
+import { getSystemStatus, updateCarlaWeather } from '../../api/system';
+import type { BenchmarkTaskRecord, RunRecord, WeatherConfig } from '../../api/types';
 import { CompactPageHeader } from '../../components/common/CompactPageHeader';
 import { DetailPanel } from '../../components/common/DetailPanel';
 import { EmptyState } from '../../components/common/EmptyState';
@@ -27,6 +27,23 @@ type ViewerState = 'no-run' | 'loading' | 'error' | 'no-viewer' | 'ready';
 const runningRunStatuses = ['STARTING', 'RUNNING', 'PAUSED', 'STOPPING'];
 const activeTaskStatuses = ['CREATED', 'RUNNING'];
 const archivedTaskStatuses = ['COMPLETED', 'PARTIAL_FAILED', 'FAILED', 'CANCELED'];
+const weatherPresetStorageKey = 'carla-web.execution-monitor.weather-preset-id';
+const officialWeatherCycle: Array<{ id: string; label: string; weather: WeatherConfig }> = [
+  { id: 'ClearNoon', label: 'Clear Noon', weather: { preset: 'ClearNoon' } },
+  { id: 'ClearSunset', label: 'Clear Sunset', weather: { preset: 'ClearSunset' } },
+  { id: 'CloudyNoon', label: 'Cloudy Noon', weather: { preset: 'CloudyNoon' } },
+  { id: 'CloudySunset', label: 'Cloudy Sunset', weather: { preset: 'CloudySunset' } },
+  { id: 'HardRainNoon', label: 'Hard Rain Noon', weather: { preset: 'HardRainNoon' } },
+  { id: 'HardRainSunset', label: 'Hard Rain Sunset', weather: { preset: 'HardRainSunset' } },
+  { id: 'MidRainSunset', label: 'Mid Rain Sunset', weather: { preset: 'MidRainSunset' } },
+  { id: 'MidRainyNoon', label: 'Mid Rainy Noon', weather: { preset: 'MidRainyNoon' } },
+  { id: 'SoftRainNoon', label: 'Soft Rain Noon', weather: { preset: 'SoftRainNoon' } },
+  { id: 'SoftRainSunset', label: 'Soft Rain Sunset', weather: { preset: 'SoftRainSunset' } },
+  { id: 'WetCloudyNoon', label: 'Wet Cloudy Noon', weather: { preset: 'WetCloudyNoon' } },
+  { id: 'WetCloudySunset', label: 'Wet Cloudy Sunset', weather: { preset: 'WetCloudySunset' } },
+  { id: 'WetNoon', label: 'Wet Noon', weather: { preset: 'WetNoon' } },
+  { id: 'WetSunset', label: 'Wet Sunset', weather: { preset: 'WetSunset' } }
+];
 
 function pickPreferredTask(tasks: BenchmarkTaskRecord[]) {
   return (
@@ -108,13 +125,16 @@ export function ExecutionsPage() {
   const [viewMode, setViewMode] = useState<ExecutionViewMode>('current');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(taskIdFromQuery);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [selectedViewerView, setSelectedViewerView] = useState('third_person');
+  const [selectedViewerView, setSelectedViewerView] = useState('first_person');
   const [viewerRefreshSeed, setViewerRefreshSeed] = useState(() => Date.now());
   const [streamFrameUrl, setStreamFrameUrl] = useState<string | null>(null);
   const [streamMessage, setStreamMessage] = useState<string | null>(null);
   const [streamConnected, setStreamConnected] = useState(false);
   const [streamBufferDepth, setStreamBufferDepth] = useState(0);
   const [streamBuffering, setStreamBuffering] = useState(false);
+  const [lastWeatherPresetId, setLastWeatherPresetId] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : window.localStorage.getItem(weatherPresetStorageKey)
+  );
   const streamFrameQueueRef = useRef<string[]>([]);
   const streamPlaybackPrimedRef = useRef(false);
   const pendingQueryTaskIdRef = useRef<string | null>(taskIdFromQuery);
@@ -134,7 +154,6 @@ export function ExecutionsPage() {
     queryFn: getSystemStatus,
     refetchInterval: 3000
   });
-
   const tasks = tasksQuery.data ?? [];
   const runs = sortByActivity(runsQuery.data ?? []);
   const activeTasks = tasks.filter((task) => activeTaskStatuses.includes(task.status));
@@ -145,6 +164,8 @@ export function ExecutionsPage() {
     runningRunStatuses.includes(run.status)
   );
   const standaloneQueuedRuns = standaloneRuns.filter((run) => run.status === 'QUEUED');
+  const hasStandaloneCurrentActivity =
+    standaloneRunningRuns.length > 0 || standaloneQueuedRuns.length > 0;
   const taskForQuery =
     taskIdFromQuery
       ? tasks.find((task) => task.benchmark_task_id === taskIdFromQuery) ?? null
@@ -153,7 +174,12 @@ export function ExecutionsPage() {
   useEffect(() => {
     if (!taskIdFromQuery) {
       pendingQueryTaskIdRef.current = null;
-      if (viewMode === 'current' && activeTasks.length === 0 && archivedTasks.length > 0) {
+      if (
+        viewMode === 'current' &&
+        activeTasks.length === 0 &&
+        !hasStandaloneCurrentActivity &&
+        archivedTasks.length > 0
+      ) {
         setViewMode('archive');
       }
       return;
@@ -169,7 +195,7 @@ export function ExecutionsPage() {
     if (archivedTasks.some((task) => task.benchmark_task_id === taskIdFromQuery)) {
       setViewMode('archive');
     }
-  }, [activeTasks, archivedTasks, taskIdFromQuery, viewMode]);
+  }, [activeTasks, archivedTasks, hasStandaloneCurrentActivity, taskIdFromQuery, viewMode]);
 
   useEffect(() => {
     if (viewMode === 'current' && taskIdFromQuery) {
@@ -206,7 +232,7 @@ export function ExecutionsPage() {
   const standaloneMonitorActive =
     viewMode === 'current' &&
     activeTasks.length === 0 &&
-    (standaloneCurrentRun !== null || standaloneQueuedRuns.length > 0);
+    hasStandaloneCurrentActivity;
 
   useEffect(() => {
     if (viewMode !== 'current') {
@@ -248,6 +274,17 @@ export function ExecutionsPage() {
   }, [selectedRunId]);
 
   const selectedRun = selectedRunId ? runs.find((run) => run.run_id === selectedRunId) ?? null : null;
+  const nextWeatherPreset = useMemo(() => {
+    if (officialWeatherCycle.length === 0) {
+      return null;
+    }
+
+    const currentIndex = lastWeatherPresetId
+      ? officialWeatherCycle.findIndex((item) => item.id === lastWeatherPresetId)
+      : -1;
+    const nextIndex = (currentIndex + 1 + officialWeatherCycle.length) % officialWeatherCycle.length;
+    return officialWeatherCycle[nextIndex] ?? officialWeatherCycle[0];
+  }, [lastWeatherPresetId]);
   const selectedRunEventsQuery = useQuery({
     queryKey: ['runs', selectedRunId, 'events'],
     queryFn: () => getRunEvents(selectedRunId ?? ''),
@@ -260,20 +297,23 @@ export function ExecutionsPage() {
     enabled: viewMode === 'current' && Boolean(selectedRunId),
     refetchInterval: 5000
   });
+  const viewerViews = selectedRunViewerQuery.data?.views ?? [];
+  const hasFirstPersonView = viewerViews.some((item) => item.view_id === 'first_person');
+  const hasThirdPersonView = viewerViews.some((item) => item.view_id === 'third_person');
 
   useEffect(() => {
-    const nextView = selectedRunViewerQuery.data?.views.find((item) => item.view_id === 'third_person')?.view_id
-      ?? selectedRunViewerQuery.data?.views[0]?.view_id;
+    const nextView = viewerViews.find((item) => item.view_id === 'first_person')?.view_id
+      ?? viewerViews[0]?.view_id;
     if (!nextView) {
       return;
     }
     setSelectedViewerView((current) => {
-      if (selectedRunViewerQuery.data?.views.some((item) => item.view_id === current)) {
+      if (viewerViews.some((item) => item.view_id === current)) {
         return current;
       }
       return nextView;
     });
-  }, [selectedRunViewerQuery.data]);
+  }, [viewerViews]);
 
   useEffect(() => {
     streamFrameQueueRef.current = [];
@@ -435,6 +475,26 @@ export function ExecutionsPage() {
       setSelectedTaskId(task.benchmark_task_id);
     }
   });
+  const cycleWeatherMutation = useMutation({
+    mutationFn: async () => {
+      if (!nextWeatherPreset) {
+        throw new Error('天气预设尚未加载完成。');
+      }
+
+      return updateCarlaWeather(nextWeatherPreset.weather);
+    },
+    onSuccess: () => {
+      if (!nextWeatherPreset) {
+        return;
+      }
+
+      setLastWeatherPresetId(nextWeatherPreset.id);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(weatherPresetStorageKey, nextWeatherPreset.id);
+      }
+      void queryClient.invalidateQueries({ queryKey: ['system-status'] });
+    }
+  });
 
   const viewerState: ViewerState =
     viewMode !== 'current' || !selectedRun
@@ -532,7 +592,7 @@ export function ExecutionsPage() {
     if (viewMode === 'archive') {
       return {
         title: '归档任务视图',
-        description: '归档任务用于查看结果和再次执行，不再显示实时画面。'
+        description: '查看结果或再次执行。'
       };
     }
     if (!selectedRun) {
@@ -607,8 +667,8 @@ export function ExecutionsPage() {
       <CompactPageHeader
         className="compact-page-header--execution"
         stepLabel="Step 4 / Executions"
-        title="执行监控工作台"
-        description="执行页分成当前执行和任务归档。当前执行优先显示活跃批量任务，没有批量任务时自动接管独立场景 run。"
+        title="执行监控"
+        description="查看当前执行和历史任务。"
         contextSummary={
           selectedTask
             ? `${selectedTask.benchmark_name} / ${selectedTask.dut_model ?? '未登记 DUT'}`
@@ -748,9 +808,9 @@ export function ExecutionsPage() {
               subtitle={
                 selectedTask
                   ? viewMode === 'current'
-                    ? '按顺序执行当前批量任务中的场景。'
-                    : '归档任务可以在这里直接再次执行。'
-                  : '当前没有活跃批量任务，执行监控页已切换到独立场景运行模式。'
+                    ? '当前任务状态。'
+                    : '可重新执行已归档任务。'
+                  : '当前独立场景状态。'
               }
               title={
                 selectedTask
@@ -868,6 +928,36 @@ export function ExecutionsPage() {
             overlay={
               viewMode === 'current' ? (
                 <>
+                  {(hasFirstPersonView || hasThirdPersonView) && (
+                    <div className="project-console__toggle">
+                      {hasFirstPersonView && (
+                        <button
+                          className={
+                            selectedViewerView === 'first_person'
+                              ? 'project-console__toggle-item project-console__toggle-item--active'
+                              : 'project-console__toggle-item'
+                          }
+                          onClick={() => setSelectedViewerView('first_person')}
+                          type="button"
+                        >
+                          第一视角
+                        </button>
+                      )}
+                      {hasThirdPersonView && (
+                        <button
+                          className={
+                            selectedViewerView === 'third_person'
+                              ? 'project-console__toggle-item project-console__toggle-item--active'
+                              : 'project-console__toggle-item'
+                          }
+                          onClick={() => setSelectedViewerView('third_person')}
+                          type="button"
+                        >
+                          第三视角
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <button
                     className="horizon-button-secondary"
                     disabled={!selectedRun || stopCurrentRunMutation.isPending}
@@ -914,9 +1004,9 @@ export function ExecutionsPage() {
               subtitle={
                 selectedTask
                   ? viewMode === 'current'
-                    ? '只突出当前执行和等待中的场景，减少历史干扰。'
-                    : '查看历史场景执行结果。'
-                  : '当前展示独立场景 run 的执行与等待关系。'
+                    ? '当前场景和等待队列。'
+                    : '历史场景执行结果。'
+                  : '当前场景和等待队列。'
               }
               title={
                 selectedTask
@@ -1030,6 +1120,43 @@ export function ExecutionsPage() {
             }
           />
 
+          {viewMode === 'current' && (
+            <DetailPanel
+              subtitle="每次点击切到下一个天气预设。"
+              title="CARLA Weather"
+            >
+              <div className="studio-copy-stack">
+                <button
+                  className="horizon-button"
+                  disabled={
+                    cycleWeatherMutation.isPending ||
+                    !nextWeatherPreset
+                  }
+                  onClick={() => cycleWeatherMutation.mutate()}
+                  type="button"
+                >
+                  {cycleWeatherMutation.isPending
+                    ? '天气切换中...'
+                    : `切换天气${nextWeatherPreset ? ` · ${nextWeatherPreset.label}` : ''}`}
+                </button>
+
+                <p>
+                  {selectedRun
+                    ? '会立即切换全局天气。'
+                    : '当前没有活动场景，也可以切换全局天气。'}
+                </p>
+
+                {cycleWeatherMutation.error && (
+                  <p className="text-sm text-rose-600">{cycleWeatherMutation.error.message}</p>
+                )}
+
+                {cycleWeatherMutation.data && (
+                  <p className="text-sm text-emerald-600">{cycleWeatherMutation.data.message}</p>
+                )}
+              </div>
+            </DetailPanel>
+          )}
+
           <TelemetryPanel items={telemetryItems} subtitle="当前任务与当前场景状态" title="Telemetry" />
 
           {viewMode === 'current' ? (
@@ -1043,11 +1170,11 @@ export function ExecutionsPage() {
               />
             </DetailPanel>
           ) : (
-            <DetailPanel subtitle="归档任务支持直接重新执行，不需要重新手工编排" title="归档说明">
+            <DetailPanel subtitle="查看归档任务处理方式" title="归档说明">
               <div className="studio-copy-stack">
-                <p>1. 归档任务保留原始配置和执行结果。</p>
-                <p>2. 点击“再次执行”会复用原配置，生成新的任务实例。</p>
-                <p>3. 历史任务不会被覆盖，方便后续报告和结果对比。</p>
+                <p>1. 归档任务会保留原始配置和结果。</p>
+                <p>2. 点击“再次执行”会生成新的任务实例。</p>
+                <p>3. 历史任务不会被覆盖。</p>
               </div>
             </DetailPanel>
           )}

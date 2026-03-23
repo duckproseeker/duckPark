@@ -34,6 +34,141 @@ _SCENARIO_TEMPLATE_OVERRIDES: dict[str, dict[str, Any]] = {
             }
         },
     },
+    "town01_urban_loop": {
+        "category": "urban",
+        "parameters": {
+            "targetSpeedMps": {
+                "label": "自车目标速度",
+                "description": "平台内置自动驾驶的目标巡航速度。",
+                "type": "number",
+                "default": 8.0,
+                "min": 2.0,
+                "max": 16.0,
+                "step": 0.5,
+                "unit": "m/s",
+            }
+        },
+    },
+    "town02_suburb_cruise": {
+        "category": "suburb",
+        "parameters": {
+            "targetSpeedMps": {
+                "label": "自车目标速度",
+                "description": "平台内置自动驾驶的目标巡航速度。",
+                "type": "number",
+                "default": 8.5,
+                "min": 2.0,
+                "max": 16.0,
+                "step": 0.5,
+                "unit": "m/s",
+            }
+        },
+    },
+    "town03_intersection_sweep": {
+        "category": "intersection",
+        "parameters": {
+            "targetSpeedMps": {
+                "label": "自车目标速度",
+                "description": "平台内置自动驾驶的目标巡航速度。",
+                "type": "number",
+                "default": 7.5,
+                "min": 2.0,
+                "max": 16.0,
+                "step": 0.5,
+                "unit": "m/s",
+            }
+        },
+    },
+    "town03_rush_hour": {
+        "category": "dense_traffic",
+        "parameters": {
+            "targetSpeedMps": {
+                "label": "自车目标速度",
+                "description": "平台内置自动驾驶的目标巡航速度。",
+                "type": "number",
+                "default": 6.5,
+                "min": 2.0,
+                "max": 16.0,
+                "step": 0.5,
+                "unit": "m/s",
+            }
+        },
+    },
+    "town04_night_cruise": {
+        "category": "night",
+        "parameters": {
+            "targetSpeedMps": {
+                "label": "自车目标速度",
+                "description": "平台内置自动驾驶的目标巡航速度。",
+                "type": "number",
+                "default": 7.0,
+                "min": 2.0,
+                "max": 16.0,
+                "step": 0.5,
+                "unit": "m/s",
+            }
+        },
+    },
+    "town05_rainy_commute": {
+        "category": "weather",
+        "parameters": {
+            "targetSpeedMps": {
+                "label": "自车目标速度",
+                "description": "平台内置自动驾驶的目标巡航速度。",
+                "type": "number",
+                "default": 6.5,
+                "min": 2.0,
+                "max": 16.0,
+                "step": 0.5,
+                "unit": "m/s",
+            }
+        },
+    },
+    "town06_long_route": {
+        "category": "long_route",
+        "parameters": {
+            "targetSpeedMps": {
+                "label": "自车目标速度",
+                "description": "平台内置自动驾驶的目标巡航速度。",
+                "type": "number",
+                "default": 9.0,
+                "min": 2.0,
+                "max": 18.0,
+                "step": 0.5,
+                "unit": "m/s",
+            }
+        },
+    },
+    "town07_hillside_patrol": {
+        "category": "maneuver",
+        "parameters": {
+            "targetSpeedMps": {
+                "label": "自车目标速度",
+                "description": "平台内置自动驾驶的目标巡航速度。",
+                "type": "number",
+                "default": 7.0,
+                "min": 2.0,
+                "max": 16.0,
+                "step": 0.5,
+                "unit": "m/s",
+            }
+        },
+    },
+    "town10_dense_flow": {
+        "category": "dense_traffic",
+        "parameters": {
+            "targetSpeedMps": {
+                "label": "自车目标速度",
+                "description": "平台内置自动驾驶的目标巡航速度。",
+                "type": "number",
+                "default": 7.5,
+                "min": 2.0,
+                "max": 16.0,
+                "step": 0.5,
+                "unit": "m/s",
+            }
+        },
+    },
     "free_drive_sensor_collection": {
         "category": "data_collection",
         "parameters": {

@@ -50,6 +50,8 @@ class JetsonRtpCameraSettings:
     topic: str
     frame_id: str
     decoder: str
+    buffer_size: int = 4_194_304
+    jitter_latency_ms: int = 50
     swap_rb: bool = False
 
 
@@ -79,6 +81,16 @@ def parse_args(argv: list[str] | None = None) -> tuple[JetsonRtpCameraSettings, 
     parser.add_argument("--frame-id", default=os.getenv("JETSON_RTP_FRAME_ID", "camera"))
     parser.add_argument("--decoder", default=os.getenv("JETSON_RTP_DECODER", "nvv4l2decoder"))
     parser.add_argument(
+        "--buffer-size",
+        type=int,
+        default=int(os.getenv("JETSON_RTP_BUFFER_SIZE", "4194304")),
+    )
+    parser.add_argument(
+        "--jitter-latency-ms",
+        type=int,
+        default=int(os.getenv("JETSON_RTP_JITTER_LATENCY_MS", "50")),
+    )
+    parser.add_argument(
         "--swap-rb",
         action="store_true",
         default=env_flag("JETSON_RTP_SWAP_RB", default=False),
@@ -92,6 +104,8 @@ def parse_args(argv: list[str] | None = None) -> tuple[JetsonRtpCameraSettings, 
         topic=str(args.topic).strip() or "/image_raw",
         frame_id=str(args.frame_id).strip() or "camera",
         decoder=str(args.decoder).strip() or "nvv4l2decoder",
+        buffer_size=max(int(args.buffer_size), 0),
+        jitter_latency_ms=max(int(args.jitter_latency_ms), 0),
         swap_rb=bool(args.swap_rb),
     )
     return settings, ros_args
@@ -114,7 +128,9 @@ def build_gstreamer_pipeline(settings: JetsonRtpCameraSettings) -> str:
         )
 
     return (
-        f"udpsrc address={settings.host} port={settings.port} caps=\"{caps}\" ! "
+        f"udpsrc address={settings.host} port={settings.port} "
+        f"buffer-size={settings.buffer_size} caps=\"{caps}\" ! "
+        f"rtpjitterbuffer latency={settings.jitter_latency_ms} drop-on-latency=true ! "
         "queue max-size-buffers=4 leaky=downstream ! "
         f"{decode_chain} ! "
         "appsink drop=true max-buffers=1 sync=false"

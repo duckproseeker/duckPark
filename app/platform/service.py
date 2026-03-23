@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from app.core.config import get_settings
 from app.core.errors import AppError, ConflictError, ValidationError
 from app.core.models import (
     BenchmarkPlanningMode,
@@ -18,6 +19,8 @@ from app.core.models import (
     RunRecord,
 )
 from app.hil.evaluation_profiles import list_evaluation_profiles
+from app.hil.gateway_runtime_status import resolve_gateway_status
+from app.hil.pi_gateway_runtime import probe_pi_gateway
 from app.orchestrator.run_manager import RunManager
 from app.scenario.environment_presets import list_environment_presets
 from app.scenario.library import list_scenario_catalog
@@ -100,6 +103,22 @@ def _metadata_tag_value(metadata: dict[str, Any] | None, prefix: str) -> str | N
         value = tag[len(needle) :].strip()
         return value or None
     return None
+
+
+def _is_effectively_online_gateway(
+    gateway: Any,
+    *,
+    settings: Any,
+    checked_at: Any,
+    pi_gateway_status: dict[str, Any],
+) -> bool:
+    effective_status, _, _ = resolve_gateway_status(
+        gateway,
+        settings,
+        checked_at=checked_at,
+        pi_gateway_status=pi_gateway_status,
+    )
+    return effective_status in {"READY", "BUSY", "DEGRADED"}
 
 
 def _run_matches_project(run: RunRecord, project_id: str) -> bool:
@@ -233,6 +252,9 @@ class PlatformService:
         gateways = sorted(
             self._gateway_store.list(), key=lambda item: item.updated_at, reverse=True
         )
+        settings = get_settings()
+        checked_at = now_utc()
+        pi_gateway_status = probe_pi_gateway(settings)
         runnable_scenarios = self._runnable_scenarios()
         active_run_count = len(
             [
@@ -243,7 +265,16 @@ class PlatformService:
             ]
         )
         online_gateway_count = len(
-            [gateway for gateway in gateways if gateway.status.value in {"READY", "BUSY"}]
+            [
+                gateway
+                for gateway in gateways
+                if _is_effectively_online_gateway(
+                    gateway,
+                    settings=settings,
+                    checked_at=checked_at,
+                    pi_gateway_status=pi_gateway_status,
+                )
+            ]
         )
 
         return {
@@ -904,10 +935,20 @@ class PlatformService:
         gateways = sorted(
             self._gateway_store.list(), key=lambda item: item.updated_at, reverse=True
         )
+        settings = get_settings()
+        checked_at = now_utc()
+        pi_gateway_status = probe_pi_gateway(settings)
         captures = self.list_captures()
         benchmark_tasks = self.list_benchmark_tasks()
         online_gateways = [
-            gateway for gateway in gateways if gateway.status.value in {"READY", "BUSY"}
+            gateway
+            for gateway in gateways
+            if _is_effectively_online_gateway(
+                gateway,
+                settings=settings,
+                checked_at=checked_at,
+                pi_gateway_status=pi_gateway_status,
+            )
         ]
         running_captures = [capture for capture in captures if capture.status.value == "RUNNING"]
 

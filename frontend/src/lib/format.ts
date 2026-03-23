@@ -71,7 +71,7 @@ export function sortByActivity<T extends { status: string; updated_at_utc?: stri
     if (['RUNNING', 'STARTING', 'QUEUED', 'STOPPING', 'BUSY'].includes(status)) {
       return 0;
     }
-    if (['CREATED', 'READY'].includes(status)) {
+    if (['CREATED', 'READY', 'DEGRADED'].includes(status)) {
       return 1;
     }
     if (['FAILED', 'ERROR'].includes(status)) {

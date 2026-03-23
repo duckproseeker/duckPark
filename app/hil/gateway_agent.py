@@ -436,11 +436,17 @@ def determine_gateway_status(metrics: dict[str, Any], current_run_id: str | None
         return "ERROR"
     if not metrics.get("input_device_exists", False):
         return "ERROR"
-    if not metrics.get("gadget_driver_loaded", False):
-        return "ERROR"
-    if not metrics.get("gadget_video_device_exists", False):
-        return "ERROR"
+    # RTP-only / HTTP result pipelines can be healthy even when the optional UVC gadget
+    # side is not attached. Treat the gateway as online when DUT telemetry is flowing.
+    has_live_dut_result = bool(metrics.get("dut_received_at_utc"))
+    if not has_live_dut_result:
+        if not metrics.get("gadget_driver_loaded", False):
+            return "ERROR"
+        if not metrics.get("gadget_video_device_exists", False):
+            return "ERROR"
     if current_run_id or metrics.get("active_capture_id"):
+        return "BUSY"
+    if str(metrics.get("dut_status") or "").upper() == "RUNNING":
         return "BUSY"
     return "READY"
 

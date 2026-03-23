@@ -14,6 +14,23 @@
 
 阅读下面内容时，如果看到“ScenarioRunner 唯一主链”之类的表述，应把它理解为历史设计背景，而不是现行实现。
 
+## 当前落地口径
+
+截至当前仓库版本，Web 默认暴露的内置模板有这些约束：
+
+- 只暴露平台内置 `native_descriptor` 模板和少量保留的输入格式模板
+- 默认可见的巡航类模板都由平台 native runtime + Traffic Manager 自动驾驶控制 hero
+- 当前实机确认可用并已收口到目录里的模板地图为：
+  - `Town01`
+  - `Town02`
+  - `Town03`
+  - `Town04`
+  - `Town05`
+  - `Town10HD_Opt`
+- `Town06`、`Town07` 这类当前远端环境不存在的模板地图不应继续暴露到演示目录里
+
+如果文档后续还出现“模板目录可以随意换到任意 Town 地图”的描述，应按上面的实机可用地图约束理解当前行为。
+
 ## 背景
 
 当前平台已经支持通过 `GET /scenarios/catalog` 展示可运行场景，并通过 `POST /scenarios/launch` 生成 per-run 的 `scenario_launch_spec.json` 与 `generated_scenario.xosc`。

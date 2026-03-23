@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import io
 import json
 import zipfile
@@ -7,6 +8,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.api import routes_runs
+from app.api.carla_worker_runner import CarlaWorkerError
 from app.api.main import app
 from app.core.config import get_settings
 from app.core.models import EventLevel, RunEvent, RunStatus
@@ -484,6 +487,170 @@ def test_run_viewer_waits_for_ego_during_starting_run() -> None:
     viewer_ready_resp = client.get(f"/runs/{run_id}/viewer")
     assert viewer_ready_resp.status_code == 200
     assert viewer_ready_resp.json()["data"]["available"] is True
+
+
+def test_run_viewer_frame_returns_png_from_worker(monkeypatch) -> None:
+    client = TestClient(app)
+
+    create_resp = client.post("/runs", json={"descriptor": VALID_DESCRIPTOR})
+    assert create_resp.status_code == 200
+    run_id = create_resp.json()["data"]["run_id"]
+
+    settings = get_settings()
+    run_store = RunStore(settings.runs_root)
+    artifact_store = ArtifactStore(settings.artifacts_root)
+    run_store.transition(run_id, RunStatus.QUEUED)
+    run_store.transition(run_id, RunStatus.STARTING, set_started_at=True)
+    artifact_store.append_event(
+        RunEvent(
+            timestamp=now_utc(),
+            run_id=run_id,
+            level=EventLevel.INFO,
+            event_type="EGO_SPAWNED",
+            message="hero ready",
+            payload={"actor_id": 42},
+        )
+    )
+    run_store.transition(run_id, RunStatus.RUNNING)
+
+    expected_png = b"\x89PNG\r\n\x1a\nviewer-frame"
+    monkeypatch.setattr(
+        routes_runs,
+        "run_carla_worker",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "image_base64": base64.b64encode(expected_png).decode("ascii"),
+        },
+    )
+
+    frame_resp = client.get(f"/runs/{run_id}/viewer/frame")
+
+    assert frame_resp.status_code == 200
+    assert frame_resp.headers["content-type"] == "image/png"
+    assert frame_resp.content == expected_png
+
+
+def test_run_viewer_frame_returns_503_when_worker_fails(monkeypatch) -> None:
+    client = TestClient(app)
+
+    create_resp = client.post("/runs", json={"descriptor": VALID_DESCRIPTOR})
+    assert create_resp.status_code == 200
+    run_id = create_resp.json()["data"]["run_id"]
+
+    settings = get_settings()
+    run_store = RunStore(settings.runs_root)
+    artifact_store = ArtifactStore(settings.artifacts_root)
+    run_store.transition(run_id, RunStatus.QUEUED)
+    run_store.transition(run_id, RunStatus.STARTING, set_started_at=True)
+    artifact_store.append_event(
+        RunEvent(
+            timestamp=now_utc(),
+            run_id=run_id,
+            level=EventLevel.INFO,
+            event_type="EGO_SPAWNED",
+            message="hero ready",
+            payload={"actor_id": 42},
+        )
+    )
+    run_store.transition(run_id, RunStatus.RUNNING)
+
+    def raise_worker_error(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise CarlaWorkerError(status_code=503, detail="viewer worker timed out")
+
+    monkeypatch.setattr(routes_runs, "run_carla_worker", raise_worker_error)
+
+    frame_resp = client.get(f"/runs/{run_id}/viewer/frame")
+
+    assert frame_resp.status_code == 503
+    assert frame_resp.json()["detail"]["code"] == "RUN_VIEWER_UNAVAILABLE"
+    assert "viewer worker timed out" in frame_resp.json()["detail"]["message"]
+
+
+def test_run_viewer_stream_uses_persistent_worker(monkeypatch) -> None:
+    client = TestClient(app)
+
+    create_resp = client.post("/runs", json={"descriptor": VALID_DESCRIPTOR})
+    assert create_resp.status_code == 200
+    run_id = create_resp.json()["data"]["run_id"]
+
+    settings = get_settings()
+    run_store = RunStore(settings.runs_root)
+    artifact_store = ArtifactStore(settings.artifacts_root)
+    run_store.transition(run_id, RunStatus.QUEUED)
+    run_store.transition(run_id, RunStatus.STARTING, set_started_at=True)
+    artifact_store.append_event(
+        RunEvent(
+            timestamp=now_utc(),
+            run_id=run_id,
+            level=EventLevel.INFO,
+            event_type="EGO_SPAWNED",
+            message="hero ready",
+            payload={"actor_id": 42},
+        )
+    )
+    run_store.transition(run_id, RunStatus.RUNNING)
+
+    expected_png = b"\x89PNG\r\n\x1a\nviewer-stream"
+    frame_line = (
+        json.dumps(
+            {
+                "ok": True,
+                "mime": "image/png",
+                "image_base64": base64.b64encode(expected_png).decode("ascii"),
+            }
+        )
+        + "\n"
+    ).encode("utf-8")
+
+    class FakeStdout:
+        def __init__(self, chunks: list[bytes]) -> None:
+            self._chunks = list(chunks)
+
+        async def read(self, _n: int = -1) -> bytes:
+            if self._chunks:
+                return self._chunks.pop(0)
+            return b""
+
+    class FakeStderr:
+        async def read(self) -> bytes:
+            return b""
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.stdout = FakeStdout([frame_line])
+            self.stderr = FakeStderr()
+            self.returncode: int | None = None
+            self.terminated = False
+            self.killed = False
+
+        def terminate(self) -> None:
+            self.terminated = True
+            self.returncode = 0
+
+        def kill(self) -> None:
+            self.killed = True
+            self.returncode = -9
+
+        async def wait(self) -> int:
+            self.returncode = 0
+            return 0
+
+    created: dict[str, FakeProcess] = {}
+
+    async def fake_create_subprocess_exec(*args, **kwargs):  # type: ignore[no-untyped-def]
+        process = FakeProcess()
+        created["process"] = process
+        return process
+
+    monkeypatch.setattr(routes_runs.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    with client.websocket_connect(f"/ws/runs/{run_id}/viewer?view=third_person") as websocket:
+        payload = websocket.receive_json()
+
+    assert payload["type"] == "frame"
+    assert payload["mime"] == "image/png"
+    assert payload["image_base64"] == base64.b64encode(expected_png).decode("ascii")
+    assert created["process"].terminated is True
 
 
 def test_start_run_rejects_when_another_run_is_active() -> None:

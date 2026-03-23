@@ -38,6 +38,13 @@
   - 官方 `.xosc` 现在作为输入格式进入平台受控子集解析，而不是直接交给 `scenario_runner.py`
   - 当前受控子集重点覆盖地图、天气、参与者生成、时间/距离触发、`ChangeAutoPilot` 和简单 `KeepVelocity`
   - 不承诺完整覆盖全部 OpenSCENARIO 语义
+- 内置演示模板：
+  - 当前 Web 默认暴露的内置模板都走平台 `native runtime`
+  - `Town01`、`Town02`、`Town03`、`Town04`、`Town05`、`Town10HD_Opt` 是当前实机确认可用的模板地图
+  - `town10_autonomous_demo` 与其余内置巡航模板都由平台内置 Traffic Manager 自动驾驶控制 hero
+- 设备中心观测链：
+  - Jetson 指标回传到 Pi `dut_result_receiver` 之后，还需要 Pi `gateway_agent` 持续 heartbeat 到平台
+  - `设备中心 / 单 DUT 运行观测` 页面依赖这条 heartbeat 才会被判定为在线实时观测，而不只是旧快照
 
 ## 技术栈
 
@@ -142,6 +149,16 @@ carla_web_platform/
 - 平台模板场景走 `native_descriptor`
 - 官方 `.xosc` 场景走 `openscenario`
 - 两者最终都由平台 executor 内的 native runtime 执行
+- 当前默认可见的内置模板为 9 个：
+  - `town10_autonomous_demo`
+  - `town01_urban_loop`
+  - `town02_suburb_cruise`
+  - `town03_intersection_sweep`
+  - `town03_rush_hour`
+  - `town04_night_cruise`
+  - `town05_rainy_commute`
+  - `town10_dense_flow`
+  - `free_drive_sensor_collection`
 
 设计说明见：
 

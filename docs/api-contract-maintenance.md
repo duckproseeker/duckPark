@@ -43,10 +43,22 @@ make contract-sync
   - 后端：`app/api/routes_runs.py`
   - 前端 wrapper：`frontend/src/api/runs.ts`
   - 主要页面：`frontend/src/pages/executions/ExecutionsPage.tsx`、`frontend/src/pages/executions/ExecutionDetailPage.tsx`
+- `/system/carla/weather`
+  - 后端：`app/api/routes_carla.py`
+  - 前端 wrapper：`frontend/src/api/system.ts`
+  - 主要页面：`frontend/src/pages/executions/ExecutionsPage.tsx`
 - `/runs/{run_id}/environment`
   - 后端：`app/api/routes_runs.py`
   - 前端 wrapper：`frontend/src/api/runs.ts`
   - 主要页面：`frontend/src/pages/executions/ExecutionDetailPage.tsx`
+- `/system/pi-gateway`、`/system/pi-gateway/start`、`/system/pi-gateway/stop`
+  - 后端：`app/api/routes_system.py`
+  - 前端 wrapper：`frontend/src/api/system.ts`
+  - 主要页面：`frontend/src/pages/studio/StudioPage.tsx`
+- `/devices/workspace`
+  - 后端：`app/api/routes_devices.py`
+  - 前端 wrapper：`frontend/src/api/devices.ts`
+  - 主要页面：`frontend/src/pages/devices/DevicesPage.tsx`
 - `/runs/{run_id}/sensor-capture/start`、`/runs/{run_id}/sensor-capture/stop`
   - 后端：`app/api/routes_runs.py`
   - 前端 wrapper：`frontend/src/api/runs.ts`
@@ -88,6 +100,7 @@ npm run build
 
 ### 2. 运行时控制
 
+- `PUT /system/carla/weather`
 - `GET /runs/{run_id}/environment`
 - `POST /runs/{run_id}/environment`
 - `POST /runs/{run_id}/sensor-capture/start`
@@ -96,6 +109,7 @@ npm run build
 当前约定：
 
 - `runtime_control.weather` 和 `runtime_control.debug` 主要给 native run 用
+- 全局天气切换走 `/system/carla/weather`，不再要求绑定某个 run
 - `runtime_control.sensor_capture` 用来展示真实传感器采集状态
 - `runtime_control.recorder` 用来展示 CARLA recorder 的状态
 
@@ -136,6 +150,28 @@ npm run build
 - `RunPayload.achieved_tick_rate_hz`
 
 其中 `achieved_tick_rate_hz` 是当前观察 native runtime 实际执行速率的关键字段，远端联调和演示帧率对比时优先看它。
+
+### 4. 设备与网关观测
+
+- `GET /gateways`
+- `GET /devices/workspace`
+- `GET /system/pi-gateway`
+
+维护要点：
+
+- `GatewayRecord.status`
+- `GatewayRecord.status_detail`
+- `GatewayRecord.last_heartbeat_at_utc`
+- `GatewayRecord.metrics.dut_received_at_utc`
+- `GatewayRecord.metrics.output_fps`
+- `GatewayRecord.metrics.avg_latency_ms`
+- `GatewayRecord.metrics.temperature_c`
+
+当前现网心智模型：
+
+- `Pi chain READY` 只表示平台到 Pi 的 SSH / 启动命令链是可达的
+- `Gateway BUSY / READY / DEGRADED / OFFLINE` 才表示设备页会消费的实时观测状态
+- Jetson 指标即使已经写进 Pi `dut_result.json`，如果 Pi `gateway_agent` 没继续 heartbeat，设备页也只会看到旧快照或离线状态
 
 ## 生成物位置
 

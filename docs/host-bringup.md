@@ -119,6 +119,7 @@ bash hil_runtime/host/scripts/start_carla_headed.sh
 
 这个脚本会：
 
+- 先确保主机 `HDMI-0` 真正被激活为 `DP-0` 的镜像输出，避免 Pi 只有 HPD 没有 TMDS
 - 清掉冲突的旧 CARLA 容器
 - 启动 `carla-headed`
 - 等待 RPC 端口 ready
@@ -130,6 +131,15 @@ bash hil_runtime/host/scripts/start_carla_headed.sh
 docker ps | grep carla-headed
 docker logs --tail 100 carla-headed
 ```
+
+如果只想单独修主机 HDMI 镜像，可以先手动执行：
+
+```bash
+cd /home/du/ros2-humble/src
+bash hil_runtime/host/scripts/ensure_host_hdmi_mirror.sh
+```
+
+看到 `xrandr --listmonitors` 里同时出现 `DP-0` 和 `HDMI-0`，Pi 侧才有机会拿到稳定 TMDS/sync。
 
 如果要手动停掉：
 
@@ -160,6 +170,7 @@ bash hil_runtime/host/scripts/start_host_display_remote.sh
 
 当前默认行为：
 
+- 预览启动前会先确保主机 `HDMI-0` 已经被激活为镜像输出
 - display mode 为 `native_follow`
 - 默认等待 hero 的时间继承 `DUCKPARK_HIL_TIMEOUT_SECONDS`
 - 如果没有显式设置，就按 `86400` 秒等待，不会像旧版那样在 `90` 秒后自己退出
@@ -222,11 +233,14 @@ DUCKPARK_HOST_SRC_ROOT=/home/du/ros2-humble/src
 5. 从 Web 下发 `town10_autonomous_demo` 或 `free_drive_sensor_collection`
 6. 观察主机显示器上的 CARLA 跟车画面是否已经出来
 7. 再打开 Pi 和 Jetson 链路，确认 HDMI -> RTP -> 推理链继续成立
+8. 如果需要在 Web `设备中心 / 单 DUT 运行观测` 里看到在线曲线，再确认 Pi `gateway_agent` 正在持续 heartbeat
 
 补充说明：
 
 - 当前 `POST /scenarios/launch` 会按场景目录默认补齐 HIL 编排配置，因此这条入口更适合“真正演示链”。
 - 如果只是想验证 native runtime 核心链，不想把 Pi / Jetson sidecar 一起拉起来，建议直接走 `POST /runs`，或者使用 `python3 scripts/remote_smoke.py --mode core`。
+- 当前 Web 默认可见的内置模板已经限制在远端实机确认存在的地图集合内：`Town01`、`Town02`、`Town03`、`Town04`、`Town05`、`Town10HD_Opt`。
+- 内置巡航模板默认都由平台内置 Traffic Manager 自动驾驶控制 hero，不走官方 `ScenarioRunner` 主执行链。
 
 ## 6. 常见问题
 
@@ -254,6 +268,35 @@ DUCKPARK_HOST_SRC_ROOT=/home/du/ros2-humble/src
 - `HIL_HOST_DISPLAY_START_COMMAND`
 - SSH 回跳配置
 - 主机上 `/home/du/ros2-humble/src/hil_runtime/...` 是否存在
+
+### 设备中心看不到单 DUT 实时观测
+
+先分清两条状态链：
+
+- `Pi chain READY`
+  - 只代表平台能通过 SSH 触达 Pi，并能执行 Pi 链路启动命令
+- `Gateway BUSY / READY`
+  - 代表 Pi `gateway_agent` 正在把心跳和 DUT 指标持续上报到平台
+
+如果 Jetson 推理已经在跑，但 `设备中心` 仍然没有实时观测，优先检查：
+
+- Pi 上 `dut_result_receiver` 是否还在跑
+- Pi 上 `python3 -m app.hil.gateway_agent ...` 是否常驻
+- 平台 `GET /gateways` 返回的 `last_heartbeat_at_utc` 是否在持续刷新
+- 平台 `GET /devices/workspace` 返回的 `online_device_count` 是否大于 `0`
+
+在 Pi 上手动补起一次 `gateway_agent` 的最小命令：
+
+```bash
+cd /home/kavin/duckpark/carla_web_platform
+python3 -m app.hil.gateway_agent \
+  --api-base-url http://192.168.110.151:8000 \
+  --gateway-id rpi5-x1301-01 \
+  --gateway-name bench-a \
+  --input-video-device /dev/video0
+```
+
+如果只想做一次注入和状态确认，可以加 `--once`。
 
 ## 7. 关联文档
 

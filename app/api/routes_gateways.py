@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -14,6 +15,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError, NotFoundError, ValidationError
 from app.core.models import GatewayRecord
 from app.hil.evaluation_profiles import list_evaluation_profiles
+from app.hil.gateway_runtime_status import resolve_gateway_status
 from app.hil.gateway_registry import GatewayRegistry
 from app.storage.artifact_store import ArtifactStore
 from app.storage.gateway_store import GatewayStore
@@ -31,18 +33,35 @@ def get_gateway_registry() -> GatewayRegistry:
     )
 
 
-def gateway_to_payload(gateway: GatewayRecord) -> dict[str, Any]:
+def gateway_to_payload(
+    gateway: GatewayRecord,
+    *,
+    checked_at: datetime | None = None,
+    pi_gateway_status: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    settings = get_settings()
+    reference_time = checked_at or datetime.now(timezone.utc)
+    effective_status, heartbeat_age_seconds, status_detail = resolve_gateway_status(
+        gateway,
+        settings,
+        checked_at=reference_time,
+        pi_gateway_status=pi_gateway_status,
+    )
+    last_heartbeat_at_utc = to_iso8601(gateway.last_heartbeat_at)
+
     return {
         "gateway_id": gateway.gateway_id,
         "name": gateway.name,
-        "status": gateway.status.value,
+        "status": effective_status,
+        "status_detail": status_detail,
         "capabilities": gateway.capabilities,
         "metrics": gateway.metrics,
         "agent_version": gateway.agent_version,
         "address": gateway.address,
         "current_run_id": gateway.current_run_id,
-        "last_heartbeat_at_utc": to_iso8601(gateway.last_heartbeat_at),
+        "last_heartbeat_at_utc": last_heartbeat_at_utc,
         "last_seen_at_utc": to_iso8601(gateway.last_seen_at),
+        "heartbeat_age_seconds": heartbeat_age_seconds,
         "created_at_utc": to_iso8601(gateway.created_at),
         "updated_at_utc": to_iso8601(gateway.updated_at),
     }

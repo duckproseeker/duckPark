@@ -18,12 +18,16 @@ def test_scenario_catalog_and_environment_endpoints() -> None:
     catalog_resp = client.get("/scenarios/catalog")
     assert catalog_resp.status_code == 200
     items = catalog_resp.json()["data"]["items"]
-    assert len(items) >= 2
+    assert len(items) >= 9
     assert all(item["execution_support"] == "native" for item in items)
     assert all(item["execution_backend"] == "native" for item in items)
     assert all("launch_capabilities" in item for item in items)
     assert any(item["scenario_id"] == "town10_autonomous_demo" for item in items)
     assert any(item["scenario_id"] == "free_drive_sensor_collection" for item in items)
+    assert any(item["scenario_id"] == "town01_urban_loop" for item in items)
+    assert any(item["scenario_id"] == "town10_dense_flow" for item in items)
+    assert not any(item["scenario_id"] == "town06_long_route" for item in items)
+    assert not any(item["scenario_id"] == "town07_hillside_patrol" for item in items)
     assert not any(item["scenario_id"] == "osc_follow_leading_vehicle" for item in items)
 
     env_resp = client.get("/scenarios/environment-presets")
@@ -173,6 +177,9 @@ def test_scenario_catalog_marks_official_runner_items_when_environment_present(
     free_drive_item = next(
         item for item in items if item["scenario_id"] == "free_drive_sensor_collection"
     )
+    town03_item = next(
+        item for item in items if item["scenario_id"] == "town03_intersection_sweep"
+    )
     hidden_official_item = get_scenario_catalog_item("osc_follow_leading_vehicle")
     assert hidden_official_item is not None
     assert hidden_official_item["web_hidden"] is True
@@ -204,6 +211,10 @@ def test_scenario_catalog_marks_official_runner_items_when_environment_present(
     assert free_drive_item["parameter_schema"][0]["field"] == "targetSpeedMps"
     assert free_drive_item["descriptor_template"]["sensors"]["auto_start"] is False
     assert free_drive_item["descriptor_template"]["recorder"]["enabled"] is True
+    assert town03_item["default_map_name"] == "Town03"
+    assert town03_item["descriptor_template"]["traffic"]["num_vehicles"] == 22
+    assert town03_item["parameter_schema"][0]["field"] == "targetSpeedMps"
+    assert town03_item["parameter_schema"][0]["default"] == 7.5
 
 
 def test_launch_endpoint_generates_per_run_spec_and_xosc(tmp_path: Path, monkeypatch) -> None:
@@ -636,6 +647,59 @@ def test_launch_endpoint_uses_template_traffic_defaults_when_request_omits_traff
     assert spec_payload["descriptor"]["traffic"]["seed"] == payload["traffic"]["seed"]
     assert spec_payload["descriptor"]["traffic"]["injection_mode"] == "carla_api_near_ego"
     assert spec_payload["launch_request"]["traffic"] == {"seed": payload["traffic"]["seed"]}
+
+
+def test_launch_endpoint_uses_template_weather_defaults_when_request_omits_weather(
+    tmp_path: Path, monkeypatch
+) -> None:
+    scenario_runner_root = tmp_path / "scenario_runner"
+    (scenario_runner_root / "srunner" / "examples").mkdir(parents=True, exist_ok=True)
+    (scenario_runner_root / "scenario_runner.py").write_text(
+        "#!/usr/bin/env python3\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("SCENARIO_RUNNER_ROOT", str(scenario_runner_root))
+    monkeypatch.setenv("SENSOR_PROFILES_ROOT", str(tmp_path / "sensors"))
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    sensor_root = settings.sensor_profiles_root
+    sensor_root.mkdir(parents=True, exist_ok=True)
+    (sensor_root / "front_rgb.yaml").write_text(
+        "\n".join(
+            [
+                "profile_name: front_rgb",
+                "display_name: Front RGB",
+                "description: front rgb",
+                "sensors:",
+                "  - id: FrontRGB",
+                "    type: sensor.camera.rgb",
+                "    x: 1.5",
+                "    y: 0.0",
+                "    z: 1.7",
+                "    width: 1280",
+                "    height: 720",
+                "    fov: 90.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    client = TestClient(app)
+    resp = client.post(
+        "/scenarios/launch",
+        json={
+            "scenario_id": "town05_rainy_commute",
+            "auto_start": False,
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()["data"]
+    assert payload["weather"]["preset"] == "MidRainSunset"
+
+    spec_path = Path(payload["scenario_source"]["generated_spec_path"])
+    spec_payload = json.loads(spec_path.read_text(encoding="utf-8"))
+    assert spec_payload["descriptor"]["weather"]["preset"] == "MidRainSunset"
 
 
 def test_launch_endpoint_can_auto_queue_run(tmp_path: Path, monkeypatch) -> None:

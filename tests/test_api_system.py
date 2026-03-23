@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.api.main import app
+from app.api import routes_system
 from app.core.config import get_settings
 from app.orchestrator.queue import FileCommandQueue
 from app.storage.executor_store import ExecutorStore
@@ -67,3 +68,63 @@ def test_system_status_reports_live_executor_heartbeat() -> None:
     response = client.get("/system/status")
     assert response.status_code == 200
     assert "executor" in response.json()["data"]
+
+
+def test_system_status_includes_pi_gateway_status(monkeypatch) -> None:
+    monkeypatch.setattr(
+        routes_system,
+        "probe_pi_gateway",
+        lambda settings: {
+            "status": "OFFLINE",
+            "configured": True,
+            "reachable": False,
+            "host": "192.168.110.236",
+            "user": "kavin",
+            "port": 22,
+            "start_command_configured": True,
+            "stop_command_configured": True,
+            "last_probe_at_utc": "2026-03-23T00:00:00+00:00",
+            "warning": "No route to host",
+        },
+    )
+
+    client = TestClient(app)
+    response = client.get("/system/status")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]["pi_gateway"]
+    assert payload["status"] == "OFFLINE"
+    assert payload["reachable"] is False
+
+
+def test_pi_gateway_start_route_returns_command_result(monkeypatch) -> None:
+    monkeypatch.setattr(
+        routes_system,
+        "run_pi_gateway_command",
+        lambda settings, action: {
+            "action": action,
+            "success": True,
+            "exit_code": 0,
+            "output": "pi_rtp_started",
+            "status": {
+                "status": "READY",
+                "configured": True,
+                "reachable": True,
+                "host": "192.168.110.236",
+                "user": "kavin",
+                "port": 22,
+                "start_command_configured": True,
+                "stop_command_configured": True,
+                "last_probe_at_utc": "2026-03-23T00:00:00+00:00",
+                "warning": None,
+            },
+        },
+    )
+
+    client = TestClient(app)
+    response = client.post("/system/pi-gateway/start")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["action"] == "start"
+    assert payload["success"] is True

@@ -3,8 +3,11 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
+import { getDevicesWorkspace } from '../../api/devices';
 import { listScenarioCatalog, listSensorProfiles, saveSensorProfile } from '../../api/scenarios';
+import { getPiGatewayStatus, startPiGateway, stopPiGateway } from '../../api/system';
 import type {
+  PiGatewayCommandResult,
   ScenarioCatalogItem,
   SensorProfile,
   SensorProfileSavePayload,
@@ -15,6 +18,8 @@ import { JsonBlock } from '../../components/common/JsonBlock';
 import { MetricCard } from '../../components/common/MetricCard';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Panel } from '../../components/common/Panel';
+import { StatusPill } from '../../components/common/StatusPill';
+import { formatDateTime } from '../../lib/format';
 
 interface EditableSensorSpec extends SensorSpec {
   attributes_text: string;
@@ -179,12 +184,23 @@ export function StudioPage() {
     queryKey: ['sensor-profiles'],
     queryFn: listSensorProfiles
   });
+  const devicesWorkspaceQuery = useQuery({
+    queryKey: ['devices', 'workspace'],
+    queryFn: getDevicesWorkspace,
+    refetchInterval: 5000
+  });
+  const piGatewayQuery = useQuery({
+    queryKey: ['system', 'pi-gateway'],
+    queryFn: getPiGatewayStatus,
+    refetchInterval: 5000
+  });
   const catalogQuery = useQuery({
     queryKey: ['scenario-catalog'],
     queryFn: listScenarioCatalog
   });
 
   const sensorProfiles = sensorProfilesQuery.data ?? [];
+  const gateways = devicesWorkspaceQuery.data?.gateways ?? [];
   const catalogItems = catalogQuery.data ?? [];
   const editableScenarioCount = catalogItems.filter(
     (item) => item.launch_capabilities.sensor_profile_editable
@@ -218,6 +234,20 @@ export function StudioPage() {
       setSelectedProfileName(savedProfile.profile_name);
       setEditor(profileToEditor(savedProfile));
       await queryClient.invalidateQueries({ queryKey: ['sensor-profiles'] });
+    }
+  });
+  const piGatewayStartMutation = useMutation({
+    mutationFn: startPiGateway,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['system', 'pi-gateway'] });
+      await queryClient.invalidateQueries({ queryKey: ['devices', 'workspace'] });
+    }
+  });
+  const piGatewayStopMutation = useMutation({
+    mutationFn: stopPiGateway,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['system', 'pi-gateway'] });
+      await queryClient.invalidateQueries({ queryKey: ['devices', 'workspace'] });
     }
   });
 
@@ -268,12 +298,15 @@ export function StudioPage() {
       (selectedProfileName && item.launch_capabilities.sensor_profile_editable)
     );
   });
+  const latestPiGatewayMutation =
+    piGatewayStartMutation.data ?? piGatewayStopMutation.data ?? null;
+  const piGatewayBusy = piGatewayStartMutation.isPending || piGatewayStopMutation.isPending;
 
   return (
     <div className="page-stack studio-page">
       <PageHeader
         title="Studio"
-        description="把传感器模板作为运维资产维护。场景页只选择 profile_name，具体坐标、分辨率和高级参数都在这里按车型固定。"
+        description="管理传感器模板和网关状态。"
         actions={
           <div className="flex flex-wrap gap-3">
             <Link className="horizon-button-secondary" to="/scenario-sets">
@@ -302,10 +335,127 @@ export function StudioPage() {
         <MetricCard accent="orange" label="可用场景" value={editableScenarioCount} hint="支持直接选择传感器模板的场景数" />
       </div>
 
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <Panel
+          title="Pi 网关链路"
+          subtitle="查看状态并手动启动或停止。"
+          actions={
+            <div className="flex flex-wrap gap-3">
+              <button
+                className="horizon-button-secondary"
+                disabled={piGatewayBusy || !piGatewayQuery.data?.stop_command_configured}
+                onClick={() => piGatewayStopMutation.mutate()}
+                type="button"
+              >
+                {piGatewayStopMutation.isPending ? '停止中...' : '停止树莓派链路'}
+              </button>
+              <button
+                className="horizon-button"
+                disabled={piGatewayBusy || !piGatewayQuery.data?.start_command_configured}
+                onClick={() => piGatewayStartMutation.mutate()}
+                type="button"
+              >
+                {piGatewayStartMutation.isPending ? '启动中...' : '启动树莓派链路'}
+              </button>
+            </div>
+          }
+        >
+          {piGatewayQuery.isLoading ? (
+            <EmptyState title="正在探测 Pi 网关" description="正在读取状态。" />
+          ) : piGatewayQuery.isError ? (
+            <EmptyState
+              title="Pi 网关状态读取失败"
+              description={piGatewayQuery.error.message}
+            />
+          ) : piGatewayQuery.data ? (
+            <div className="studio-runtime-shell">
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusPill status={piGatewayQuery.data.status} />
+                <span className="studio-runtime-chip">
+                  {piGatewayQuery.data.host ?? '未配置主机'}:{piGatewayQuery.data.port ?? '-'}
+                </span>
+                <span className="studio-runtime-chip">
+                  用户 {piGatewayQuery.data.user ?? '未配置'}
+                </span>
+              </div>
+
+              <div className="studio-runtime-meta">
+                <div className="studio-runtime-stat">
+                  <span>最近探测</span>
+                  <strong>{formatDateTime(piGatewayQuery.data.last_probe_at_utc)}</strong>
+                </div>
+                <div className="studio-runtime-stat">
+                  <span>启动命令</span>
+                  <strong>{piGatewayQuery.data.start_command_configured ? '已配置' : '未配置'}</strong>
+                </div>
+                <div className="studio-runtime-stat">
+                  <span>停止命令</span>
+                  <strong>{piGatewayQuery.data.stop_command_configured ? '已配置' : '未配置'}</strong>
+                </div>
+              </div>
+
+              <p className="studio-runtime-note">
+                {piGatewayQuery.data.reachable
+                  ? '树莓派当前可达。'
+                  : '树莓派当前不可达，运行时会跳过 Pi 注入。'}
+              </p>
+
+              {piGatewayQuery.data.warning ? (
+                <p className="studio-inline-feedback studio-inline-feedback--error">
+                  {piGatewayQuery.data.warning}
+                </p>
+              ) : null}
+
+              {renderPiGatewayCommandFeedback(latestPiGatewayMutation)}
+            </div>
+          ) : null}
+        </Panel>
+
+        <Panel
+          title="已注册网关"
+          subtitle="查看最近心跳和当前运行。"
+        >
+          {devicesWorkspaceQuery.isLoading ? (
+            <EmptyState title="网关列表加载中" description="正在同步平台已注册设备。" />
+          ) : devicesWorkspaceQuery.isError ? (
+            <EmptyState
+              title="网关列表加载失败"
+              description={devicesWorkspaceQuery.error.message}
+            />
+          ) : gateways.length === 0 ? (
+            <EmptyState
+              title="当前没有已注册网关"
+              description="Agent 上报心跳后会显示在这里。"
+            />
+          ) : (
+            <div className="studio-gateway-list">
+              {gateways.map((gateway) => (
+                <article key={gateway.gateway_id} className="studio-gateway-card">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <StatusPill status={gateway.status} />
+                    <strong className="studio-gateway-card__title">{gateway.name}</strong>
+                  </div>
+                  <div className="studio-gateway-card__meta">
+                    <span>网关 ID: {gateway.gateway_id}</span>
+                    <span>最近心跳: {formatDateTime(gateway.last_heartbeat_at_utc)}</span>
+                    <span>当前运行: {gateway.current_run_id ?? '空闲'}</span>
+                  </div>
+                  {gateway.status_detail ? (
+                    <p className="mt-3 text-sm text-secondaryGray-500 dark:text-slate-400">
+                      {gateway.status_detail}
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+
       <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
         <Panel
           title="模板列表"
-          subtitle="左侧管理模板资产，右侧编辑具体传感器参数。"
+          subtitle="选择模板后在右侧编辑。"
           actions={
             sensorProfilesQuery.isLoading ? <span className="studio-panel-status">加载中...</span> : null
           }
@@ -347,7 +497,7 @@ export function StudioPage() {
         <div className="flex flex-col gap-5">
           <Panel
             title="模板编辑"
-            subtitle="坐标、姿态、分辨率和高级属性都在这里维护。保存后场景页会直接复用。"
+            subtitle="修改后保存即可。"
             actions={
               <button
                 className="horizon-button"
@@ -428,7 +578,7 @@ export function StudioPage() {
                     <div>
                       <strong className="studio-sensor-card__title">传感器 {index + 1}</strong>
                       <p className="studio-sensor-card__subtitle">
-                        建议按车型固定相对坐标，场景运行时只选模板名。
+                        按车型维护传感器参数。
                       </p>
                     </div>
                     <button
@@ -507,13 +657,13 @@ export function StudioPage() {
             ) : null}
             {saveMutation.data ? (
               <p className="studio-inline-feedback studio-inline-feedback--success">
-                已保存模板 {saveMutation.data.display_name}，场景页会在刷新后使用最新参数。
+                已保存模板 {saveMutation.data.display_name}。
               </p>
             ) : null}
           </Panel>
 
           <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <Panel className="studio-preview-panel" title="当前保存态" subtitle="便于对照 YAML 文件和最近一次保存结果。">
+            <Panel className="studio-preview-panel" title="当前保存态" subtitle="最近一次保存结果。">
               {selectedProfile ? (
                 <pre className="json-block json-block--compact studio-preview-block">{selectedProfile.raw_yaml}</pre>
               ) : (
@@ -521,12 +671,12 @@ export function StudioPage() {
               )}
             </Panel>
 
-            <Panel className="studio-preview-panel" title="待保存预览" subtitle="这里展示的是即将发给后端的 payload。">
+            <Panel className="studio-preview-panel" title="待保存预览" subtitle="即将提交的数据。">
               <JsonBlock compact value={previewPayload} />
             </Panel>
           </div>
 
-          <Panel title="模板使用范围" subtitle="方便确认哪些场景会引用当前模板。">
+          <Panel title="模板使用范围" subtitle="可使用当前模板的场景。">
             {selectedProfileName ? (
               selectedProfileScenarioDefaults.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
@@ -539,7 +689,7 @@ export function StudioPage() {
               ) : (
                 <EmptyState
                   title="当前没有默认绑定场景"
-                  description="不过支持传感器模板切换的场景依然可以在场景页里选用它。"
+                  description="可在支持模板切换的场景中手动选择。"
                 />
               )
             ) : (
@@ -548,6 +698,28 @@ export function StudioPage() {
           </Panel>
         </div>
       </div>
+    </div>
+  );
+}
+
+function renderPiGatewayCommandFeedback(result: PiGatewayCommandResult | null) {
+  if (!result) {
+    return null;
+  }
+
+  return (
+    <div className="studio-runtime-command">
+      <p
+        className={
+          result.success
+            ? 'studio-inline-feedback studio-inline-feedback--success'
+            : 'studio-inline-feedback studio-inline-feedback--error'
+        }
+      >
+        最近一次 {result.action === 'start' ? '启动' : '停止'}
+        {result.success ? '成功' : '失败'}，exit code {result.exit_code}。
+      </p>
+      {result.output ? <pre className="json-block json-block--compact studio-command-log">{result.output}</pre> : null}
     </div>
   );
 }

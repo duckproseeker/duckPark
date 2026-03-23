@@ -50,7 +50,7 @@ export function ExecutionDetailPage() {
 
   const [weatherDraft, setWeatherDraft] = useState<WeatherConfig>(defaultWeather);
   const [viewerFriendly, setViewerFriendly] = useState(false);
-  const [selectedViewerView, setSelectedViewerView] = useState('third_person');
+  const [selectedViewerView, setSelectedViewerView] = useState('first_person');
   const [viewerSnapshotSeed, setViewerSnapshotSeed] = useState(() => Date.now());
   const [streamFrameUrl, setStreamFrameUrl] = useState<string | null>(null);
   const [streamMessage, setStreamMessage] = useState<string | null>(null);
@@ -117,6 +117,8 @@ export function ExecutionDetailPage() {
   }, [environmentQuery.data]);
 
   useEffect(() => {
+    // TODO: Add a separate real-time stream path for the actual mounted sensor feed
+    // (for example FrontRGB) instead of only the synthetic viewer camera.
     const nextView = viewerQuery.data?.views?.[0]?.view_id;
     if (!nextView) {
       return;

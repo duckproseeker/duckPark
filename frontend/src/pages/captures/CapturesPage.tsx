@@ -108,7 +108,7 @@ export function CapturesPage() {
     <div className="page-stack">
       <PageHeader
         title="Captures"
-        description="阶段一目标只聚焦到树莓派保存帧。这里只做创建、启动、停止和 manifest 可视化。"
+        description="创建、启动和查看采集任务。"
         actions={
           <button className="horizon-button-secondary" onClick={() => void queryClient.invalidateQueries({ queryKey: ['captures'] })} type="button">
             刷新
@@ -219,13 +219,13 @@ export function CapturesPage() {
           <div className="mt-5 rounded-[20px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
             <span className="block text-[11px] font-extrabold uppercase tracking-[0.18em] text-secondaryGray-500">Write Path</span>
             <p className="mt-3 text-sm leading-6 text-secondaryGray-600">
-              当前采集链路的关键判断标准不是 UI 显示，而是 `saved_frames` 是否增长、`save_dir` 是否可达、manifest 是否持续追加。
+              重点关注 `saved_frames`、`save_dir` 和 manifest 状态。
             </p>
           </div>
         </Panel>
       </div>
 
-      <Panel title="采集列表" subtitle="列表直接显示保存帧数和保存目录，不再把 manifest 全摊开。">
+      <Panel title="采集列表" subtitle="查看采集状态、保存帧数和目录。">
         {filteredCaptures.length === 0 ? (
           <EmptyState title="没有匹配的采集任务" description="当前筛选条件下没有 capture 记录。" />
         ) : (

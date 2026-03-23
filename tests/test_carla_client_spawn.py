@@ -94,17 +94,25 @@ class FakeBlueprintLibrary:
 class FakeActor:
     _next_id = 1
 
-    def __init__(self, transform: FakeTransform) -> None:
+    def __init__(self, transform: FakeTransform, *, autopilot_error: Exception | None = None) -> None:
         self.id = FakeActor._next_id
         FakeActor._next_id += 1
         self._transform = transform
         self.autopilot_enabled = False
+        self.destroyed = False
+        self._autopilot_error = autopilot_error
 
     def set_autopilot(self, enabled: bool, traffic_manager_port: int) -> None:
+        _ = traffic_manager_port
+        if self._autopilot_error is not None:
+            raise self._autopilot_error
         self.autopilot_enabled = enabled
 
     def get_transform(self) -> FakeTransform:
         return self._transform
+
+    def destroy(self) -> None:
+        self.destroyed = True
 
 
 class FakeMap:
@@ -129,10 +137,12 @@ class FakeWorld:
         self,
         fake_map: FakeMap,
         blocked_locations: set[tuple[float, float, float]] | None = None,
+        autopilot_error: Exception | None = None,
     ) -> None:
         self._map = fake_map
         self._blueprint_library = FakeBlueprintLibrary()
         self._blocked_locations = blocked_locations or set()
+        self._autopilot_error = autopilot_error
 
     def get_map(self) -> FakeMap:
         return self._map
@@ -148,7 +158,7 @@ class FakeWorld:
         )
         if location_key in self._blocked_locations:
             return None
-        return FakeActor(transform)
+        return FakeActor(transform, autopilot_error=self._autopilot_error)
 
 
 class FakeClientForMaps:
@@ -164,16 +174,26 @@ class FakeClientForMaps:
         return {"map_name": map_name}
 
 
+class FakeLoadedWorld:
+    def __init__(self, map_name: str) -> None:
+        self._map = type("Map", (), {"name": map_name})()
+
+    def get_map(self) -> object:
+        return self._map
+
+
 def build_client(
     projected_transform: FakeTransform,
     spawn_points: list[FakeTransform],
     blocked_locations: set[tuple[float, float, float]] | None = None,
+    autopilot_error: Exception | None = None,
 ) -> CarlaClient:
     client = CarlaClient("127.0.0.1", 2000, 10.0, 8010)
     client._carla = FakeCarlaModule()
     client._world = FakeWorld(
         fake_map=FakeMap(FakeWaypoint(projected_transform), spawn_points),
         blocked_locations=blocked_locations,
+        autopilot_error=autopilot_error,
     )
     return client
 
@@ -261,6 +281,7 @@ def test_load_map_resolves_exact_tail_name() -> None:
         ["/Game/Carla/Maps/Town01", "/Game/Carla/Maps/Town10HD_Opt"]
     )
     client._client = fake_client
+    client._world = FakeLoadedWorld("/Game/Carla/Maps/Town10HD_Opt")
 
     resolved = client.load_map("Town01")
 
@@ -274,8 +295,34 @@ def test_load_map_resolves_known_town10_alias_to_town10hd() -> None:
         ["/Game/Carla/Maps/Town01", "/Game/Carla/Maps/Town10HD"]
     )
     client._client = fake_client
+    client._world = FakeLoadedWorld("/Game/Carla/Maps/Town01")
 
     resolved = client.load_map("Town10")
 
     assert resolved == "/Game/Carla/Maps/Town10HD"
     assert fake_client.loaded_map_name == "/Game/Carla/Maps/Town10HD"
+
+
+def test_spawn_traffic_vehicles_skips_tm_bind_failures_without_crashing_run() -> None:
+    projected_transform = FakeTransform(
+        FakeLocation(0.0, 0.0, 0.2),
+        FakeRotation(yaw=0.0),
+    )
+    spawn_point = FakeTransform(
+        FakeLocation(20.0, 20.0, 0.5),
+        FakeRotation(yaw=0.0),
+    )
+    client = build_client(
+        projected_transform,
+        [spawn_point],
+        autopilot_error=RuntimeError(
+            "trying to create rpc server for traffic manager; but the system failed to create because of bind error."
+        ),
+    )
+
+    spawned = client.spawn_traffic_vehicles(1, autopilot=True)
+
+    assert spawned == []
+    assert client.spawned_actors == []
+    assert client._tm is None
+    assert client._tm_unavailable_reason is not None

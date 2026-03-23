@@ -73,6 +73,18 @@ def test_determine_gateway_status_error_when_gadget_missing() -> None:
     assert determine_gateway_status(metrics, None) == "ERROR"
 
 
+def test_determine_gateway_status_ready_when_dut_telemetry_is_live_without_gadget() -> None:
+    metrics = {
+        "udc_present": True,
+        "input_device_exists": True,
+        "gadget_driver_loaded": False,
+        "gadget_video_device_exists": False,
+        "dut_received_at_utc": "2026-03-23T13:29:12Z",
+        "dut_status": "RUNNING",
+    }
+    assert determine_gateway_status(metrics, None) == "BUSY"
+
+
 def test_build_register_payload_contains_capabilities(tmp_path: Path) -> None:
     settings = make_settings(tmp_path)
     payload = build_register_payload(

@@ -482,9 +482,9 @@ export function ScenarioSetsPage() {
       <section className="project-console">
         <header className="project-console__header">
           <div>
-            <span className="project-console__eyebrow">场景控制层 / 场景工作台</span>
+            <span className="project-console__eyebrow">场景管理</span>
             <h1>场景启动台</h1>
-            <p>前端只负责选择地图、天气、背景参与者和剧本参数，底层的 per-run XOSC 或 native spec 由后端生成并统一交给平台 native runtime。</p>
+            <p>选择场景并创建运行。</p>
           </div>
 
           <div className="project-console__header-actions">
@@ -503,11 +503,15 @@ export function ScenarioSetsPage() {
               <div className="project-console__picker-copy">
                 <span className="project-console__section-label">场景选择</span>
                 <strong>{selectedScenario?.display_name ?? '尚未选择运行场景'}</strong>
-                <p>这里选的是测试剧本，底层执行模式和 XOSC 生成过程对前端保持隐藏。</p>
+                <p>选择要运行的场景。</p>
               </div>
 
               <div className="project-console__picker-actions">
-                {selectedScenario && <StatusPill canonical status="READY" />}
+                {selectedScenario && (
+                  <span className="project-console__state-chip project-console__state-chip--ready">
+                    场景已选
+                  </span>
+                )}
                 <button
                   className="project-console__picker-button"
                   onClick={() => setSelectorOpen(true)}
@@ -533,7 +537,16 @@ export function ScenarioSetsPage() {
                       <span className="project-console__section-label">运行前配置</span>
                       <strong>{selectedScenario.display_name}</strong>
                     </div>
-                    <StatusPill canonical status={autoStart ? 'RUNNING' : 'CREATED'} />
+                    <span
+                      className={[
+                        'project-console__state-chip',
+                        autoStart
+                          ? 'project-console__state-chip--warm'
+                          : 'project-console__state-chip--muted'
+                      ].join(' ')}
+                    >
+                      {autoStart ? '创建后立即执行' : '仅创建待启动'}
+                    </span>
                   </header>
 
                   <div className="project-console__form-stack">
@@ -585,13 +598,13 @@ export function ScenarioSetsPage() {
                           ))}
                         </select>
                         <small className="mt-2 block text-xs text-secondaryGray-500">
-                          坐标、姿态和分辨率在
+                          模板参数在
                           {' '}
                           <Link className="font-semibold text-brand-500 underline-offset-4 hover:underline" to="/studio">
                             运维页
                           </Link>
                           {' '}
-                          里按车型维护，这里只选模板名。
+                          维护。
                         </small>
                       </label>
 
@@ -660,28 +673,55 @@ export function ScenarioSetsPage() {
                         />
                         <small className="text-xs text-slate-500">
                           {selectedCapabilities?.timeout_editable === false
-                            ? '该演示场景默认长驻运行，请在执行页使用 Stop 手动结束。'
-                            : '用于重写场景剧本的最大观察时长，场景会按仿真时间结束。'}
+                            ? '该场景需要手动停止。'
+                            : '到时后会自动结束。'}
                         </small>
                       </label>
-
-                      <label className="field field--checkbox">
-                        <input
-                          checked={autoStart}
-                          onChange={(event) => setAutoStart(event.target.checked)}
-                          type="checkbox"
-                        />
-                        <span>创建后立即启动</span>
-                      </label>
                     </div>
+
+                    <section className="project-console__launch-card">
+                      <div className="project-console__launch-copy">
+                        <span className="project-console__section-label">启动模式</span>
+                        <strong>{autoStart ? '创建后立即执行' : '仅创建到执行队列'}</strong>
+                        <p>
+                          {autoStart
+                            ? '提交后立即执行。'
+                            : '提交后稍后手动启动。'}
+                        </p>
+                      </div>
+
+                      <div className="project-console__launch-controls">
+                        <span
+                          className={[
+                            'project-console__state-chip',
+                            autoStart
+                              ? 'project-console__state-chip--warm'
+                              : 'project-console__state-chip--muted'
+                          ].join(' ')}
+                        >
+                          {autoStart ? '自动启动' : '手动启动'}
+                        </span>
+
+                        <label className="project-console__launch-toggle">
+                          <input
+                            checked={autoStart}
+                            onChange={(event) => setAutoStart(event.target.checked)}
+                            type="checkbox"
+                          />
+                          <span className="project-console__launch-toggle-track">
+                            <span className="project-console__launch-toggle-thumb" />
+                          </span>
+                          <span className="project-console__launch-toggle-copy">
+                            立即执行
+                          </span>
+                        </label>
+                      </div>
+                    </section>
 
                     {selectedScenario.parameter_schema.length > 0 && (
                       <div className="space-y-4">
                         <div>
                           <span className="project-console__section-label">剧本参数</span>
-                          <p className="text-sm text-slate-500">
-                            这些字段由场景模板定义，会直接写入 per-run 的 runtime 输入文件。
-                          </p>
                         </div>
 
                         <div className="form-grid">
@@ -827,9 +867,6 @@ export function ScenarioSetsPage() {
                             ? '创建并启动场景'
                             : '创建场景运行'}
                       </button>
-                      <span className="inline-flex items-center rounded-full bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-600">
-                        统一进入平台 native 执行链路
-                      </span>
                     </div>
                   </div>
                 </section>
@@ -874,7 +911,11 @@ export function ScenarioSetsPage() {
                   <span className="project-console__section-label">当前接入</span>
                   <strong>运行上下文</strong>
                 </div>
-                {selectedScenario && <StatusPill canonical status="READY" />}
+                {selectedScenario && (
+                  <span className="project-console__state-chip project-console__state-chip--ready">
+                    已完成配置
+                  </span>
+                )}
               </header>
 
               {selectedScenario ? (
@@ -892,7 +933,7 @@ export function ScenarioSetsPage() {
                       {formatTemplateParamValue(parameter, templateParams[parameter.field])}
                     </p>
                   ))}
-                  <small>{autoStart ? '创建后会直接进入执行队列。' : '创建后停留在 CREATED，等待手动启动。'}</small>
+                  <small>{autoStart ? '创建后会直接执行。' : '创建后等待手动启动。'}</small>
                 </div>
               ) : (
                 <EmptyState description="选择场景后显示当前运行上下文。" title="没有运行上下文" />
@@ -950,7 +991,7 @@ export function ScenarioSetsPage() {
           </header>
 
           <div className="project-console__drawer-copy">
-            <p>这里展示的是测试剧本本身，不再暴露底层执行模式、XOSC 路径等实现细节。</p>
+            <p>请选择要运行的场景。</p>
           </div>
 
           {catalogQuery.isLoading ? (

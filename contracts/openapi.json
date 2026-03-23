@@ -5934,6 +5934,47 @@
         ]
       }
     },
+    "/system/carla/weather": {
+      "put": {
+        "operationId": "update_carla_weather_system_carla_weather_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WeatherPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "动态修改全局天气",
+        "tags": [
+          "全局仿真控制"
+        ]
+      }
+    },
     "/system/status": {
       "get": {
         "operationId": "get_system_status_system_status_get",
