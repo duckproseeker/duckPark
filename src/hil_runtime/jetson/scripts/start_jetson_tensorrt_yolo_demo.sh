@@ -5,6 +5,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 HIL_RUNTIME_ROOT=$(cd -- "${SCRIPT_DIR}/../.." && pwd)
 SRC_ROOT="${DUCKPARK_SRC_ROOT:-$(cd -- "${HIL_RUNTIME_ROOT}/.." && pwd)}"
 PROJECT_ROOT="${DUCKPARK_PLATFORM_ROOT:-${SRC_ROOT}/carla_web_platform}"
+TIME_SYNC_ENABLED="${JETSON_SYNC_TIME_FROM_PI:-1}"
 
 WORKSPACE_DIR="${JETSON_WORKSPACE_DIR:-$HOME/yolo_ros2}"
 WORKSPACE_SETUP="${JETSON_WORKSPACE_SETUP:-${WORKSPACE_DIR}/install/setup.bash}"
@@ -111,6 +112,10 @@ EOF
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   usage
   exit 0
+fi
+
+if [[ "${TIME_SYNC_ENABLED,,}" == "1" || "${TIME_SYNC_ENABLED,,}" == "true" || "${TIME_SYNC_ENABLED,,}" == "yes" || "${TIME_SYNC_ENABLED,,}" == "on" ]]; then
+  bash "${SCRIPT_DIR}/sync_jetson_time_from_pi.sh"
 fi
 
 if [[ ! -f "${ROS_SETUP}" ]]; then

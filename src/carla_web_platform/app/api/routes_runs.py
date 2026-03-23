@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
+import sys
 import zipfile
 from functools import lru_cache
 from pathlib import Path
@@ -10,6 +12,7 @@ from typing import Any, NoReturn
 from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
+from app.api.carla_worker_runner import CarlaWorkerError, run_carla_worker
 from app.api.schemas import (
     CreateRunRequest,
     RunCreatePayload,
@@ -45,7 +48,7 @@ from app.storage.run_control_store import (
 )
 from app.storage.run_store import RunStore
 from app.utils.time_utils import now_utc, to_iso8601
-from app.viewer.ego_snapshot import EgoSnapshotViewer, EgoSnapshotViewerError, list_viewer_views
+from app.viewer.ego_snapshot import list_viewer_views
 
 router = APIRouter(tags=["运行管理"])
 ACTIVE_VIEWER_STATUSES = {
@@ -54,12 +57,12 @@ ACTIVE_VIEWER_STATUSES = {
     RunStatus.PAUSED,
     RunStatus.STOPPING,
 }
-VIEWER_STREAM_INTERVAL_MS = 90
-VIEWER_STREAM_WIDTH = 640
-VIEWER_STREAM_HEIGHT = 360
-VIEWER_PLAYBACK_INTERVAL_MS = 100
-VIEWER_BUFFER_MIN_FRAMES = 5
-VIEWER_BUFFER_MAX_FRAMES = 18
+VIEWER_STREAM_INTERVAL_MS = 66
+VIEWER_STREAM_WIDTH = 800
+VIEWER_STREAM_HEIGHT = 450
+VIEWER_PLAYBACK_INTERVAL_MS = 66
+VIEWER_BUFFER_MIN_FRAMES = 2
+VIEWER_BUFFER_MAX_FRAMES = 6
 
 
 @lru_cache(maxsize=1)
@@ -334,25 +337,106 @@ def _viewer_preferred_spawn_point(
     return None
 
 
-def _build_snapshot_viewer(
+def _viewer_worker_payload(
     manager: RunManager,
     run_id: str,
     run: RunRecord,
     *,
-    width: int = 1280,
-    height: int = 720,
-) -> EgoSnapshotViewer:
+    width: int,
+    height: int,
+    view_id: str,
+) -> dict[str, Any]:
     settings = get_settings()
     events = manager.get_events(run_id)
-    return EgoSnapshotViewer(
-        host=settings.carla_host,
-        port=settings.carla_port,
-        timeout_seconds=settings.carla_timeout_seconds,
+    return {
+        "host": settings.carla_host,
+        "port": settings.carla_port,
+        "timeout_seconds": settings.carla_timeout_seconds,
+        "width": width,
+        "height": height,
+        "preferred_actor_id": _viewer_preferred_actor_id(events),
+        "preferred_spawn_point": _viewer_preferred_spawn_point(events, run),
+        "view_id": view_id,
+    }
+
+
+def _capture_viewer_frame_base64(
+    manager: RunManager,
+    run_id: str,
+    run: RunRecord,
+    *,
+    width: int,
+    height: int,
+    view_id: str,
+) -> str:
+    settings = get_settings()
+    worker_payload = run_carla_worker(
+        "app.api.carla_viewer_worker",
+        _viewer_worker_payload(
+            manager,
+            run_id,
+            run,
+            width=width,
+            height=height,
+            view_id=view_id,
+        ),
+        timeout_seconds=max(settings.carla_timeout_seconds, 5.0) + 5.0,
+    )
+    image_base64 = worker_payload.get("image_base64")
+    if not isinstance(image_base64, str) or not image_base64:
+        raise CarlaWorkerError(
+            status_code=503,
+            detail="viewer worker returned an empty frame payload.",
+        )
+    return image_base64
+
+
+def _viewer_stream_worker_payload(
+    manager: RunManager,
+    run_id: str,
+    run: RunRecord,
+    *,
+    width: int,
+    height: int,
+    view_id: str,
+) -> dict[str, Any]:
+    payload = _viewer_worker_payload(
+        manager,
+        run_id,
+        run,
         width=width,
         height=height,
-        preferred_actor_id=_viewer_preferred_actor_id(events),
-        preferred_spawn_point=_viewer_preferred_spawn_point(events, run),
+        view_id=view_id,
     )
+    payload["target_interval_ms"] = VIEWER_PLAYBACK_INTERVAL_MS
+    payload["capture_timeout_seconds"] = max(1.0, VIEWER_PLAYBACK_INTERVAL_MS / 1000.0 * 2.5)
+    return payload
+
+
+async def _read_worker_json_line(
+    stream: asyncio.StreamReader,
+    buffer: bytearray,
+    *,
+    max_bytes: int = 8 * 1024 * 1024,
+) -> bytes | None:
+    while True:
+        newline_index = buffer.find(b"\n")
+        if newline_index >= 0:
+            line = bytes(buffer[:newline_index])
+            del buffer[: newline_index + 1]
+            return line
+
+        chunk = await stream.read(65536)
+        if not chunk:
+            if buffer:
+                line = bytes(buffer)
+                buffer.clear()
+                return line
+            return None
+
+        buffer.extend(chunk)
+        if len(buffer) > max_bytes:
+            raise ValueError("viewer stream payload exceeded the safety limit")
 
 
 def _starting_run_has_spawned_ego(manager: RunManager, run_id: str) -> bool:
@@ -592,7 +676,7 @@ def get_run_viewer(run_id: str) -> RunViewerInfoResponse:
 )
 def get_run_viewer_frame(
     run_id: str,
-    view: str = Query(default="third_person"),
+    view: str = Query(default="first_person"),
 ) -> Response:
     manager = get_run_manager()
     try:
@@ -610,10 +694,17 @@ def get_run_viewer_frame(
             },
         )
 
-    viewer = _build_snapshot_viewer(manager, run_id, run)
     try:
-        png_bytes = viewer.capture_png_bytes(view_id=view)
-    except EgoSnapshotViewerError as exc:
+        image_base64 = _capture_viewer_frame_base64(
+            manager,
+            run_id,
+            run,
+            width=1280,
+            height=720,
+            view_id=view,
+        )
+        png_bytes = base64.b64decode(image_base64)
+    except (CarlaWorkerError, ValueError) as exc:
         raise HTTPException(
             status_code=503,
             detail={"code": "RUN_VIEWER_UNAVAILABLE", "message": str(exc)},
@@ -630,77 +721,142 @@ def get_run_viewer_frame(
 async def stream_run_viewer(websocket: WebSocket, run_id: str) -> None:
     await websocket.accept()
     manager = get_run_manager()
-    view = websocket.query_params.get("view", "third_person")
-    stream_session = None
+    view = websocket.query_params.get("view", "first_person")
+    worker_process: asyncio.subprocess.Process | None = None
+    stdout_buffer = bytearray()
 
     try:
+        try:
+            run = manager.get_run(run_id)
+        except AppError as exc:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "code": exc.code,
+                    "message": exc.message,
+                }
+            )
+            return
+
+        available, reason = _viewer_availability(manager, run_id, run)
+        if not available:
+            await websocket.send_json(
+                {
+                    "type": "unavailable",
+                    "run_id": run_id,
+                    "run_status": run.status.value,
+                    "reason": reason or "viewer 当前不可用",
+                }
+            )
+            return
+
+        worker_process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "app.api.carla_viewer_stream_worker",
+            json.dumps(
+                _viewer_stream_worker_payload(
+                    manager,
+                    run_id,
+                    run,
+                    width=VIEWER_STREAM_WIDTH,
+                    height=VIEWER_STREAM_HEIGHT,
+                    view_id=view,
+                ),
+                ensure_ascii=False,
+            ),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        assert worker_process.stdout is not None
+        assert worker_process.stderr is not None
+
         while True:
-            try:
-                run = manager.get_run(run_id)
-            except AppError as exc:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "code": exc.code,
-                        "message": exc.message,
-                    }
-                )
-                return
-
-            available, reason = _viewer_availability(manager, run_id, run)
-            if not available:
+            latest_run = manager.get_run(run_id)
+            latest_available, latest_reason = _viewer_availability(manager, run_id, latest_run)
+            if not latest_available:
                 await websocket.send_json(
                     {
                         "type": "unavailable",
                         "run_id": run_id,
-                        "run_status": run.status.value,
-                        "reason": reason or "viewer 当前不可用",
+                        "run_status": latest_run.status.value,
+                        "reason": latest_reason or "viewer 当前不可用",
+                    }
+                )
+                return
+
+            raw_line = await _read_worker_json_line(worker_process.stdout, stdout_buffer)
+            if not raw_line:
+                stderr_output = await worker_process.stderr.read()
+                stderr_text = stderr_output.decode("utf-8", errors="ignore").strip()
+                await websocket.send_json(
+                    {
+                        "type": "unavailable",
+                        "run_id": run_id,
+                        "run_status": latest_run.status.value,
+                        "reason": stderr_text or "viewer stream worker exited unexpectedly",
                     }
                 )
                 return
 
             try:
-                if stream_session is None:
-                    viewer = _build_snapshot_viewer(
-                        manager,
-                        run_id,
-                        run,
-                        width=VIEWER_STREAM_WIDTH,
-                        height=VIEWER_STREAM_HEIGHT,
-                    )
-                    stream_session = await asyncio.to_thread(
-                        viewer.open_stream_session, view_id=view
-                    )
-
-                png_bytes = await asyncio.to_thread(stream_session.capture_png_bytes, 2.5)
-                await websocket.send_json(
-                    {
-                        "type": "frame",
-                        "run_id": run_id,
-                        "run_status": run.status.value,
-                        "mime": "image/png",
-                        "image_base64": base64.b64encode(png_bytes).decode("ascii"),
-                    }
-                )
-            except EgoSnapshotViewerError as exc:
+                worker_payload = json.loads(raw_line.decode("utf-8"))
+            except json.JSONDecodeError:
                 await websocket.send_json(
                     {
                         "type": "unavailable",
                         "run_id": run_id,
-                        "run_status": run.status.value,
-                        "reason": str(exc),
+                        "run_status": latest_run.status.value,
+                        "reason": "viewer stream worker returned malformed payload",
                     }
                 )
-                if stream_session is not None:
-                    await asyncio.to_thread(stream_session.close)
-                    stream_session = None
+                return
 
-            await asyncio.sleep(VIEWER_STREAM_INTERVAL_MS / 1000)
+            if not worker_payload.get("ok"):
+                await websocket.send_json(
+                    {
+                        "type": "unavailable",
+                        "run_id": run_id,
+                        "run_status": latest_run.status.value,
+                        "reason": str(
+                            worker_payload.get("error") or "viewer stream unavailable"
+                        ),
+                    }
+                )
+                return
+
+            image_base64 = worker_payload.get("image_base64")
+            mime = str(worker_payload.get("mime") or "image/png")
+            if not isinstance(image_base64, str) or not image_base64:
+                await websocket.send_json(
+                    {
+                        "type": "unavailable",
+                        "run_id": run_id,
+                        "run_status": latest_run.status.value,
+                        "reason": "viewer stream worker returned an empty frame payload",
+                    }
+                )
+                return
+
+            await websocket.send_json(
+                {
+                    "type": "frame",
+                    "run_id": run_id,
+                    "run_status": latest_run.status.value,
+                    "mime": mime,
+                    "image_base64": image_base64,
+                }
+            )
     except WebSocketDisconnect:
         return
     finally:
-        if stream_session is not None:
-            await asyncio.to_thread(stream_session.close)
+        if worker_process is not None and worker_process.returncode is None:
+            worker_process.terminate()
+            try:
+                await asyncio.wait_for(worker_process.wait(), timeout=2.0)
+            except asyncio.TimeoutError:
+                worker_process.kill()
 
 
 @router.post(

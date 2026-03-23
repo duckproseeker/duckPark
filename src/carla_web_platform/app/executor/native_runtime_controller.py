@@ -121,10 +121,31 @@ class NativeRuntimeController:
                 self._settings.carla_timeout_seconds,
                 self._settings.traffic_manager_port,
             )
-            client.connect()
-            client.apply_traffic_seed(getattr(descriptor.traffic, "seed", None))
+            self._emit_event(run_id, "CARLA_CONNECTING", "正在建立 CARLA client 连接")
+            client.connect(connect_traffic_manager=False)
             self._emit_event(run_id, "CARLA_CONNECTED", "已连接 CARLA")
 
+            self._emit_event(
+                run_id,
+                "TRAFFIC_MANAGER_CONNECTING",
+                "正在等待 Traffic Manager 就绪",
+                payload={"traffic_manager_port": self._settings.traffic_manager_port},
+            )
+            client.connect_traffic_manager(
+                startup_timeout_seconds=max(
+                    self._settings.carla_timeout_seconds,
+                    15.0,
+                )
+            )
+            client.apply_traffic_seed(getattr(descriptor.traffic, "seed", None))
+            self._emit_event(run_id, "TRAFFIC_MANAGER_READY", "Traffic Manager 已就绪")
+
+            self._emit_event(
+                run_id,
+                "MAP_LOADING",
+                "正在加载目标地图",
+                payload={"requested_map_name": plan.map_name or descriptor.map_name},
+            )
             resolved_map_name = client.load_map(plan.map_name or descriptor.map_name)
             self._emit_event(
                 run_id,
@@ -136,9 +157,21 @@ class NativeRuntimeController:
                 },
             )
 
+            self._emit_event(
+                run_id,
+                "WEATHER_APPLYING",
+                "正在应用场景天气参数",
+                payload={"preset": descriptor.weather.preset},
+            )
             client.set_weather(
                 descriptor.weather.preset,
                 overrides=descriptor.weather.to_runtime_payload(),
+            )
+            self._emit_event(
+                run_id,
+                "WORLD_CONFIGURING",
+                "正在应用 world 同步配置",
+                payload={"sync_enabled": descriptor.sync.enabled},
             )
             client.configure_world_sync(descriptor.sync.enabled, descriptor.sync.fixed_delta_seconds)
             if descriptor.sync.enabled:
@@ -157,6 +190,7 @@ class NativeRuntimeController:
                     payload={"fixed_delta_seconds": descriptor.sync.fixed_delta_seconds},
                 )
 
+            self._emit_event(run_id, "PLAN_ENTITIES_SPAWNING", "正在生成场景实体")
             actors = self._spawn_plan_entities(run_id, client, descriptor, plan)
             hero_actor = next(
                 (

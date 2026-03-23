@@ -14,6 +14,7 @@ from app.api.routes_reports import router as reports_router
 from app.api.routes_runs import router as runs_router
 from app.api.routes_scenarios import router as scenarios_router
 from app.api.routes_system import router as system_router
+from app.api.routes_carla import router as carla_router
 from app.api.routes_ui import router as ui_router
 from app.core.logging import setup_logging
 
@@ -49,6 +50,7 @@ app.include_router(devices_router)
 app.include_router(captures_router)
 app.include_router(reports_router)
 app.include_router(system_router)
+app.include_router(carla_router)
 app.include_router(ui_router)
 
 

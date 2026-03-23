@@ -68,6 +68,28 @@ export interface SystemStatus {
   frontend: {
     bundle_present: boolean;
   };
+  pi_gateway: PiGatewayRuntimeStatus;
+}
+
+export interface PiGatewayRuntimeStatus {
+  status: 'READY' | 'OFFLINE' | 'UNKNOWN';
+  configured: boolean;
+  reachable: boolean;
+  host: string | null;
+  user: string | null;
+  port: number | null;
+  start_command_configured: boolean;
+  stop_command_configured: boolean;
+  last_probe_at_utc: string | null;
+  warning: string | null;
+}
+
+export interface PiGatewayCommandResult {
+  action: 'start' | 'stop';
+  success: boolean;
+  exit_code: number;
+  output: string | null;
+  status: PiGatewayRuntimeStatus;
 }
 
 export interface ScenarioDescriptor {
@@ -485,6 +507,7 @@ export interface GatewayRecord {
   gateway_id: string;
   name: string;
   status: string;
+  status_detail?: string | null;
   capabilities: Record<string, unknown>;
   metrics: Record<string, unknown>;
   agent_version: string | null;

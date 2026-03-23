@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+TIME_SYNC_ENABLED="${JETSON_SYNC_TIME_FROM_PI:-1}"
 
 BUILD_DIR="${JETSON_CPP_DETECTOR_BUILD_DIR:-$HOME/duckpark_cpp_detector/build}"
 BINARY_PATH="${JETSON_CPP_DETECTOR_BINARY:-${BUILD_DIR}/duckpark_cpp_detector}"
@@ -48,6 +49,10 @@ Examples:
   bash hil_runtime/jetson/scripts/start_jetson_cpp_detector.sh
 EOF
   exit 0
+fi
+
+if bool_flag "${TIME_SYNC_ENABLED}"; then
+  bash "${SCRIPT_DIR}/sync_jetson_time_from_pi.sh"
 fi
 
 if [[ ! -x "${BINARY_PATH}" ]]; then

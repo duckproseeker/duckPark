@@ -1,4 +1,11 @@
-export type StatusSemantic = 'RUNNING' | 'READY' | 'COMPLETED' | 'FAILED' | 'OFFLINE' | 'UNKNOWN';
+export type StatusSemantic =
+  | 'RUNNING'
+  | 'READY'
+  | 'DEGRADED'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'OFFLINE'
+  | 'UNKNOWN';
 
 const runningStatuses = new Set([
   'CREATED',
@@ -11,6 +18,7 @@ const runningStatuses = new Set([
 ]);
 
 const readyStatuses = new Set(['READY', 'ACTIVE', 'OFFICIAL', 'PILOT']);
+const degradedStatuses = new Set(['DEGRADED']);
 const completedStatuses = new Set(['COMPLETED']);
 const failedStatuses = new Set(['FAILED', 'ERROR', 'CANCELED', 'STOPPED', 'PARTIAL_FAILED']);
 const offlineStatuses = new Set(['OFFLINE', 'ARCHIVED']);
@@ -30,6 +38,9 @@ export function toStatusSemantic(status: string | null | undefined): StatusSeman
   if (readyStatuses.has(normalized)) {
     return 'READY';
   }
+  if (degradedStatuses.has(normalized)) {
+    return 'DEGRADED';
+  }
   if (completedStatuses.has(normalized)) {
     return 'COMPLETED';
   }
@@ -48,6 +59,9 @@ export function statusToneClass(semantic: StatusSemantic) {
   }
   if (semantic === 'READY') {
     return 'status-badge--ready';
+  }
+  if (semantic === 'DEGRADED') {
+    return 'status-badge--degraded';
   }
   if (semantic === 'COMPLETED') {
     return 'status-badge--completed';

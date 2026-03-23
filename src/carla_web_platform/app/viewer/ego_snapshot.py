@@ -24,10 +24,10 @@ VIEWER_VIEWS: tuple[ViewerView, ...] = (
         view_id="first_person",
         label="第一视角",
         transform={
-            "x": 0.35,
+            "x": 1.45,
             "y": 0.0,
-            "z": 1.25,
-            "pitch": 0.0,
+            "z": 1.62,
+            "pitch": -2.0,
             "yaw": 0.0,
             "roll": 0.0,
         },
@@ -131,14 +131,21 @@ class EgoSnapshotViewer:
             ) from exc
 
         self._carla = carla
-        self._client = carla.Client(self._host, self._port)
-        self._client.set_timeout(self._timeout_seconds)
-        self._world = self._client.get_world()
+        try:
+            self._client = carla.Client(self._host, self._port)
+            self._client.set_timeout(self._timeout_seconds)
+            self._world = self._client.get_world()
+        except Exception as exc:
+            # specifically catch carla.client.TimeoutException or other C++ aborts mapped to Python
+            raise EgoSnapshotViewerError(f"Failed to connect to CARLA world: {exc}") from exc
 
     def _refresh_world(self) -> None:
         if self._client is None:
             raise EgoSnapshotViewerError("CARLA client 未连接")
-        self._world = self._client.get_world()
+        try:
+            self._world = self._client.get_world()
+        except Exception as exc:
+            raise EgoSnapshotViewerError(f"Failed to refresh CARLA world: {exc}") from exc
 
     @staticmethod
     def _vehicle_sort_key(vehicle: Any) -> tuple[int, float]:
@@ -331,7 +338,7 @@ class EgoSnapshotViewer:
                 rgb_rows[write_offset + 2] = blue
                 write_offset += 3
 
-        compressed = zlib.compress(bytes(rgb_rows), level=6)
+        compressed = zlib.compress(bytes(rgb_rows), level=1)
         header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
         return b"".join(
             [

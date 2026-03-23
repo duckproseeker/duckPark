@@ -55,7 +55,7 @@ export function RunsPage() {
     <div className="page-stack">
       <PageHeader
         title="Runs"
-        description="这里只负责运行队列、状态、事件和故障处理。场景模板、环境参数和传感器 YAML 统一在 Studio 页面配置。"
+        description="查看运行队列、状态和处理结果。"
         actions={
           <div className="flex flex-wrap gap-3">
             <Link className="horizon-button" to="/studio">
@@ -85,7 +85,7 @@ export function RunsPage() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <Panel title="Filters" subtitle="保持运行列表短而稳定，优先盯活跃 run。">
+        <Panel title="Filters" subtitle="筛选当前运行列表。">
           <div className="form-grid">
             <label className="field">
               <span>状态</span>
@@ -119,7 +119,7 @@ export function RunsPage() {
           </div>
         </Panel>
 
-        <Panel title="Run Queue" subtitle="以卡片方式显示状态、时间、环境摘要和操作。">
+        <Panel title="Run Queue" subtitle="运行列表">
           {filteredRuns.length === 0 ? (
             <EmptyState title="没有匹配的运行" description="当前筛选条件下没有找到 run 记录。" />
           ) : (

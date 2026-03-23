@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import random
+import subprocess
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -84,18 +86,107 @@ class CarlaClient:
             self._tm = None
             self._tm_unavailable_reason = "traffic manager connection disabled by caller"
             return
+        self.connect_traffic_manager()
+
+    def connect_traffic_manager(self, *, startup_timeout_seconds: float | None = None) -> None:
+        if self._client is None:
+            raise CarlaClientError("CARLA client is not connected")
+        self._wait_for_traffic_manager_ready(
+            startup_timeout_seconds=startup_timeout_seconds
+        )
         try:
             self._tm = self._client.get_trafficmanager(self._traffic_manager_port)
             self._tm_unavailable_reason = None
-        except RuntimeError as exc:
+        except Exception as exc:
+            # specifically catch bind errors or timeouts during TM handshake
             self._tm = None
             self._tm_unavailable_reason = str(exc)
             logger.warning(
-                "Traffic Manager unavailable at %s:%s: %s",
+                "Traffic Manager unavailable at %s:%s (this process may not be the primary TM owner): %s",
                 self._host,
                 self._traffic_manager_port,
                 exc,
             )
+
+    def _wait_for_traffic_manager_ready(self, *, startup_timeout_seconds: float | None) -> None:
+        deadline = time.monotonic() + max(
+            self._timeout_seconds,
+            1.0 if startup_timeout_seconds is None else startup_timeout_seconds,
+        )
+        last_failure: str | None = None
+
+        while time.monotonic() < deadline:
+            remaining = max(1.0, deadline - time.monotonic())
+            command = [
+                sys.executable,
+                "-m",
+                "app.executor.traffic_manager_probe",
+                "--host",
+                self._host,
+                "--port",
+                str(self._port),
+                "--traffic-manager-port",
+                str(self._traffic_manager_port),
+                "--timeout-seconds",
+                str(min(self._timeout_seconds, remaining)),
+            ]
+            try:
+                completed = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=min(max(self._timeout_seconds, 1.0), remaining + 1.0),
+                )
+            except subprocess.TimeoutExpired as exc:
+                last_failure = (
+                    "traffic manager probe timed out while waiting for readiness"
+                )
+                time.sleep(1.0)
+                continue
+
+            if completed.returncode == 0:
+                return
+
+            stderr = (completed.stderr or "").strip()
+            stdout = (completed.stdout or "").strip()
+            last_failure = stderr or stdout or "traffic manager probe failed"
+            time.sleep(1.0)
+
+        raise CarlaClientError(
+            last_failure
+            or (
+                "Traffic Manager did not become ready within "
+                f"{max(self._timeout_seconds, startup_timeout_seconds or 1.0):.1f}s"
+            )
+        )
+
+    @staticmethod
+    def _is_tm_bind_error(exc: Exception) -> bool:
+        message = str(exc).lower()
+        return "bind error" in message and "traffic manager" in message
+
+    def _mark_tm_unavailable(self, exc: Exception, *, context: str, actor_id: int | None = None) -> bool:
+        if not self._is_tm_bind_error(exc):
+            return False
+        self._tm = None
+        self._tm_unavailable_reason = str(exc)
+        actor_label = "-" if actor_id is None else str(actor_id)
+        logger.warning(
+            "Traffic Manager bind failed during %s for actor %s: %s",
+            context,
+            actor_label,
+            exc,
+        )
+        return True
+
+    @staticmethod
+    def _destroy_actor_best_effort(actor: Any) -> None:
+        destroy = getattr(actor, "destroy", None)
+        if callable(destroy):
+            try:
+                destroy()
+            except Exception:
+                pass
 
     def apply_traffic_seed(self, seed: int | None) -> None:
         if seed is None or self._tm is None:
@@ -402,10 +493,23 @@ class CarlaClient:
         self._spawned_actors.append(actor)
         return actor
 
-    def set_vehicle_autopilot(self, vehicle: Any, enabled: bool) -> None:
+    def set_vehicle_autopilot(self, vehicle: Any, enabled: bool) -> bool:
         if vehicle is None:
-            return
-        vehicle.set_autopilot(enabled, self._traffic_manager_port)
+            return False
+        try:
+            vehicle.set_autopilot(enabled, self._traffic_manager_port)
+        except Exception as exc:
+            logger.error("Failed to set autopilot for vehicle %s: %s", vehicle.id, exc)
+            if self._mark_tm_unavailable(
+                exc,
+                context="vehicle.set_autopilot",
+                actor_id=int(getattr(vehicle, "id", 0) or 0),
+            ):
+                return False
+            raise CarlaClientError(
+                f"Failed to set autopilot for vehicle {getattr(vehicle, 'id', 'unknown')}: {exc}"
+            ) from exc
+        return True
 
     def configure_tm_autopilot(
         self,
@@ -420,39 +524,55 @@ class CarlaClient:
         if vehicle is None:
             return
 
-        self.set_vehicle_autopilot(vehicle, enabled)
+        autopilot_applied = self.set_vehicle_autopilot(vehicle, enabled)
         if not enabled:
             disable_constant_velocity = getattr(vehicle, "disable_constant_velocity", None)
             if callable(disable_constant_velocity):
                 disable_constant_velocity()
             return
+        if not autopilot_applied:
+            return
 
         if self._tm is not None:
-            if auto_lane_change is not None and hasattr(self._tm, "auto_lane_change"):
-                self._tm.auto_lane_change(vehicle, bool(auto_lane_change))
-            if (
-                distance_between_vehicles is not None
-                and hasattr(self._tm, "distance_to_leading_vehicle")
-            ):
-                self._tm.distance_to_leading_vehicle(vehicle, float(distance_between_vehicles))
-            if (
-                ignore_vehicles_percentage is not None
-                and hasattr(self._tm, "ignore_vehicles_percentage")
-            ):
-                self._tm.ignore_vehicles_percentage(
-                    vehicle, float(ignore_vehicles_percentage)
-                )
-            if (
-                target_speed_mps is not None
-                and hasattr(self._tm, "vehicle_percentage_speed_difference")
-            ):
-                speed_limit_kmh = max(float(getattr(vehicle, "get_speed_limit", lambda: 0.0)()), 1.0)
-                target_speed_kmh = max(0.0, float(target_speed_mps) * 3.6)
-                percentage = ((speed_limit_kmh - target_speed_kmh) / speed_limit_kmh) * 100.0
-                self._tm.vehicle_percentage_speed_difference(
-                    vehicle,
-                    max(-100.0, min(100.0, percentage)),
-                )
+            try:
+                if auto_lane_change is not None and hasattr(self._tm, "auto_lane_change"):
+                    self._tm.auto_lane_change(vehicle, bool(auto_lane_change))
+                if (
+                    distance_between_vehicles is not None
+                    and hasattr(self._tm, "distance_to_leading_vehicle")
+                ):
+                    self._tm.distance_to_leading_vehicle(vehicle, float(distance_between_vehicles))
+                if (
+                    ignore_vehicles_percentage is not None
+                    and hasattr(self._tm, "ignore_vehicles_percentage")
+                ):
+                    self._tm.ignore_vehicles_percentage(
+                        vehicle, float(ignore_vehicles_percentage)
+                    )
+                if (
+                    target_speed_mps is not None
+                    and hasattr(self._tm, "vehicle_percentage_speed_difference")
+                ):
+                    speed_limit_kmh = max(
+                        float(getattr(vehicle, "get_speed_limit", lambda: 0.0)()),
+                        1.0,
+                    )
+                    target_speed_kmh = max(0.0, float(target_speed_mps) * 3.6)
+                    percentage = ((speed_limit_kmh - target_speed_kmh) / speed_limit_kmh) * 100.0
+                    self._tm.vehicle_percentage_speed_difference(
+                        vehicle,
+                        max(-100.0, min(100.0, percentage)),
+                    )
+            except Exception as exc:
+                if self._mark_tm_unavailable(
+                    exc,
+                    context="configure_tm_autopilot",
+                    actor_id=int(getattr(vehicle, "id", 0) or 0),
+                ):
+                    return
+                raise CarlaClientError(
+                    f"Failed to configure Traffic Manager autopilot for vehicle {getattr(vehicle, 'id', 'unknown')}: {exc}"
+                ) from exc
             return
 
         if target_speed_mps is None or self._carla is None:
@@ -543,7 +663,9 @@ class CarlaClient:
             actor = self._world.try_spawn_actor(blueprint_obj, spawn_point)
             if actor is None:
                 continue
-            actor.set_autopilot(autopilot, self._traffic_manager_port)
+            if autopilot and not self.set_vehicle_autopilot(actor, True):
+                self._destroy_actor_best_effort(actor)
+                continue
             self._spawned_actors.append(actor)
             spawned.append(actor)
 
@@ -610,7 +732,9 @@ class CarlaClient:
             actor = self._world.try_spawn_actor(blueprint_obj, spawn_point)
             if actor is None:
                 continue
-            actor.set_autopilot(autopilot, self._traffic_manager_port)
+            if autopilot and not self.set_vehicle_autopilot(actor, True):
+                self._destroy_actor_best_effort(actor)
+                continue
             self._spawned_actors.append(actor)
             spawned.append(actor)
 

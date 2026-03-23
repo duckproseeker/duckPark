@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from app.core.models import EventLevel
+from app.hil.pi_gateway_runtime import probe_pi_gateway
 from app.utils.time_utils import now_utc
 
 
@@ -67,6 +68,30 @@ class HilRuntimeOrchestrator:
                 )
                 continue
 
+            if step.step_id == "pi_pipeline":
+                pi_gateway_status = probe_pi_gateway(self._settings)
+                if not pi_gateway_status["reachable"]:
+                    self._emit_event(
+                        run_id,
+                        "HIL_RUNTIME_STEP_SKIPPED",
+                        "树莓派网关当前不可达，已跳过虚拟传感器注入链路",
+                        payload={
+                            "step_id": step.step_id,
+                            "gateway_status": pi_gateway_status,
+                        },
+                        level=EventLevel.WARNING,
+                    )
+                    self._append_log(
+                        run_id,
+                        (
+                            "[hil_runtime:pi_pipeline] start skipped: "
+                            f"gateway unreachable host={pi_gateway_status['host']} "
+                            f"port={pi_gateway_status['port']} "
+                            f"warning={pi_gateway_status['warning']}"
+                        ),
+                    )
+                    continue
+
             self._emit_event(
                 run_id,
                 "HIL_RUNTIME_STEP_STARTING",
@@ -95,6 +120,15 @@ class HilRuntimeOrchestrator:
 
         env = self._build_command_env(run_id, run, descriptor)
         for step in reversed(started_steps):
+            if self._should_preserve_step_on_stop(step, run, descriptor):
+                self._emit_event(
+                    run_id,
+                    "HIL_RUNTIME_STEP_STOP_SKIPPED",
+                    f"{step.label} 按当前演示策略保留运行态",
+                    payload={"step_id": step.step_id},
+                    level=EventLevel.INFO,
+                )
+                continue
             if not step.stop_command:
                 self._emit_event(
                     run_id,
@@ -188,15 +222,24 @@ class HilRuntimeOrchestrator:
             return normalized
         return default
 
+    @staticmethod
+    def _should_preserve_step_on_stop(step: HilRuntimeStep, run: Any, descriptor: Any) -> bool:
+        if step.step_id != "host_carla":
+            return False
+        success_condition = str(
+            getattr(getattr(descriptor, "termination", None), "success_condition", "") or ""
+        ).strip().lower()
+        if success_condition in {"manual_stop", "manual_stop_only", "user_stop"}:
+            return True
+        return str(getattr(run, "scenario_name", "") or "").strip() == "town10_autonomous_demo"
+
     def _default_host_carla_start_command(self) -> str | None:
         if not self._settings.hil_runtime_root.exists():
             return None
         return "bash hil_runtime/host/scripts/start_carla_headed.sh"
 
     def _default_host_carla_stop_command(self) -> str | None:
-        if not self._settings.hil_runtime_root.exists():
-            return None
-        return "docker rm -f \"${CARLA_HEADED_CONTAINER_NAME:-carla-headed}\" >/dev/null 2>&1 || true"
+        return None
 
     def _default_host_display_start_command(self) -> str | None:
         if not self._settings.hil_runtime_root.exists():

@@ -50,6 +50,30 @@ def log(message: str) -> None:
 def parse_tegrastats_line(line: str) -> dict[str, float]:
     metrics: dict[str, float] = {}
 
+    ram_match = re.search(r"RAM\s+(\d+)/(\d+)MB", line)
+    if ram_match:
+        metrics["memory_used_mb"] = float(ram_match.group(1))
+        metrics["memory_total_mb"] = float(ram_match.group(2))
+
+    cpu_match = re.search(r"CPU\s+\[([^\]]+)\]", line)
+    if cpu_match:
+        cpu_samples = [
+            float(match.group(1))
+            for item in cpu_match.group(1).split(",")
+            if (match := re.search(r"(\d+(?:\.\d+)?)%@", item))
+        ]
+        if cpu_samples:
+            metrics["cpu_usage_percent"] = sum(cpu_samples) / len(cpu_samples)
+            metrics["cpu_peak_usage_percent"] = max(cpu_samples)
+
+    emc_match = re.search(r"EMC_FREQ\s+(\d+(?:\.\d+)?)%", line)
+    if emc_match:
+        metrics["emc_usage_percent"] = float(emc_match.group(1))
+
+    gpu_match = re.search(r"GR3D_FREQ\s+(\d+(?:\.\d+)?)%", line)
+    if gpu_match:
+        metrics["gpu_usage_percent"] = float(gpu_match.group(1))
+
     power_match = re.search(r"(?:POM_5V_IN|VDD_IN)\s+(\d+)(?:/\d+)?", line)
     if power_match:
         metrics["power_w"] = float(power_match.group(1)) / 1000.0
@@ -78,8 +102,16 @@ class TegrastatsSampler:
         self._process: subprocess.Popen[str] | None = None
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
-        self._power_samples: list[float] = []
-        self._temperature_samples: list[float] = []
+        self._metric_samples: dict[str, list[float]] = {
+            "power_w": [],
+            "temperature_c": [],
+            "cpu_usage_percent": [],
+            "cpu_peak_usage_percent": [],
+            "gpu_usage_percent": [],
+            "emc_usage_percent": [],
+            "memory_used_mb": [],
+            "memory_total_mb": [],
+        }
 
     def start(self) -> None:
         if not self._command.strip():
@@ -106,12 +138,14 @@ class TegrastatsSampler:
             if self._verbose and line:
                 log(f"tegrastats {line}")
             parsed = parse_tegrastats_line(line)
-            power = parsed.get("power_w")
-            temperature = parsed.get("temperature_c")
-            if power is not None:
-                self._power_samples.append(power)
-            if temperature is not None:
-                self._temperature_samples.append(temperature)
+            for key, value in parsed.items():
+                if value is None:
+                    continue
+                samples = self._metric_samples.get(key)
+                if samples is None:
+                    samples = []
+                    self._metric_samples[key] = samples
+                samples.append(value)
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -125,17 +159,30 @@ class TegrastatsSampler:
             self._thread.join(timeout=1)
 
     def summary(self) -> dict[str, float | None]:
-        power_avg = (
-            sum(self._power_samples) / len(self._power_samples) if self._power_samples else None
-        )
-        temperature_avg = (
-            sum(self._temperature_samples) / len(self._temperature_samples)
-            if self._temperature_samples
-            else None
-        )
+        power_samples = self._metric_samples.get("power_w", [])
+        temperature_samples = self._metric_samples.get("temperature_c", [])
+        cpu_samples = self._metric_samples.get("cpu_usage_percent", [])
+        cpu_peak_samples = self._metric_samples.get("cpu_peak_usage_percent", [])
+        gpu_samples = self._metric_samples.get("gpu_usage_percent", [])
+        emc_samples = self._metric_samples.get("emc_usage_percent", [])
+        memory_used_samples = self._metric_samples.get("memory_used_mb", [])
+        memory_total_samples = self._metric_samples.get("memory_total_mb", [])
+
+        def _avg(values: list[float]) -> float | None:
+            return (sum(values) / len(values)) if values else None
+
         return {
-            "power_w": power_avg,
-            "temperature_c": temperature_avg,
+            "power_w": _avg(power_samples),
+            "temperature_c": _avg(temperature_samples),
+            "temperature_max_c": max(temperature_samples) if temperature_samples else None,
+            "cpu_usage_percent": _avg(cpu_samples),
+            "cpu_peak_usage_percent": _avg(cpu_peak_samples),
+            "gpu_usage_percent": _avg(gpu_samples),
+            "emc_usage_percent": _avg(emc_samples),
+            "memory_used_mb": _avg(memory_used_samples),
+            "memory_total_mb": (
+                memory_total_samples[-1] if memory_total_samples else None
+            ),
         }
 
 

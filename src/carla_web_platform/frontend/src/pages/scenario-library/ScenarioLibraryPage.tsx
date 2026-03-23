@@ -28,18 +28,18 @@ export function ScenarioLibraryPage() {
     <div className="page-stack">
       <PageHeader
         title="Scenario Library"
-        description="场景目录默认走平台 native runtime。这里主要用来核对模板元数据、默认 descriptor 和 xosc 来源。"
+        description="查看场景目录和默认配置。"
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard accent="blue" label="Catalog Items" value={catalogItems.length} hint="场景库总条目数" />
-        <MetricCard accent="teal" label="Native Runtime" value={nativeCount} hint="默认由平台 native runtime 执行" />
-        <MetricCard accent="violet" label="Linked XOSC" value={linkedXoscCount} hint="当前工作区里能直接定位到的 xosc 文件" />
+        <MetricCard accent="teal" label="Native Runtime" value={nativeCount} hint="使用 native 的场景数" />
+        <MetricCard accent="violet" label="Linked Files" value={linkedXoscCount} hint="已关联文件数" />
         <MetricCard accent="orange" label="Selected Support" value={supportFilter.toUpperCase()} hint="当前筛选模式" />
       </div>
 
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.35fr)_420px]">
-        <Panel title="Scenario Catalog" subtitle="目录条目默认指向 native runtime，页面保留 support 维度方便核对兼容情况。">
+        <Panel title="Scenario Catalog" subtitle="场景列表">
           <div className="mb-4 flex flex-wrap gap-3">
             {[
               { label: 'ALL', value: 'all' as const },
@@ -99,7 +99,7 @@ export function ScenarioLibraryPage() {
         </Panel>
 
         <div className="flex flex-col gap-5">
-          <Panel title="Template Preview" subtitle="用来核对默认地图、天气和传感器块结构。">
+          <Panel title="Template Preview" subtitle="默认配置">
             {selectedItem ? (
               <JsonBlock compact value={selectedItem.descriptor_template} />
             ) : (
@@ -107,7 +107,7 @@ export function ScenarioLibraryPage() {
             )}
           </Panel>
 
-          <Panel title="Source Metadata" subtitle="官方模板来源和当前执行支持状态。">
+          <Panel title="Source Metadata" subtitle="来源与执行支持">
             {selectedItem ? (
               <JsonBlock
                 compact

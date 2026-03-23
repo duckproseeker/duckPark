@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 
+from app.api import routes_gateways
 from app.core.config import get_settings
+from app.core.models import GatewayRecord, GatewayStatus
 from fastapi.testclient import TestClient
 
 from app.api.main import app
@@ -145,3 +149,48 @@ def test_register_gateway_recovers_from_malformed_existing_file() -> None:
     payload = json.loads(malformed_path.read_text(encoding="utf-8"))
     assert payload["gateway_id"] == "rpi5-x1301-01"
     assert payload["name"] == "bench-a"
+
+
+def test_gateway_payload_marks_stale_but_reachable_pi_as_degraded(monkeypatch) -> None:
+    settings = replace(
+        get_settings(),
+        duckpark_pi_host="192.168.110.236",
+        duckpark_pi_user="kavin",
+        hil_gateway_stale_seconds=15.0,
+    )
+    monkeypatch.setattr(routes_gateways, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "app.hil.gateway_runtime_status.probe_pi_gateway",
+        lambda current_settings: {
+            "status": "READY",
+            "configured": True,
+            "reachable": True,
+            "host": "192.168.110.236",
+            "user": "kavin",
+            "port": 22,
+            "start_command_configured": True,
+            "stop_command_configured": True,
+            "last_probe_at_utc": "2026-03-23T00:00:00+00:00",
+            "warning": None,
+        },
+    )
+
+    gateway = GatewayRecord(
+        gateway_id="rpi5-x1301-01",
+        name="bench-a",
+        status=GatewayStatus.READY,
+        capabilities={},
+        metrics={},
+        agent_version="0.1.0",
+        address="192.168.110.236",
+        current_run_id=None,
+        last_heartbeat_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+        last_seen_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    payload = routes_gateways.gateway_to_payload(gateway)
+
+    assert payload["status"] == "DEGRADED"
+    assert payload["status_detail"] == "Pi chain reachable but gateway heartbeat is stale"

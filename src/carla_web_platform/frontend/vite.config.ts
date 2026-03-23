@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
-  const backendTarget = env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  const backendTarget = env.DEV_API_TARGET || env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
   const apiProxyPaths = [
     '/healthz',
     '/runs',
@@ -16,10 +16,14 @@ export default defineConfig(({ mode }) => {
     '/projects',
     '/benchmark-definitions',
     '/benchmark-tasks',
-    '/reports'
+    '/reports',
+    '/devices'
   ];
-  const httpProxyEntries = apiProxyPaths.reduce<Record<string, string>>((accumulator, path) => {
-    accumulator[path] = backendTarget;
+  const httpProxyEntries = apiProxyPaths.reduce<Record<string, any>>((accumulator, path) => {
+    accumulator[path] = {
+      target: backendTarget,
+      changeOrigin: true
+    };
     return accumulator;
   }, {});
 

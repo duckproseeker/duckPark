@@ -132,6 +132,23 @@ def log_running_snapshot(metrics: dict[str, Any]) -> None:
     )
 
 
+def poll_final_metrics(
+    monitor: MetricsFileMonitor,
+    *,
+    poll_interval_seconds: float,
+    wait_timeout_seconds: float = 1.0,
+) -> None:
+    deadline = time.monotonic() + max(wait_timeout_seconds, 0.0)
+    while time.monotonic() < deadline:
+        changed = monitor.poll()
+        if changed:
+            # Give the detector one more short window in case it is still flushing.
+            time.sleep(max(poll_interval_seconds, 0.05))
+            continue
+        time.sleep(0.05)
+    monitor.poll()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     result_file = Path(args.result_file).expanduser() if args.result_file else None
@@ -200,6 +217,10 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         tegrastats.stop()
 
+    poll_final_metrics(
+        monitor,
+        poll_interval_seconds=args.poll_interval_seconds,
+    )
     final_metrics = build_metrics_snapshot(monitor, tegrastats)
     payload = build_result_payload(
         args,

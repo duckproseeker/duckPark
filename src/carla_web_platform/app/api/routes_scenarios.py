@@ -5,6 +5,7 @@ import shutil
 
 from fastapi import APIRouter, HTTPException
 
+from app.api.carla_worker_runner import CarlaWorkerError, run_carla_worker
 from app.api.routes_runs import get_run_manager, raise_http_error, run_to_payload
 from app.api.schemas import (
     ApiResponse,
@@ -17,7 +18,6 @@ from app.api.schemas import (
 )
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.executor.carla_client import CarlaClient
 from app.scenario.environment_presets import list_environment_presets
 from app.scenario.launch_builder import (
     build_generated_scenario_source,
@@ -25,7 +25,7 @@ from app.scenario.launch_builder import (
     write_launch_artifacts,
 )
 from app.scenario.library import get_scenario_catalog_item, list_scenario_catalog
-from app.scenario.maps import collapse_available_maps, fallback_runtime_map_options
+from app.scenario.maps import fallback_runtime_map_options
 from app.scenario.sensor_profiles import (
     build_sensor_config_from_profile,
     get_sensor_profile,
@@ -67,17 +67,16 @@ def _default_hil_config_for_launch(catalog_item: dict[str, object]) -> dict[str,
 
 def fetch_available_maps() -> list[dict[str, str]]:
     settings = get_settings()
-    client = CarlaClient(
-        settings.carla_host,
-        settings.carla_port,
-        settings.carla_timeout_seconds,
-        settings.traffic_manager_port,
-    )
-
     try:
-        client.connect()
-        available_maps = client.get_available_maps()
-    except Exception as exc:  # noqa: BLE001
+        worker_payload = run_carla_worker(
+            "app.api.carla_maps_worker",
+            {},
+            timeout_seconds=max(settings.carla_timeout_seconds, 5.0) + 2.0,
+        )
+        maps = worker_payload.get("maps")
+        if isinstance(maps, list):
+            return maps
+    except CarlaWorkerError as exc:
         fallback_items = fallback_runtime_map_options()
         if fallback_items:
             return fallback_items
@@ -85,11 +84,10 @@ def fetch_available_maps() -> list[dict[str, str]]:
             status_code=503,
             detail={
                 "code": "CARLA_MAPS_UNAVAILABLE",
-                "message": f"获取 CARLA 地图列表失败: {exc}",
+                "message": exc.detail,
             },
         ) from exc
-
-    return collapse_available_maps(available_maps)
+    return fallback_runtime_map_options()
 
 
 def _sensor_profile_list_payload(settings_root) -> SensorProfileListPayload:

@@ -17,6 +17,9 @@ function chartColorForStatus(status: string) {
   if (status === 'COMPLETED' || status === 'READY') {
     return '#01B574';
   }
+  if (status === 'DEGRADED') {
+    return '#FFB547';
+  }
   if (status === 'FAILED' || status === 'ERROR' || status === 'CANCELED') {
     return '#EE5D50';
   }
@@ -49,7 +52,7 @@ export function OverviewPage() {
   const gateways = sortByActivity(gatewaysQuery.data ?? []);
   const captures = sortByActivity(capturesQuery.data ?? []);
   const activeRuns = runs.filter((item) => ['CREATED', 'QUEUED', 'STARTING', 'RUNNING', 'STOPPING'].includes(item.status));
-  const onlineGateways = gateways.filter((item) => ['READY', 'BUSY'].includes(item.status));
+  const onlineGateways = gateways.filter((item) => ['READY', 'BUSY', 'DEGRADED'].includes(item.status));
   const activeCaptures = captures.filter((item) => item.status === 'RUNNING');
   const completedCaptures = captures.filter((item) => item.status === 'COMPLETED').length;
   const systemStatus = systemQuery.data;
@@ -188,7 +191,7 @@ export function OverviewPage() {
           hint={`队列 ${systemStatus?.executor.pending_commands ?? 0}`}
         />
         <MetricCard accent="teal" label="活跃运行" value={activeRuns.length} hint="CREATED / QUEUED / RUNNING" />
-        <MetricCard accent="orange" label="在线网关" value={onlineGateways.length} hint="READY / BUSY" />
+        <MetricCard accent="orange" label="在线网关" value={onlineGateways.length} hint="READY / BUSY / DEGRADED" />
         <MetricCard accent="teal" label="运行中采集" value={activeCaptures.length} hint="RUNNING" />
       </div>
 

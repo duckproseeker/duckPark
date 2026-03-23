@@ -105,7 +105,11 @@ class Settings:
     hil_runtime_workdir: Path
     hil_orchestration_enabled: bool
     hil_command_timeout_seconds: float
+    hil_gateway_stale_seconds: float
     hil_platform_base_url: str | None
+    duckpark_pi_host: str | None
+    duckpark_pi_user: str | None
+    duckpark_pi_port: int
     hil_host_carla_start_command: str | None
     hil_host_carla_stop_command: str | None
     hil_host_display_start_command: str | None
@@ -233,7 +237,21 @@ def get_settings() -> Settings:
         hil_command_timeout_seconds=float(
             os.getenv("HIL_COMMAND_TIMEOUT_SECONDS", "90.0")
         ),
+        hil_gateway_stale_seconds=float(
+            os.getenv("HIL_GATEWAY_STALE_SECONDS", "15.0")
+        ),
         hil_platform_base_url=hil_platform_base_url,
+        duckpark_pi_host=(
+            os.getenv("DUCKPARK_PI_HOST").strip()
+            if os.getenv("DUCKPARK_PI_HOST")
+            else None
+        ),
+        duckpark_pi_user=(
+            os.getenv("DUCKPARK_PI_USER").strip()
+            if os.getenv("DUCKPARK_PI_USER")
+            else None
+        ),
+        duckpark_pi_port=int(os.getenv("DUCKPARK_PI_PORT", "22")),
         hil_host_carla_start_command=os.getenv("HIL_HOST_CARLA_START_COMMAND"),
         hil_host_carla_stop_command=os.getenv("HIL_HOST_CARLA_STOP_COMMAND"),
         hil_host_display_start_command=os.getenv("HIL_HOST_DISPLAY_START_COMMAND"),

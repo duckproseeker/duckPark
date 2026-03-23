@@ -5,6 +5,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 HIL_RUNTIME_ROOT=$(cd -- "${SCRIPT_DIR}/../.." && pwd)
 SRC_ROOT="${DUCKPARK_SRC_ROOT:-$(cd -- "${HIL_RUNTIME_ROOT}/.." && pwd)}"
 PROJECT_ROOT="${DUCKPARK_PLATFORM_ROOT:-${SRC_ROOT}/carla_web_platform}"
+CONFIGURE_HDMI_INPUT_BEFORE_STREAM="${PI_HDMI_RTP_CONFIGURE_INPUT:-1}"
+CONFIGURE_SCRIPT="${SCRIPT_DIR}/configure_pi_hdmi_input.sh"
 
 DEVICE="${PI_HDMI_RTP_DEVICE:-/dev/video0}"
 TARGET_HOST="${PI_HDMI_RTP_TARGET_HOST:-192.168.50.2}"
@@ -17,6 +19,7 @@ NETWORK_INTERFACE="${PI_HDMI_RTP_NETWORK_INTERFACE:-eth0}"
 INPUT_PIXFMT="${PI_HDMI_RTP_INPUT_PIXFMT:-RGB3}"
 FORCE_V4L2_FORMAT="${PI_HDMI_RTP_FORCE_V4L2_FORMAT:-1}"
 BITRATE_KBPS="${PI_HDMI_RTP_BITRATE_KBPS:-8000}"
+CONFIG_FILE="${PI_HDMI_RTP_CONFIG_FILE:-/tmp/duckpark_pi_hdmi_rtp_config.json}"
 GST_LAUNCH_BIN="${GST_LAUNCH_BIN:-gst-launch-1.0}"
 GST_INSPECT_BIN="${GST_INSPECT_BIN:-gst-inspect-1.0}"
 
@@ -46,6 +49,9 @@ Environment overrides:
     When true, run v4l2-ctl --set-fmt-video before launch, default 1.
   PI_HDMI_RTP_BITRATE_KBPS
     Default H.264 bitrate for x264enc fallback, default 8000.
+  PI_HDMI_RTP_CONFIGURE_INPUT
+    When true, run configure_pi_hdmi_input.sh first so EDID/HPD and the media graph
+    are refreshed before starting RTP, default 1.
 EOF
 }
 
@@ -217,6 +223,18 @@ fi
 require_command "${GST_LAUNCH_BIN}"
 require_command "${GST_INSPECT_BIN}"
 
+if bool_flag "${CONFIGURE_HDMI_INPUT_BEFORE_STREAM}"; then
+  if [[ ! -x "${CONFIGURE_SCRIPT}" ]]; then
+    echo "HDMI configure script not found: ${CONFIGURE_SCRIPT}" >&2
+    exit 1
+  fi
+  log "refreshing HDMI input via ${CONFIGURE_SCRIPT} so EDID/HPD and timings are ready"
+  bash "${CONFIGURE_SCRIPT}" \
+    --input-video-device "${DEVICE}" \
+    --width "${WIDTH}" \
+    --height "${HEIGHT}"
+fi
+
 SELECTED_ENCODER="$(select_encoder)"
 declare -a ENCODER_ARGS=()
 while IFS= read -r -d '' arg; do
@@ -226,6 +244,50 @@ done < <(build_encoder_args "${SELECTED_ENCODER}")
 log "project_root=${PROJECT_ROOT}"
 log "device=${DEVICE} target=${TARGET_HOST}:${TARGET_PORT} size=${WIDTH}x${HEIGHT}@${FRAMERATE}"
 log "selected_encoder=${SELECTED_ENCODER}"
+
+mkdir -p "$(dirname "${CONFIG_FILE}")"
+PI_HDMI_RTP_CONFIG_FILE="${CONFIG_FILE}" \
+PI_HDMI_RTP_DEVICE="${DEVICE}" \
+PI_HDMI_RTP_TARGET_HOST="${TARGET_HOST}" \
+PI_HDMI_RTP_TARGET_PORT="${TARGET_PORT}" \
+PI_HDMI_RTP_WIDTH="${WIDTH}" \
+PI_HDMI_RTP_HEIGHT="${HEIGHT}" \
+PI_HDMI_RTP_FRAMERATE="${FRAMERATE}" \
+PI_HDMI_RTP_ENCODER="${SELECTED_ENCODER}" \
+PI_HDMI_RTP_NETWORK_INTERFACE="${NETWORK_INTERFACE}" \
+PI_HDMI_RTP_INPUT_PIXFMT="${INPUT_PIXFMT}" \
+PI_HDMI_RTP_FORCE_V4L2_FORMAT="${FORCE_V4L2_FORMAT}" \
+PI_HDMI_RTP_BITRATE_KBPS="${BITRATE_KBPS}" \
+DUCKPARK_PLATFORM_ROOT="${PROJECT_ROOT}" \
+python3 - <<'PY'
+import json
+import os
+import socket
+import time
+from pathlib import Path
+
+payload = {
+    "captured_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "hostname": socket.gethostname(),
+    "project_root": os.environ.get("DUCKPARK_PLATFORM_ROOT", ""),
+    "device": os.environ.get("PI_HDMI_RTP_DEVICE", ""),
+    "target_host": os.environ.get("PI_HDMI_RTP_TARGET_HOST", ""),
+    "target_port": os.environ.get("PI_HDMI_RTP_TARGET_PORT", ""),
+    "width": os.environ.get("PI_HDMI_RTP_WIDTH", ""),
+    "height": os.environ.get("PI_HDMI_RTP_HEIGHT", ""),
+    "framerate": os.environ.get("PI_HDMI_RTP_FRAMERATE", ""),
+    "encoder": os.environ.get("PI_HDMI_RTP_ENCODER", ""),
+    "network_interface": os.environ.get("PI_HDMI_RTP_NETWORK_INTERFACE", ""),
+    "input_pixfmt": os.environ.get("PI_HDMI_RTP_INPUT_PIXFMT", ""),
+    "force_v4l2_format": os.environ.get("PI_HDMI_RTP_FORCE_V4L2_FORMAT", ""),
+    "bitrate_kbps": os.environ.get("PI_HDMI_RTP_BITRATE_KBPS", ""),
+}
+Path(os.environ["PI_HDMI_RTP_CONFIG_FILE"]).write_text(
+    json.dumps(payload, ensure_ascii=False, indent=2),
+    encoding="utf-8",
+)
+PY
+log "config_dump=${CONFIG_FILE}"
 
 if command -v v4l2-ctl >/dev/null 2>&1; then
   if bool_flag "${FORCE_V4L2_FORMAT}"; then

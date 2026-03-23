@@ -85,9 +85,9 @@ export function ProjectsPage() {
       <section className="project-console">
         <header className="project-console__header">
           <div>
-            <span className="project-console__eyebrow">场景控制层 / 项目工作台</span>
+            <span className="project-console__eyebrow">项目管理</span>
             <h1>项目归档台</h1>
-            <p>项目页只负责项目总览、报告归档和运行态汇总，不再重复展开基准任务编排和场景模板参数。</p>
+            <p>查看项目总览、报告和运行情况。</p>
           </div>
 
           <div className="project-console__header-actions">
@@ -153,15 +153,15 @@ export function ProjectsPage() {
               </section>
             ) : workspaceQuery.isLoading ? (
               <section className="project-console__card project-console__card--empty">
-                <EmptyState description="正在加载项目工作台接口。" title="项目工作台加载中" />
+                <EmptyState description="正在加载项目数据。" title="项目加载中" />
               </section>
             ) : workspaceQuery.isError || !workspace ? (
               <section className="project-console__card project-console__card--empty">
                 <EmptyState
                   description={
-                    workspaceQuery.error instanceof Error ? workspaceQuery.error.message : '工作台接口异常。'
+                    workspaceQuery.error instanceof Error ? workspaceQuery.error.message : '项目接口异常。'
                   }
-                  title="项目工作台加载失败"
+                  title="项目加载失败"
                 />
               </section>
             ) : (

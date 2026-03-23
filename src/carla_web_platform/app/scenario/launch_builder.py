@@ -236,6 +236,9 @@ def _resolve_launch_weather(
 ) -> dict[str, Any]:
     base_weather = copy.deepcopy(default_launch_weather())
     if isinstance(template_weather, dict):
+        template_preset = str(template_weather.get("preset") or "").strip()
+        if template_preset:
+            base_weather["preset"] = template_preset
         for key, value in template_weather.items():
             if value is not None and key != "preset":
                 base_weather[key] = value

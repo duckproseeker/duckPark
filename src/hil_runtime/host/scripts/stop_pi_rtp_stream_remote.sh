@@ -27,6 +27,7 @@ Optional environment:
 
 Notes:
   - This sends SIGINT to the Pi RTP wrapper script first so its trap can stop GStreamer cleanly.
+  - It also stops the Pi DUT result receiver and gateway heartbeat agent.
   - As a fallback it also stops matching gst-launch RTP sender pipelines.
 EOF
 }
@@ -79,14 +80,20 @@ set -euo pipefail
 
 WRAPPER_PATTERN='[s]tart_pi_hdmi_rtp_stream.sh'
 GST_PATTERN='[g]st-launch-1.0.*rtph264pay.*udpsink'
+RECEIVER_PATTERN='[d]ut_result_receiver'
+AGENT_PATTERN='[g]ateway_agent'
 
 pkill -INT -f "${WRAPPER_PATTERN}" >/dev/null 2>&1 || true
 pkill -f "${GST_PATTERN}" >/dev/null 2>&1 || true
+pkill -INT -f "${RECEIVER_PATTERN}" >/dev/null 2>&1 || true
+pkill -INT -f "${AGENT_PATTERN}" >/dev/null 2>&1 || true
 
 for _ in $(seq 1 10); do
   if ! pgrep -f "${WRAPPER_PATTERN}" >/dev/null 2>&1 && \
-     ! pgrep -f "${GST_PATTERN}" >/dev/null 2>&1; then
-    echo "pi_rtp_stopped"
+     ! pgrep -f "${GST_PATTERN}" >/dev/null 2>&1 && \
+     ! pgrep -f "${RECEIVER_PATTERN}" >/dev/null 2>&1 && \
+     ! pgrep -f "${AGENT_PATTERN}" >/dev/null 2>&1; then
+    echo "pi_gateway_stack_stopped"
     exit 0
   fi
   sleep 0.5
@@ -94,6 +101,8 @@ done
 
 pkill -TERM -f "${WRAPPER_PATTERN}" >/dev/null 2>&1 || true
 pkill -TERM -f "${GST_PATTERN}" >/dev/null 2>&1 || true
+pkill -TERM -f "${RECEIVER_PATTERN}" >/dev/null 2>&1 || true
+pkill -TERM -f "${AGENT_PATTERN}" >/dev/null 2>&1 || true
 sleep 1
 
 if pgrep -f "${WRAPPER_PATTERN}" >/dev/null 2>&1; then
@@ -106,5 +115,15 @@ if pgrep -f "${GST_PATTERN}" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "pi_rtp_stopped"
+if pgrep -f "${RECEIVER_PATTERN}" >/dev/null 2>&1; then
+  echo "Pi DUT result receiver is still running after stop request" >&2
+  exit 1
+fi
+
+if pgrep -f "${AGENT_PATTERN}" >/dev/null 2>&1; then
+  echo "Pi gateway agent is still running after stop request" >&2
+  exit 1
+fi
+
+echo "pi_gateway_stack_stopped"
 EOF

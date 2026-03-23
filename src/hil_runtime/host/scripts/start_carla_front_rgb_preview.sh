@@ -10,6 +10,9 @@ PYTHONPATH_VALUE="${CARLA_FRONT_RGB_PREVIEW_PYTHONPATH:-${CONTAINER_PLATFORM_ROO
 SCRIPT_PATH="${CARLA_FRONT_RGB_PREVIEW_SCRIPT_PATH:-hil_runtime/host/scripts/carla_front_rgb_preview.py}"
 BACKGROUND="${CARLA_FRONT_RGB_PREVIEW_BACKGROUND:-0}"
 LOG_FILE="${CARLA_FRONT_RGB_PREVIEW_LOG_FILE:-/tmp/carla_front_rgb_preview.log}"
+ENSURE_HOST_HDMI_MIRROR="${CARLA_FRONT_RGB_PREVIEW_ENSURE_HOST_HDMI_MIRROR:-1}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENSURE_HOST_HDMI_SCRIPT="${CARLA_FRONT_RGB_PREVIEW_ENSURE_HOST_HDMI_SCRIPT:-${SCRIPT_DIR}/ensure_host_hdmi_mirror.sh}"
 
 usage() {
   cat <<'EOF'
@@ -26,6 +29,8 @@ Environment overrides:
   CARLA_FRONT_RGB_PREVIEW_SCRIPT_PATH Preview script path relative to source root
   CARLA_FRONT_RGB_PREVIEW_BACKGROUND  1 to run under nohup in the background
   CARLA_FRONT_RGB_PREVIEW_LOG_FILE    Background log file path
+  CARLA_FRONT_RGB_PREVIEW_ENSURE_HOST_HDMI_MIRROR
+                                      Ensure HDMI mirror is active before preview, default 1
 
 Examples:
   bash hil_runtime/host/scripts/start_carla_front_rgb_preview.sh
@@ -53,6 +58,16 @@ bool_flag() {
 }
 
 require_command docker
+
+if bool_flag "${ENSURE_HOST_HDMI_MIRROR}"; then
+  if [[ ! -x "${ENSURE_HOST_HDMI_SCRIPT}" ]]; then
+    echo "HDMI mirror helper not found: ${ENSURE_HOST_HDMI_SCRIPT}" >&2
+    exit 1
+  fi
+  DUCKPARK_HOST_DISPLAY="${DISPLAY_VALUE}" \
+    DUCKPARK_HOST_XAUTHORITY="${XAUTHORITY_PATH}" \
+    bash "${ENSURE_HOST_HDMI_SCRIPT}"
+fi
 
 docker exec "${CONTAINER_NAME}" pkill -f "python3 ${SCRIPT_PATH}" >/dev/null 2>&1 || true
 

@@ -21,6 +21,8 @@ READY_CHECK_CONTAINER="${CARLA_HEADED_READY_CHECK_CONTAINER:-ros2-dev}"
 READY_CHECK_HOST="${CARLA_HEADED_READY_CHECK_HOST:-}"
 READY_CHECK_PYTHON_BIN="${CARLA_HEADED_READY_CHECK_PYTHON_BIN:-python3}"
 READY_CHECK_CLIENT_TIMEOUT_SECONDS="${CARLA_HEADED_READY_CHECK_CLIENT_TIMEOUT_SECONDS:-5}"
+ENSURE_HOST_HDMI_MIRROR="${CARLA_HEADED_ENSURE_HOST_HDMI_MIRROR:-1}"
+ENSURE_HOST_HDMI_SCRIPT="${CARLA_HEADED_ENSURE_HOST_HDMI_SCRIPT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/ensure_host_hdmi_mirror.sh}"
 
 usage() {
   cat <<'EOF'
@@ -45,6 +47,8 @@ Environment overrides:
   CARLA_HEADED_WAIT_FOR_RPC Wait for CARLA RPC after launch, default 1
   CARLA_HEADED_WAIT_TIMEOUT_SECONDS
                             Max seconds to wait for CARLA RPC, default 45
+  CARLA_HEADED_ENSURE_HOST_HDMI_MIRROR
+                            Ensure HDMI mirror is active before launch, default 1
 
 Examples:
   bash hil_runtime/host/scripts/start_carla_headed.sh
@@ -283,6 +287,17 @@ PY
 }
 
 require_command docker
+
+if bool_flag "${ENSURE_HOST_HDMI_MIRROR}"; then
+  if [[ ! -x "${ENSURE_HOST_HDMI_SCRIPT}" ]]; then
+    echo "HDMI mirror helper not found: ${ENSURE_HOST_HDMI_SCRIPT}" >&2
+    exit 1
+  fi
+  log "ensuring host HDMI mirror is active before starting headed CARLA"
+  DUCKPARK_HOST_DISPLAY="${DISPLAY_VALUE}" \
+    DUCKPARK_HOST_XAUTHORITY="${XAUTHORITY_PATH}" \
+    bash "${ENSURE_HOST_HDMI_SCRIPT}"
+fi
 
 if [[ ! -S /tmp/.X11-unix/X0 && ! -S /tmp/.X11-unix/X1 ]]; then
   echo "No X11 socket found under /tmp/.X11-unix" >&2

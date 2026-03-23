@@ -63,6 +63,14 @@ REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode basic
 - `capture`
   - 在 `scenario` 基础上，再验证 recorder、手动开始/停止传感器采集、viewer 抓帧
 
+补充说明：
+
+- `basic` smoke 只覆盖 API、executor 和 `/ui` 基本存活
+- 如果这次改动影响 `设备中心 / 单 DUT 运行观测`，除了 smoke 之外，还应额外检查：
+  - `GET /gateways`
+  - `GET /devices/workspace`
+  - Pi `gateway_agent` 是否持续 heartbeat
+
 常用例子：
 
 ```bash
@@ -184,6 +192,23 @@ SMOKE_MODE=capture make remote-deploy
 
 这样得到的值更接近“native runtime 自身执行链”的基线，不会把背景交通或采集链路的额外开销混进一起看。
 
+如果这次目标是验证 Jetson / Pi 观测链，建议再补这组检查：
+
+```bash
+curl http://127.0.0.1:8000/gateways
+curl http://127.0.0.1:8000/devices/workspace
+```
+
+重点看：
+
+- `last_heartbeat_at_utc`
+- `heartbeat_age_seconds`
+- `status`
+- `metrics.dut_received_at_utc`
+- `metrics.output_fps`
+- `metrics.avg_latency_ms`
+- `metrics.temperature_c`
+
 如果这次只改了文档、脚本或后端非契约逻辑，可以先用：
 
 - `bash scripts/remote_deploy.sh --smoke-mode basic --skip-contract-sync --skip-frontend-build`
@@ -191,6 +216,7 @@ SMOKE_MODE=capture make remote-deploy
 ## 已知注意事项
 
 - `capture` smoke 会依赖 CARLA、平台 native runtime、viewer 和传感器链路，耗时最长，也最容易暴露环境问题。
+- 设备页里看到 Jetson 指标，不仅依赖 `dut_result_receiver` 收到结果，还依赖 Pi `gateway_agent` 持续上报 heartbeat；前者在更新而后者停掉时，页面只会表现成旧快照或离线状态。
 - CARLA recorder 目前状态链路已接通，但 recorder 文件落盘还受 CARLA server 容器与 executor 容器之间的路径共享方式影响。部署 smoke 不应只看“recorder 状态为 RUNNING”，还要结合产物验证。
 - 当前远端重启日志默认写到：
   - `/tmp/carla_api_restore.log`

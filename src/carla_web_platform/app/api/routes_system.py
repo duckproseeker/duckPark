@@ -3,13 +3,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
+import subprocess
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.api.schemas import ApiResponse
 from app.core.config import get_settings
 from app.core.models import CaptureStatus, GatewayStatus, RunStatus
+from app.hil.gateway_runtime_status import resolve_gateway_status
+from app.hil.pi_gateway_runtime import probe_pi_gateway, run_pi_gateway_command
 from app.orchestrator.queue import FileCommandQueue
 from app.storage.capture_store import CaptureStore
 from app.storage.executor_store import ExecutorStore
@@ -82,6 +85,9 @@ def get_system_status() -> ApiResponse:
     captures = deps["capture_store"].list()
     gateways = deps["gateway_store"].list()
     executor = _executor_payload(deps)
+    settings = get_settings()
+    checked_at = datetime.now(timezone.utc)
+    pi_gateway_status = probe_pi_gateway(settings)
 
     run_status_counts = {status.value: 0 for status in RunStatus}
     for run in runs:
@@ -93,7 +99,13 @@ def get_system_status() -> ApiResponse:
 
     gateway_status_counts = {status.value: 0 for status in GatewayStatus}
     for gateway in gateways:
-        gateway_status_counts[gateway.status.value] = gateway_status_counts.get(gateway.status.value, 0) + 1
+        effective_status, _, _ = resolve_gateway_status(
+            gateway,
+            settings,
+            checked_at=checked_at,
+            pi_gateway_status=pi_gateway_status,
+        )
+        gateway_status_counts[effective_status] = gateway_status_counts.get(effective_status, 0) + 1
 
     return ApiResponse(
         success=True,
@@ -122,5 +134,57 @@ def get_system_status() -> ApiResponse:
             "frontend": {
                 "bundle_present": deps["frontend_dist"].exists(),
             },
+            "pi_gateway": pi_gateway_status,
         },
     )
+
+
+@router.get(
+    "/system/pi-gateway",
+    response_model=ApiResponse,
+    summary="查询树莓派网关运行态",
+)
+def get_pi_gateway_status() -> ApiResponse:
+    return ApiResponse(success=True, data=probe_pi_gateway(get_settings()))
+
+
+def _run_pi_gateway_action(action: str) -> ApiResponse:
+    settings = get_settings()
+    try:
+        result = run_pi_gateway_command(settings, action)
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(
+            status_code=504,
+            detail={
+                "code": "PI_GATEWAY_COMMAND_TIMEOUT",
+                "message": (
+                    f"树莓派网关{action}命令超时，"
+                    f"超过 {settings.hil_command_timeout_seconds:.1f}s。"
+                ),
+            },
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "PI_GATEWAY_COMMAND_INVALID", "message": str(exc)},
+        ) from exc
+
+    return ApiResponse(success=True, data=result)
+
+
+@router.post(
+    "/system/pi-gateway/start",
+    response_model=ApiResponse,
+    summary="手动启动树莓派网关链路",
+)
+def start_pi_gateway() -> ApiResponse:
+    return _run_pi_gateway_action("start")
+
+
+@router.post(
+    "/system/pi-gateway/stop",
+    response_model=ApiResponse,
+    summary="手动停止树莓派网关链路",
+)
+def stop_pi_gateway() -> ApiResponse:
+    return _run_pi_gateway_action("stop")

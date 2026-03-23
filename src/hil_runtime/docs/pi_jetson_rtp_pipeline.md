@@ -67,6 +67,42 @@ Pixel Format : 'RGB3'
 
 `RGB4` and ad hoc `1280x720` requests were misleading on this hardware path and caused allocation or format mismatch failures.
 
+### HDMI Bring-Up Requirement That Was Easy To Miss
+
+On this tc358743-based Pi path, a physically connected HDMI cable is not enough by itself. The Pi often needs to:
+
+1. write EDID to the bridge
+2. force HPD / hotplug back into an active state
+3. query timings again so the capture node and media graph pick up the real source mode
+
+If that bring-up step is skipped, the downstream RTP sender may fail with misleading GStreamer errors such as buffer allocation or negotiation failures even though the real root cause is still `TMDS signal detected: no` or `Stable sync signal: no`.
+
+Use the dedicated HDMI input setup script before capture when debugging manually:
+
+```bash
+cd /path/to/duckPark/src
+bash hil_runtime/pi/scripts/configure_pi_hdmi_input.sh
+```
+
+What that script does:
+
+- writes EDID to the tc358743 bridge
+- triggers a timing query to refresh the detected mode
+- reprograms the media graph to the detected width and height
+- forces `/dev/video0` back to `RGB3`
+- fails early with an explicit `TMDS` / `Stable sync` status when the source side is not outputting a valid signal
+
+The RTP launch flow now runs this step automatically by default before starting GStreamer.
+
+On the Ubuntu host side, the easiest way to keep this stable is to activate the HDMI mirror before Pi capture starts:
+
+```bash
+cd /path/to/duckPark/src
+bash hil_runtime/host/scripts/ensure_host_hdmi_mirror.sh
+```
+
+That helper checks whether `HDMI-0` is only physically connected or actually active in `xrandr --listmonitors`. If needed, it mirrors `DP-0` onto `HDMI-0` with the verified `1920x1080@60` settings.
+
 ### Start RTP Streaming
 
 The Pi launch script now defaults to the verified direct-link layout and the 1080p30 injection target:
@@ -110,6 +146,48 @@ PI_GATEWAY_DUT_RESULT_RECEIVER_PORT=18765 \
 bash hil_runtime/pi/scripts/start_pi_dut_result_receiver.sh
 ```
 
+### Pi Gateway Agent And Web Observability
+
+The Pi result receiver and the platform device page are not the same thing.
+
+Current split of responsibility:
+
+- `dut_result_receiver`
+  - accepts Jetson result posts on `http://192.168.50.1:18765/dut-results`
+  - updates the Pi-side `dut_result.json`
+- `gateway_agent`
+  - reads Pi capture state and the latest DUT result snapshot
+  - registers the Pi gateway with the web platform
+  - sends periodic heartbeat updates to the platform `/gateways/{gateway_id}/heartbeat`
+
+This means:
+
+- Jetson inference can already be running while the web `Devices` page still looks offline
+- if `dut_result.json` updates but `gateway_agent` is down, the platform only sees a stale or missing heartbeat
+- the practical symptom is `GET /devices/workspace` showing stale telemetry or `online_device_count = 0`
+
+Manual bring-up command on the Pi:
+
+```bash
+cd /path/to/duckPark/src/carla_web_platform
+python3 -m app.hil.gateway_agent \
+  --api-base-url http://192.168.110.151:8000 \
+  --gateway-id rpi5-x1301-01 \
+  --gateway-name bench-a \
+  --input-video-device /dev/video0
+```
+
+For a single-shot register + heartbeat sanity check:
+
+```bash
+python3 -m app.hil.gateway_agent \
+  --api-base-url http://192.168.110.151:8000 \
+  --gateway-id rpi5-x1301-01 \
+  --gateway-name bench-a \
+  --input-video-device /dev/video0 \
+  --once
+```
+
 ## Jetson Side
 
 ### Current Primary Runtime
@@ -120,6 +198,14 @@ The current primary runtime is the non-ROS C++ detector:
 - engine: `/home/wheeltec/yolo_ros2/module/yolov4-tiny.engine`
 - labels: `/home/wheeltec/yolo_ros2/module/coco.names`
 - decoder: `nvv4l2decoder`
+
+Before Jetson inference starts, the current launch wrappers now try to sync the Jetson system clock from the Pi by reading the Pi-side HTTP `Date` header from `http://192.168.50.1:18765/healthz`.
+
+Practical note:
+
+- if Jetson already has passwordless `sudo`, time sync happens automatically
+- if Jetson needs a sudo password and the launch is interactive, the wrapper will prompt once before inference starts
+- if the launch runs without a tty, the wrapper will log a warning and continue unless `JETSON_TIME_SYNC_STRICT=1`
 
 To start the live detector path:
 

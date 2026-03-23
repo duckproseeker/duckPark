@@ -1,10 +1,13 @@
 #include <trt_yolo.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <chrono>
+#include <csignal>
 #include <cstdint>
 #include <cstdlib>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -17,6 +20,12 @@
 namespace
 {
 using Clock = std::chrono::steady_clock;
+std::atomic_bool g_shutdown_requested{false};
+
+void request_shutdown(int)
+{
+  g_shutdown_requested.store(true);
+}
 
 struct Options
 {
@@ -25,6 +34,7 @@ struct Options
   std::string engine_path = "~/yolo_ros2/module/yolov4-tiny.engine";
   std::string label_path = "~/yolo_ros2/module/coco.names";
   std::string metrics_file;
+  std::string latency_samples_file;
   std::string window_name = "DuckPark C++ Detector";
   float ignore_thresh = 0.5F;
   int gpu_id = 0;
@@ -41,6 +51,10 @@ struct Metrics
   std::uint64_t detection_count = 0;
   std::uint64_t last_detection_count = 0;
   double avg_latency_ms = 0.0;
+  double latency_max_ms = 0.0;
+  double latency_p50_ms = 0.0;
+  double latency_p95_ms = 0.0;
+  double latency_p99_ms = 0.0;
   double output_fps = 0.0;
   int frame_width = 0;
   int frame_height = 0;
@@ -48,8 +62,14 @@ struct Metrics
   int model_height = 0;
   int model_width = 0;
   int max_detections = 0;
+  bool display_enabled = false;
+  bool swap_rb = false;
+  bool latency_distribution_ready = false;
   std::string source;
+  std::string decoder;
   std::string engine_path;
+  std::string started_at_utc;
+  std::string ended_at_utc;
   std::string timestamp_utc;
 };
 
@@ -64,6 +84,8 @@ void print_usage(const char * argv0)
     << "  --engine <path>        TensorRT engine path\n"
     << "  --labels <path>        Label file path\n"
     << "  --metrics-file <path>  Write running metrics JSON to this file\n"
+    << "  --latency-samples-file <path>\n"
+    << "                         Write final per-frame latency samples CSV to this file\n"
     << "  --ignore-thresh <f>    Display threshold. Default 0.5\n"
     << "  --gpu-id <n>           CUDA device id. Default 0\n"
     << "  --display              Enable cv::imshow output\n"
@@ -173,6 +195,8 @@ Options parse_args(int argc, char ** argv)
       options.label_path = require_value(arg);
     } else if (arg == "--metrics-file") {
       options.metrics_file = require_value(arg);
+    } else if (arg == "--latency-samples-file") {
+      options.latency_samples_file = require_value(arg);
     } else if (arg == "--ignore-thresh") {
       options.ignore_thresh = std::stof(require_value(arg));
     } else if (arg == "--gpu-id") {
@@ -202,6 +226,7 @@ Options parse_args(int argc, char ** argv)
   options.engine_path = expand_user(options.engine_path);
   options.label_path = expand_user(options.label_path);
   options.metrics_file = expand_user(options.metrics_file);
+  options.latency_samples_file = expand_user(options.latency_samples_file);
   return options;
 }
 
@@ -312,13 +337,26 @@ void write_metrics(const std::string & path, const Metrics & metrics)
        << "  \"detection_count\": " << metrics.detection_count << ",\n"
        << "  \"last_detection_count\": " << metrics.last_detection_count << ",\n"
        << "  \"avg_latency_ms\": " << metrics.avg_latency_ms << ",\n"
+       << "  \"latency_max_ms\": " << metrics.latency_max_ms << ",\n"
        << "  \"output_fps\": " << metrics.output_fps << ",\n"
        << "  \"frame_width\": " << metrics.frame_width << ",\n"
        << "  \"frame_height\": " << metrics.frame_height << ",\n"
        << "  \"model_channels\": " << metrics.model_channels << ",\n"
        << "  \"model_height\": " << metrics.model_height << ",\n"
        << "  \"model_width\": " << metrics.model_width << ",\n"
-       << "  \"max_detections\": " << metrics.max_detections << "\n"
+       << "  \"max_detections\": " << metrics.max_detections << ",\n"
+       << "  \"display_enabled\": " << (metrics.display_enabled ? "true" : "false") << ",\n"
+       << "  \"swap_rb\": " << (metrics.swap_rb ? "true" : "false") << ",\n"
+       << "  \"decoder\": \"" << json_escape(metrics.decoder) << "\",\n"
+       << "  \"started_at_utc\": \"" << json_escape(metrics.started_at_utc) << "\",\n"
+       << "  \"ended_at_utc\": \"" << json_escape(metrics.ended_at_utc) << "\"";
+  if (metrics.latency_distribution_ready) {
+    json << ",\n"
+         << "  \"latency_p50_ms\": " << metrics.latency_p50_ms << ",\n"
+         << "  \"latency_p95_ms\": " << metrics.latency_p95_ms << ",\n"
+         << "  \"latency_p99_ms\": " << metrics.latency_p99_ms;
+  }
+  json << "\n"
        << "}\n";
 
   const auto tmp_path = file_path.string() + ".tmp";
@@ -328,6 +366,35 @@ void write_metrics(const std::string & path, const Metrics & metrics)
       throw std::runtime_error("failed to open metrics temp file: " + tmp_path);
     }
     output << json.str();
+  }
+  std::filesystem::rename(tmp_path, file_path);
+}
+
+void write_latency_samples(
+  const std::string & path,
+  const std::vector<double> & latency_samples_ms)
+{
+  if (path.empty()) {
+    return;
+  }
+
+  const std::filesystem::path file_path(path);
+  const auto parent = file_path.parent_path();
+  if (!parent.empty()) {
+    std::filesystem::create_directories(parent);
+  }
+
+  const auto tmp_path = file_path.string() + ".tmp";
+  {
+    std::ofstream output(tmp_path, std::ios::trunc);
+    if (!output.is_open()) {
+      throw std::runtime_error("failed to open latency samples temp file: " + tmp_path);
+    }
+    output << "latency_ms\n";
+    output << std::fixed << std::setprecision(6);
+    for (const double sample : latency_samples_ms) {
+      output << sample << '\n';
+    }
   }
   std::filesystem::rename(tmp_path, file_path);
 }
@@ -372,11 +439,46 @@ void draw_overlay(cv::Mat & image, const Metrics & metrics)
   }
 }
 
+double compute_percentile(
+  const std::vector<double> & ordered_samples,
+  double percentile)
+{
+  if (ordered_samples.empty()) {
+    return 0.0;
+  }
+  const auto index = static_cast<std::size_t>(
+    std::clamp(
+      std::ceil((percentile / 100.0) * static_cast<double>(ordered_samples.size())) - 1.0,
+      0.0,
+      static_cast<double>(ordered_samples.size() - 1U)));
+  return ordered_samples[index];
+}
+
+void refresh_latency_distribution(
+  Metrics & metrics,
+  const std::vector<double> & latency_samples_ms)
+{
+  if (latency_samples_ms.empty()) {
+    metrics.latency_distribution_ready = false;
+    return;
+  }
+
+  auto ordered_samples = latency_samples_ms;
+  std::sort(ordered_samples.begin(), ordered_samples.end());
+  metrics.latency_distribution_ready = true;
+  metrics.latency_p50_ms = compute_percentile(ordered_samples, 50.0);
+  metrics.latency_p95_ms = compute_percentile(ordered_samples, 95.0);
+  metrics.latency_p99_ms = compute_percentile(ordered_samples, 99.0);
+}
+
 }  // namespace
 
 int main(int argc, char ** argv)
 {
   try {
+    std::signal(SIGINT, request_shutdown);
+    std::signal(SIGTERM, request_shutdown);
+
     Options options = parse_args(argc, argv);
     if (!yolo::set_cuda_device(options.gpu_id)) {
       throw std::runtime_error("failed to select CUDA device " + std::to_string(options.gpu_id));
@@ -393,11 +495,15 @@ int main(int argc, char ** argv)
 
     Metrics metrics;
     metrics.source = options.source;
+    metrics.decoder = options.decoder;
     metrics.engine_path = options.engine_path;
     metrics.model_channels = input_dims[0];
     metrics.model_height = input_dims[1];
     metrics.model_width = input_dims[2];
     metrics.max_detections = net->getMaxDetections();
+    metrics.display_enabled = options.display;
+    metrics.swap_rb = options.swap_rb;
+    metrics.started_at_utc = now_utc_iso8601();
 
     log_message(
       "engine ready input_chw=" + std::to_string(metrics.model_channels) + "x" +
@@ -419,8 +525,14 @@ int main(int argc, char ** argv)
     auto last_metrics_write_at = started_at;
     std::uint64_t frames_since_fps = 0;
     double latency_total_ms = 0.0;
+    std::vector<double> latency_samples_ms;
 
     for (;;) {
+      if (g_shutdown_requested.load()) {
+        log_message("received shutdown signal, finalizing");
+        break;
+      }
+
       cv::Mat frame;
       if (!capture.read(frame) || frame.empty()) {
         if (options.loop_file && !starts_with(options.source, "udp://") &&
@@ -454,6 +566,8 @@ int main(int argc, char ** argv)
       frames_since_fps += 1;
       latency_total_ms += latency_ms;
       metrics.avg_latency_ms = latency_total_ms / static_cast<double>(metrics.processed_frames);
+      metrics.latency_max_ms = std::max(metrics.latency_max_ms, latency_ms);
+      latency_samples_ms.push_back(latency_ms);
 
       std::uint64_t detections_this_frame = 0;
       for (int i = 0; i < metrics.max_detections; ++i) {
@@ -542,10 +656,18 @@ int main(int argc, char ** argv)
         log_message("reached max_frames limit");
         break;
       }
+
+      if (g_shutdown_requested.load()) {
+        log_message("shutdown requested after frame processing");
+        break;
+      }
     }
 
+    metrics.ended_at_utc = now_utc_iso8601();
     metrics.timestamp_utc = now_utc_iso8601();
+    refresh_latency_distribution(metrics, latency_samples_ms);
     write_metrics(options.metrics_file, metrics);
+    write_latency_samples(options.latency_samples_file, latency_samples_ms);
 
     std::ostringstream final_status;
     final_status << std::fixed << std::setprecision(2)

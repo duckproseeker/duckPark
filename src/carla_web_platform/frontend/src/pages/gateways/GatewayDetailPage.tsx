@@ -57,6 +57,7 @@ export function GatewayDetailPage() {
                 { label: '当前运行', value: gateway.current_run_id ?? '-' },
                 { label: '最近心跳', value: formatDateTime(gateway.last_heartbeat_at_utc) },
                 { label: '最近看到', value: formatDateTime(gateway.last_seen_at_utc) },
+                { label: '状态说明', value: gateway.status_detail ?? '-' },
                 { label: 'Agent 版本', value: gateway.agent_version ?? '-' }
               ]}
             />
