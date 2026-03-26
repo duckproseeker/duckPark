@@ -214,51 +214,57 @@ export function TelemetryDashboard({
   );
 
   if (!deviceMetrics || !hasTelemetry) {
-    return <div className="text-sm text-secondaryGray-500 dark:text-slate-400">此网关尚无遥测体征</div>;
+    return <div className="text-sm text-text-muted">此网关尚无遥测体征。</div>;
   }
 
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-[18px] border border-secondaryGray-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 px-5 py-4">
+        <div className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-5 py-4">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-sm font-bold text-purple-600 dark:text-purple-400">推理 FPS</span>
-            <span className="text-xs font-semibold px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">近1分钟均势: {fpsStats.trend}</span>
+            <span className="text-sm font-bold text-text">推理 FPS</span>
+            <span className="rounded-full border border-border-glass bg-[var(--surface-soft)] px-2 py-1 text-xs font-semibold text-text-muted">
+              近 1 分钟趋势: {fpsStats.trend}
+            </span>
           </div>
-          <div className="flex flex-col gap-1 text-sm text-secondaryGray-600 dark:text-slate-300">
-            <div className="flex justify-between"><span className="text-secondaryGray-400 dark:text-slate-500">当前值</span><strong className="text-navy-900 dark:text-slate-100">{fpsStats.current}</strong></div>
-            <div className="flex justify-between"><span className="text-secondaryGray-400 dark:text-slate-500">平均值</span><strong className="text-navy-900 dark:text-slate-100">{fpsStats.avg}</strong></div>
-            <div className="flex justify-between"><span className="text-secondaryGray-400 dark:text-slate-500">波动带</span><strong className="text-navy-900 dark:text-slate-100">{fpsStats.range}</strong></div>
+          <div className="flex flex-col gap-1 text-sm text-text-muted">
+            <div className="flex justify-between"><span className="text-text-muted">当前值</span><strong className="text-text">{fpsStats.current}</strong></div>
+            <div className="flex justify-between"><span className="text-text-muted">平均值</span><strong className="text-text">{fpsStats.avg}</strong></div>
+            <div className="flex justify-between"><span className="text-text-muted">波动带</span><strong className="text-text">{fpsStats.range}</strong></div>
           </div>
         </div>
 
-        <div className="rounded-[18px] border border-secondaryGray-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 px-5 py-4">
+        <div className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-5 py-4">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-sm font-bold text-orange-600 dark:text-orange-400">端到端延迟 (ms)</span>
-            <span className="text-xs font-semibold px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">近1分钟均势: {latStats.trend}</span>
+            <span className="text-sm font-bold text-text">端到端延迟 (ms)</span>
+            <span className="rounded-full border border-border-glass bg-[var(--surface-soft)] px-2 py-1 text-xs font-semibold text-text-muted">
+              近 1 分钟趋势: {latStats.trend}
+            </span>
           </div>
-          <div className="flex flex-col gap-1 text-sm text-secondaryGray-600 dark:text-slate-300">
-            <div className="flex justify-between"><span className="text-secondaryGray-400 dark:text-slate-500">当前值</span><strong className="text-navy-900 dark:text-slate-100">{latStats.current}</strong></div>
-            <div className="flex justify-between"><span className="text-secondaryGray-400 dark:text-slate-500">平均值</span><strong className="text-navy-900 dark:text-slate-100">{latStats.avg}</strong></div>
-            <div className="flex justify-between"><span className="text-secondaryGray-400 dark:text-slate-500">波动带</span><strong className="text-navy-900 dark:text-slate-100">{latStats.range}</strong></div>
+          <div className="flex flex-col gap-1 text-sm text-text-muted">
+            <div className="flex justify-between"><span className="text-text-muted">当前值</span><strong className="text-text">{latStats.current}</strong></div>
+            <div className="flex justify-between"><span className="text-text-muted">平均值</span><strong className="text-text">{latStats.avg}</strong></div>
+            <div className="flex justify-between"><span className="text-text-muted">波动带</span><strong className="text-text">{latStats.range}</strong></div>
           </div>
         </div>
 
-        <div className="rounded-[18px] border border-secondaryGray-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 px-5 py-4">
+        <div className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-5 py-4">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-sm font-bold text-sky-600 dark:text-sky-400">芯片温度 (°C)</span>
-            <span className="text-xs font-semibold px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">近1分钟均势: {tempStats.trend}</span>
+            <span className="text-sm font-bold text-text">芯片温度 (°C)</span>
+            <span className="rounded-full border border-border-glass bg-[var(--surface-soft)] px-2 py-1 text-xs font-semibold text-text-muted">
+              近 1 分钟趋势: {tempStats.trend}
+            </span>
           </div>
-          <div className="flex flex-col gap-1 text-sm text-secondaryGray-600 dark:text-slate-300">
-            <div className="flex justify-between"><span className="text-secondaryGray-400 dark:text-slate-500">当前值</span><strong className="text-navy-900 dark:text-slate-100">{tempStats.current}</strong></div>
-            <div className="flex justify-between"><span className="text-secondaryGray-400 dark:text-slate-500">平均值</span><strong className="text-navy-900 dark:text-slate-100">{tempStats.avg}</strong></div>
-            <div className="flex justify-between"><span className="text-secondaryGray-400 dark:text-slate-500">波动带</span><strong className="text-navy-900 dark:text-slate-100">{tempStats.range}</strong></div>
+          <div className="flex flex-col gap-1 text-sm text-text-muted">
+            <div className="flex justify-between"><span className="text-text-muted">当前值</span><strong className="text-text">{tempStats.current}</strong></div>
+            <div className="flex justify-between"><span className="text-text-muted">平均值</span><strong className="text-text">{tempStats.avg}</strong></div>
+            <div className="flex justify-between"><span className="text-text-muted">波动带</span><strong className="text-text">{tempStats.range}</strong></div>
           </div>
         </div>
       </div>
 
-      <div className="rounded-[18px] border border-secondaryGray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
-        <h4 className="text-sm font-bold text-navy-900 dark:text-slate-100 mb-2">运行时间序列观测 (Unified Trend)</h4>
+      <div className="rounded-[18px] border border-border-glass bg-[var(--surface-soft)] p-4">
+        <h4 className="mb-2 text-sm font-bold text-text">统一时间序列观测</h4>
         <div style={{ height: '350px' }}>
           <Chart
             options={unifiedOptions}

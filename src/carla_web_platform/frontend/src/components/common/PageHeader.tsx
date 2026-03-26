@@ -14,7 +14,7 @@ export function PageHeader({
   title,
   description,
   actions,
-  eyebrow = 'Chip Evaluation Workspace',
+  eyebrow = '芯片评测工作台',
   chips = defaultChips
 }: PageHeaderProps) {
   return (

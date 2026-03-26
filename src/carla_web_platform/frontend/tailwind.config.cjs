@@ -52,7 +52,10 @@ module.exports = {
       boxShadow: {
         card: '0px 18px 40px rgba(112, 144, 176, 0.12)',
         panel: '0px 20px 44px rgba(112, 144, 176, 0.16)',
-        glow: '0px 16px 32px rgba(65, 114, 255, 0.24)'
+        glow: '0px 16px 32px rgba(65, 114, 255, 0.24)',
+        'glow-accent': '0px 8px 32px rgba(34, 211, 238, 0.22)',
+        'glow-success': '0px 8px 32px rgba(34, 197, 94, 0.22)',
+        'glow-danger': '0px 8px 32px rgba(239, 68, 68, 0.22)'
       },
       backgroundImage: {
         'hero-grid':

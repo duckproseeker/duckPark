@@ -666,7 +666,7 @@ export function ExecutionsPage() {
     <div className="page-stack execution-page">
       <CompactPageHeader
         className="compact-page-header--execution"
-        stepLabel="Step 4 / Executions"
+        stepLabel="步骤 4 / 执行"
         title="执行监控"
         description="查看当前执行和历史任务。"
         contextSummary={
@@ -996,7 +996,7 @@ export function ExecutionsPage() {
                   ? `${selectedTask.benchmark_name} / 归档视图`
                   : '任务归档'
             }
-            title={viewMode === 'current' ? 'Current Execution Canvas' : 'Archived Task Overview'}
+            title={viewMode === 'current' ? '当前执行画面' : '归档任务概览'}
           />
 
           {(selectedTask || standaloneMonitorActive) && (
@@ -1087,7 +1087,7 @@ export function ExecutionsPage() {
             status={executorStatus}
           />
           <StatusPanel
-            label="Task Scope"
+            label="任务范围"
             note={
               selectedTask
                 ? `${selectedTask.planned_run_count} scenes / ${selectedTask.status}`
@@ -1100,12 +1100,12 @@ export function ExecutionsPage() {
             status={selectedTask?.status ?? selectedRun?.status ?? 'READY'}
           />
           <StatusPanel
-            label="Current Scene"
+            label="当前场景"
             note={currentEntry?.display_map_name ?? selectedRun?.map_name ?? '无活动场景'}
             status={currentEntry?.status ?? selectedRun?.status ?? 'UNKNOWN'}
           />
           <StatusPanel
-            label="Viewer State"
+            label="画面状态"
             note={telemetryItems[5]?.hint ?? '等待画面'}
             status={
               viewMode === 'archive'
@@ -1157,10 +1157,10 @@ export function ExecutionsPage() {
             </DetailPanel>
           )}
 
-          <TelemetryPanel items={telemetryItems} subtitle="当前任务与当前场景状态" title="Telemetry" />
+          <TelemetryPanel items={telemetryItems} subtitle="当前任务与当前场景状态" title="遥测面板" />
 
           {viewMode === 'current' ? (
-            <DetailPanel subtitle="持续更新，优先定位当前活动场景的状态变化与异常" title="Event Timeline">
+            <DetailPanel subtitle="持续更新，优先定位当前活动场景的状态变化与异常" title="事件时间线">
               <EventTimeline
                 emptyDescription={
                   selectedRun ? '该 run 还没有事件写入。' : '当前没有可查看事件的活动场景。'

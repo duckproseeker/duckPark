@@ -5,8 +5,11 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from app.core.errors import NotFoundError
 from app.core.models import EventLevel
+from app.hil.gateway_runtime_status import gateway_matches_configured_pi, resolve_gateway_status
 from app.hil.pi_gateway_runtime import probe_pi_gateway
+from app.storage.gateway_store import GatewayStore
 from app.utils.time_utils import now_utc
 
 
@@ -16,6 +19,48 @@ class HilRuntimeStep:
     label: str
     start_command: str | None = None
     stop_command: str | None = None
+
+
+@dataclass(frozen=True)
+class HilRuntimeStartDecision:
+    payload: dict[str, Any]
+    allow_host_carla: bool = True
+    allow_host_display: bool = True
+    allow_pi_pipeline: bool = True
+    allow_jetson_pipeline: bool = True
+    message: str | None = None
+    level: EventLevel = EventLevel.INFO
+
+    def allows_step(self, step_id: str) -> bool:
+        if step_id == "host_carla":
+            return self.allow_host_carla
+        if step_id == "host_display":
+            return self.allow_host_display
+        if step_id == "pi_pipeline":
+            return self.allow_pi_pipeline
+        if step_id == "jetson_pipeline":
+            return self.allow_jetson_pipeline
+        return True
+
+    def has_restrictions(self) -> bool:
+        return not all(
+            [
+                self.allow_host_carla,
+                self.allow_host_display,
+                self.allow_pi_pipeline,
+                self.allow_jetson_pipeline,
+            ]
+        )
+
+    def allows_any_steps(self) -> bool:
+        return any(
+            [
+                self.allow_host_carla,
+                self.allow_host_display,
+                self.allow_pi_pipeline,
+                self.allow_jetson_pipeline,
+            ]
+        )
 
 
 class HilRuntimeOrchestrator:
@@ -29,6 +74,7 @@ class HilRuntimeOrchestrator:
         self._settings = settings
         self._event_callback = event_callback
         self._log_callback = log_callback
+        self._gateway_store = GatewayStore(self._settings.gateways_root)
 
     def applies_to_run(self, run: Any) -> bool:
         if not self._settings.hil_orchestration_enabled:
@@ -55,9 +101,45 @@ class HilRuntimeOrchestrator:
             )
             return []
 
+        start_decision = self._resolve_start_decision(run_id, run)
+        if start_decision.has_restrictions() and start_decision.message:
+            self._emit_event(
+                run_id,
+                "HIL_RUNTIME_DEGRADED" if start_decision.allows_any_steps() else "HIL_RUNTIME_SKIPPED",
+                start_decision.message,
+                payload=start_decision.payload,
+                level=start_decision.level,
+            )
+            self._append_log(
+                run_id,
+                (
+                    "[hil_runtime] start degraded: "
+                    f"reason={start_decision.message} payload={start_decision.payload}"
+                ),
+            )
+            if not start_decision.allows_any_steps():
+                return []
+
         env = self._build_command_env(run_id, run, descriptor)
         started_steps: list[HilRuntimeStep] = []
         for step in steps:
+            if not start_decision.allows_step(step.step_id):
+                self._emit_event(
+                    run_id,
+                    "HIL_RUNTIME_STEP_SKIPPED",
+                    self._step_skip_message(step, start_decision),
+                    payload={"step_id": step.step_id, **start_decision.payload},
+                    level=start_decision.level,
+                )
+                self._append_log(
+                    run_id,
+                    (
+                        f"[hil_runtime:{step.step_id}] start skipped: "
+                        f"reason={start_decision.message or 'step disallowed'} "
+                        f"payload={start_decision.payload}"
+                    ),
+                )
+                continue
             if not step.start_command:
                 self._emit_event(
                     run_id,
@@ -67,30 +149,6 @@ class HilRuntimeOrchestrator:
                     level=EventLevel.WARNING,
                 )
                 continue
-
-            if step.step_id == "pi_pipeline":
-                pi_gateway_status = probe_pi_gateway(self._settings)
-                if not pi_gateway_status["reachable"]:
-                    self._emit_event(
-                        run_id,
-                        "HIL_RUNTIME_STEP_SKIPPED",
-                        "树莓派网关当前不可达，已跳过虚拟传感器注入链路",
-                        payload={
-                            "step_id": step.step_id,
-                            "gateway_status": pi_gateway_status,
-                        },
-                        level=EventLevel.WARNING,
-                    )
-                    self._append_log(
-                        run_id,
-                        (
-                            "[hil_runtime:pi_pipeline] start skipped: "
-                            f"gateway unreachable host={pi_gateway_status['host']} "
-                            f"port={pi_gateway_status['port']} "
-                            f"warning={pi_gateway_status['warning']}"
-                        ),
-                    )
-                    continue
 
             self._emit_event(
                 run_id,
@@ -107,6 +165,132 @@ class HilRuntimeOrchestrator:
                 payload={"step_id": step.step_id},
             )
         return started_steps
+
+    def _resolve_start_decision(self, run_id: str, run: Any) -> HilRuntimeStartDecision:
+        hil_config = run.hil_config or {}
+        gateway_id = str(hil_config.get("gateway_id") or "").strip()
+        if not gateway_id:
+            return HilRuntimeStartDecision(
+                allow_host_carla=True,
+                allow_host_display=True,
+                allow_pi_pipeline=False,
+                allow_jetson_pipeline=False,
+                message="当前 run 未选择树莓派网关，已跳过 Pi 注入链路并继续启动 Host CARLA / 跟随视角",
+                payload={
+                    "gateway_id": None,
+                    "hil_mode": str(hil_config.get("mode") or ""),
+                    "reason_code": "gateway_not_selected",
+                },
+                level=EventLevel.INFO,
+            )
+
+        try:
+            gateway = self._gateway_store.get(gateway_id)
+        except NotFoundError:
+            return HilRuntimeStartDecision(
+                allow_host_carla=True,
+                allow_host_display=True,
+                allow_pi_pipeline=False,
+                allow_jetson_pipeline=False,
+                message=f"指定树莓派网关不存在，已跳过 Pi 注入链路并继续启动 Host CARLA / 跟随视角: {gateway_id}",
+                payload={
+                    "gateway_id": gateway_id,
+                    "reason_code": "gateway_not_found",
+                },
+                level=EventLevel.WARNING,
+            )
+
+        pi_gateway_status = probe_pi_gateway(self._settings)
+        checked_at = now_utc()
+        effective_status, heartbeat_age_seconds, status_detail = resolve_gateway_status(
+            gateway,
+            self._settings,
+            checked_at=checked_at,
+            pi_gateway_status=pi_gateway_status,
+        )
+        payload = {
+            "gateway_id": gateway_id,
+            "gateway_record_status": gateway.status.value,
+            "gateway_effective_status": effective_status,
+            "gateway_status_detail": status_detail,
+            "gateway_current_run_id": gateway.current_run_id,
+            "heartbeat_age_seconds": heartbeat_age_seconds,
+            "gateway_checked_at_utc": checked_at.isoformat(),
+            "pi_gateway_status": pi_gateway_status,
+            "configured_pi_match": gateway_matches_configured_pi(gateway, self._settings),
+        }
+
+        if not payload["configured_pi_match"]:
+            return HilRuntimeStartDecision(
+                allow_host_carla=True,
+                allow_host_display=True,
+                allow_pi_pipeline=False,
+                allow_jetson_pipeline=False,
+                message="选中的树莓派网关与当前平台配置的 Pi 主机不匹配，已跳过 Pi 注入链路并继续启动 Host CARLA / 跟随视角",
+                payload={**payload, "reason_code": "gateway_host_mismatch"},
+                level=EventLevel.WARNING,
+            )
+
+        if not pi_gateway_status.get("configured"):
+            return HilRuntimeStartDecision(
+                allow_host_carla=True,
+                allow_host_display=True,
+                allow_pi_pipeline=False,
+                allow_jetson_pipeline=False,
+                message="平台未完成树莓派链路配置，已跳过 Pi 注入链路并继续启动 Host CARLA / 跟随视角",
+                payload={**payload, "reason_code": "pi_gateway_not_configured"},
+                level=EventLevel.WARNING,
+            )
+
+        if not pi_gateway_status.get("reachable"):
+            return HilRuntimeStartDecision(
+                allow_host_carla=True,
+                allow_host_display=True,
+                allow_pi_pipeline=False,
+                allow_jetson_pipeline=False,
+                message="树莓派网关当前不可达，已跳过 Pi 注入链路并继续启动 Host CARLA / 跟随视角",
+                payload={**payload, "reason_code": "pi_gateway_unreachable"},
+                level=EventLevel.WARNING,
+            )
+
+        if effective_status != "READY":
+            return HilRuntimeStartDecision(
+                allow_host_carla=True,
+                allow_host_display=True,
+                allow_pi_pipeline=False,
+                allow_jetson_pipeline=False,
+                message=(
+                    "树莓派网关未处于 READY 状态，已跳过 Pi 注入链路并继续启动 Host CARLA / 跟随视角"
+                    f" (当前: {effective_status})"
+                ),
+                payload={**payload, "reason_code": "gateway_not_ready"},
+                level=EventLevel.WARNING,
+            )
+
+        return HilRuntimeStartDecision(
+            allow_host_carla=True,
+            allow_host_display=True,
+            allow_pi_pipeline=True,
+            allow_jetson_pipeline=True,
+            message=None,
+            payload={**payload, "reason_code": "gateway_ready"},
+            level=EventLevel.INFO,
+        )
+
+    def _step_skip_message(
+        self,
+        step: HilRuntimeStep,
+        decision: HilRuntimeStartDecision,
+    ) -> str:
+        if step.step_id == "host_carla":
+            return "树莓派网关未就绪，已跳过 Host CARLA 自动拉起"
+        if step.step_id == "pi_pipeline":
+            return "树莓派网关未就绪，已跳过 Pi HDMI RTP Pipeline"
+        if step.step_id == "jetson_pipeline":
+            return "树莓派网关未就绪，已跳过 Jetson Inference Pipeline"
+        if decision.message:
+            return f"{step.label} 已因降级策略跳过"
+        return f"{step.label} 已跳过"
 
     def stop_pipeline(
         self,

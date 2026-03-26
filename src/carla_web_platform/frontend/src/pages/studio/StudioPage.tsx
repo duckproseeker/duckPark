@@ -305,7 +305,7 @@ export function StudioPage() {
   return (
     <div className="page-stack studio-page">
       <PageHeader
-        title="Studio"
+        title="运维工作台"
         description="管理传感器模板和网关状态。"
         actions={
           <div className="flex flex-wrap gap-3">
@@ -325,7 +325,7 @@ export function StudioPage() {
           </div>
         }
         chips={['运维配置', '传感器模板', '车型绑定']}
-        eyebrow="Operations Workspace"
+        eyebrow="运维 / 模板工作区"
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

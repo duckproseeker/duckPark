@@ -3,17 +3,29 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
+import { getDevicesWorkspace } from '../../api/devices';
 import { getProjectWorkspace, listProjects } from '../../api/projects';
-import { listReports } from '../../api/reports';
+import { getReportsWorkspace, listReports } from '../../api/reports';
 import { getSystemStatus } from '../../api/system';
+import { DonutStatusChart } from '../../components/common/DonutStatusChart';
 import { EmptyState } from '../../components/common/EmptyState';
+import { MetricCard } from '../../components/common/MetricCard';
 import { SelectionList } from '../../components/common/SelectionList';
 import { StatusPill } from '../../components/common/StatusPill';
 import { setWorkflowSelection, useWorkflowSelection } from '../../features/workflow/state';
-import { formatDateTime, truncateMiddle } from '../../lib/format';
+import { formatDateTime, sortByActivity, truncateMiddle } from '../../lib/format';
 import { findProjectRecord } from '../../lib/platform';
 
 type ProjectViewMode = 'overview' | 'reports' | 'runtime';
+type PlatformIncident = {
+  id: string;
+  type: string;
+  status: string;
+  message: string;
+  to: string;
+  updated_at_utc?: string | null;
+  created_at_utc?: string | null;
+};
 
 function planningModeLabel(mode: string) {
   if (mode === 'single_scenario') {
@@ -36,6 +48,60 @@ function isActiveTask(status: string) {
   return ['CREATED', 'RUNNING'].includes(status);
 }
 
+function chartColorForStatus(status: string) {
+  if (status === 'COMPLETED' || status === 'READY') {
+    return '#22c55e';
+  }
+  if (status === 'DEGRADED' || status === 'QUEUED' || status === 'STARTING' || status === 'RUNNING' || status === 'STOPPING' || status === 'BUSY') {
+    return '#f59e0b';
+  }
+  if (status === 'FAILED' || status === 'ERROR' || status === 'CANCELED' || status === 'OFFLINE') {
+    return '#ef4444';
+  }
+  return '#64748b';
+}
+
+function normalizeApiStatus(status: string | null | undefined) {
+  if (!status) {
+    return '未知';
+  }
+  if (status.toLowerCase() === 'ok') {
+    return '在线';
+  }
+  return status;
+}
+
+function normalizeRuntimeStatus(status: string | null | undefined) {
+  if (!status) {
+    return '未知';
+  }
+
+  const labelMap: Record<string, string> = {
+    READY: '就绪',
+    RUNNING: '运行中',
+    COMPLETED: '已完成',
+    FAILED: '失败',
+    DEGRADED: '降级',
+    UNKNOWN: '未知',
+    CREATED: '已创建',
+    QUEUED: '排队中',
+    STARTING: '启动中',
+    STOPPING: '停止中',
+    PAUSED: '已暂停',
+    CANCELED: '已取消',
+    STOPPED: '已停止',
+    ERROR: '错误',
+    BUSY: '忙碌',
+    OFFLINE: '离线'
+  };
+
+  return labelMap[status] ?? status;
+}
+
+function gatewaySummaryLabel(gateway: { metrics: Record<string, unknown>; address: string | null }) {
+  return String(gateway.metrics.capture_resolution ?? gateway.address ?? '-');
+}
+
 export function ProjectsPage() {
   const workflow = useWorkflowSelection();
   const [viewMode, setViewMode] = useState<ProjectViewMode>('overview');
@@ -45,6 +111,16 @@ export function ProjectsPage() {
     queryKey: ['system-status'],
     queryFn: getSystemStatus,
     refetchInterval: 3000
+  });
+  const devicesWorkspaceQuery = useQuery({
+    queryKey: ['devices', 'workspace'],
+    queryFn: getDevicesWorkspace,
+    refetchInterval: 5000
+  });
+  const reportsWorkspaceQuery = useQuery({
+    queryKey: ['reports', 'workspace'],
+    queryFn: getReportsWorkspace,
+    refetchInterval: 5000
   });
 
   const projects = projectsQuery.data ?? [];
@@ -64,14 +140,26 @@ export function ProjectsPage() {
 
   const workspace = workspaceQuery.data;
   const reports = reportsQuery.data ?? [];
+  const devicesWorkspace = devicesWorkspaceQuery.data;
+  const reportsWorkspace = reportsWorkspaceQuery.data;
   const reportedTaskIds = useMemo(
     () => new Set(reports.map((report) => report.benchmark_task_id)),
     [reports]
+  );
+  const platformGateways = useMemo(
+    () => sortByActivity(devicesWorkspace?.gateways ?? []),
+    [devicesWorkspace?.gateways]
+  );
+  const platformCaptures = useMemo(
+    () => sortByActivity(devicesWorkspace?.captures ?? []),
+    [devicesWorkspace?.captures]
   );
 
   const latestReport = reports[0] ?? null;
   const latestTask = workspace?.benchmark_tasks[0] ?? null;
   const latestRun = workspace?.recent_runs[0] ?? null;
+  const latestPlatformCapture = platformCaptures[0] ?? null;
+  const latestPlatformGateway = platformGateways[0] ?? null;
   const activeTaskCount = workspace?.benchmark_tasks.filter((task) => isActiveTask(task.status)).length ?? 0;
   const archivableTaskCount =
     workspace?.benchmark_tasks.filter((task) => canArchiveReport(task.status)).length ?? 0;
@@ -79,6 +167,52 @@ export function ProjectsPage() {
     workspace?.benchmark_tasks.filter(
       (task) => canArchiveReport(task.status) && !reportedTaskIds.has(task.benchmark_task_id)
     ) ?? [];
+  const recentIncidents = useMemo<PlatformIncident[]>(() => {
+    const runIncidents = (reportsWorkspace?.recent_failures ?? []).map((run) => ({
+      id: run.run_id,
+      type: '执行',
+      status: run.status,
+      message: run.error_reason ?? run.scenario_name,
+      to: `/executions/${run.run_id}`,
+      updated_at_utc: run.updated_at_utc,
+      created_at_utc: run.created_at_utc
+    }));
+    const captureIncidents = platformCaptures
+      .filter((capture) => capture.status === 'FAILED')
+      .map((capture) => ({
+        id: capture.capture_id,
+        type: '采集',
+        status: capture.status,
+        message: capture.error_reason ?? capture.gateway_id,
+        to: `/devices/${capture.gateway_id}`,
+        updated_at_utc: capture.updated_at_utc,
+        created_at_utc: capture.created_at_utc
+      }));
+    const gatewayIncidents = platformGateways
+      .filter(
+        (gateway) =>
+          ['FAILED', 'ERROR', 'OFFLINE'].includes(gateway.status) || Boolean(gateway.metrics.last_error)
+      )
+      .map((gateway) => ({
+        id: gateway.gateway_id,
+        type: '网关',
+        status: gateway.status,
+        message: String(gateway.metrics.last_error ?? gateway.address ?? '设备状态异常'),
+        to: `/devices/${gateway.gateway_id}`,
+        updated_at_utc: gateway.updated_at_utc,
+        created_at_utc: gateway.created_at_utc
+      }));
+
+    return sortByActivity([...runIncidents, ...captureIncidents, ...gatewayIncidents]).slice(0, 6);
+  }, [platformCaptures, platformGateways, reportsWorkspace?.recent_failures]);
+  const executorHealthStatus = !systemQuery.data
+    ? 'UNKNOWN'
+    : systemQuery.data.executor.alive
+      ? 'READY'
+      : systemQuery.data.executor.pending_commands > 0
+        ? 'DEGRADED'
+        : 'OFFLINE';
+  const platformApiStatus = normalizeApiStatus(systemQuery.data?.api.status);
 
   return (
     <div className="page-stack">
@@ -87,7 +221,7 @@ export function ProjectsPage() {
           <div>
             <span className="project-console__eyebrow">项目管理</span>
             <h1>项目归档台</h1>
-            <p>查看项目总览、报告和运行情况。</p>
+            <p>首页承接平台状态、异常入口和项目归档结果。</p>
           </div>
 
           <div className="project-console__header-actions">
@@ -99,6 +233,224 @@ export function ProjectsPage() {
             </Link>
           </div>
         </header>
+
+        <div className="project-console__section-stack">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <MetricCard accent="blue" label="平台健康" value={platformApiStatus} hint="FastAPI /system/status" />
+            <MetricCard
+              accent="violet"
+              label="执行队列"
+              value={systemQuery.data?.executor.pending_commands ?? 0}
+              hint={
+                systemQuery.data
+                  ? systemQuery.data.executor.alive
+                    ? '执行器在线'
+                    : '执行器不在线'
+                  : '等待执行器状态'
+              }
+            />
+            <MetricCard
+              accent="teal"
+              label="在线设备"
+              value={devicesWorkspace?.summary.online_device_count ?? 0}
+              hint={`总计 ${systemQuery.data?.totals.gateways ?? 0} 个网关`}
+            />
+            <MetricCard
+              accent="orange"
+              label="运行中采集"
+              value={
+                devicesWorkspace?.summary.running_capture_count ??
+                systemQuery.data?.capture_observability.running_capture_ids.length ??
+                0
+              }
+              hint={latestPlatformCapture ? latestPlatformCapture.capture_id : '暂无采集'}
+            />
+            <MetricCard
+              accent="rose"
+              label="最近异常"
+              value={recentIncidents.length}
+              hint={recentIncidents[0]?.message ?? '当前无高优先级异常'}
+            />
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_360px]">
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">平台着陆页</span>
+                  <strong>全局状态概览</strong>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Link className="horizon-button-secondary" to="/devices" viewTransition>
+                    查看设备中心
+                  </Link>
+                  <Link className="horizon-button-secondary" to="/executions" viewTransition>
+                    查看执行中心
+                  </Link>
+                </div>
+              </header>
+
+              <div className="flex flex-col gap-4">
+                <div className="rounded-[24px] border border-border-glass bg-[var(--surface-glass)] px-5 py-5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <StatusPill canonical status={executorHealthStatus} />
+                    <span className="project-console__chip">API {platformApiStatus}</span>
+                    <span className="project-console__chip project-console__chip--muted">
+                      Pi 网关 {normalizeRuntimeStatus(systemQuery.data?.pi_gateway.status)}
+                    </span>
+                  </div>
+                  <strong className="mt-4 block text-2xl font-extrabold tracking-[-0.04em] text-text">
+                    项目首页现在承接平台健康、资源入口和异常排查
+                  </strong>
+                  <p className="mt-2 text-sm leading-6 text-text-muted">
+                    当前队列 {systemQuery.data?.executor.pending_commands ?? 0} 条命令，最近采集{' '}
+                    {systemQuery.data?.capture_observability.latest_capture_id ?? '-'}，Pi 网关状态{' '}
+                    {normalizeRuntimeStatus(systemQuery.data?.pi_gateway.status)}。
+                  </p>
+                  {systemQuery.data?.executor.warning ? (
+                    <p className="mt-3 text-sm text-amber-300">{systemQuery.data.executor.warning}</p>
+                  ) : null}
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Link
+                    className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4 transition hover:-translate-y-0.5 hover:border-[rgba(var(--accent-rgb),0.32)]"
+                    to={latestPlatformCapture ? `/devices/${latestPlatformCapture.gateway_id}` : '/devices'}
+                    viewTransition
+                  >
+                    <span className="block text-xs font-extrabold uppercase tracking-[0.16em] text-text-muted">
+                      最近采集
+                    </span>
+                    <strong className="mt-2 block text-sm text-text">
+                      {latestPlatformCapture?.capture_id ?? '暂无采集任务'}
+                    </strong>
+                    <small className="mt-2 block text-text-muted">
+                      {latestPlatformCapture
+                        ? `${latestPlatformCapture.saved_frames} 帧 / ${latestPlatformCapture.gateway_id}`
+                        : '设备中心会显示新的采集链路。'}
+                    </small>
+                  </Link>
+
+                  <Link
+                    className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4 transition hover:-translate-y-0.5 hover:border-[rgba(var(--accent-rgb),0.32)]"
+                    to={latestPlatformGateway ? `/devices/${latestPlatformGateway.gateway_id}` : '/devices'}
+                    viewTransition
+                  >
+                    <span className="block text-xs font-extrabold uppercase tracking-[0.16em] text-text-muted">
+                      最近网关
+                    </span>
+                    <strong className="mt-2 block text-sm text-text">
+                      {latestPlatformGateway?.name ?? '暂无设备'}
+                    </strong>
+                    <small className="mt-2 block text-text-muted">
+                      {latestPlatformGateway
+                        ? gatewaySummaryLabel(latestPlatformGateway)
+                        : '等待网关心跳与链路遥测。'}
+                    </small>
+                  </Link>
+
+                  <Link
+                    className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4 transition hover:-translate-y-0.5 hover:border-[rgba(var(--accent-rgb),0.32)]"
+                    to="/executions"
+                    viewTransition
+                  >
+                    <span className="block text-xs font-extrabold uppercase tracking-[0.16em] text-text-muted">
+                      执行器队列
+                    </span>
+                    <strong className="mt-2 block text-sm text-text">
+                      {systemQuery.data?.executor.active_run_id
+                        ? truncateMiddle(systemQuery.data.executor.active_run_id, 8)
+                        : '当前没有活动执行'}
+                    </strong>
+                    <small className="mt-2 block text-text-muted">
+                      最后命令 {systemQuery.data?.executor.last_command_run_id ?? '-'}
+                    </small>
+                  </Link>
+                </div>
+              </div>
+            </section>
+
+            <section className="project-console__card">
+              <header className="project-console__card-header">
+                <div>
+                  <span className="project-console__section-label">最近异常</span>
+                  <strong>优先排查队列</strong>
+                </div>
+              </header>
+
+              {recentIncidents.length === 0 ? (
+                <EmptyState description="当前没有近期失败、离线或错误状态。" title="异常为空" />
+              ) : (
+                <div className="project-console__table">
+                  {recentIncidents.map((incident) => (
+                    <Link className="project-console__table-row" key={`${incident.type}-${incident.id}`} to={incident.to} viewTransition>
+                      <div>
+                        <span>{incident.type}</span>
+                        <strong>{truncateMiddle(incident.id, 10)}</strong>
+                        <small>{incident.message}</small>
+                      </div>
+                      <small>{formatDateTime(incident.updated_at_utc ?? incident.created_at_utc ?? null)}</small>
+                      <StatusPill status={incident.status} />
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+
+          {systemQuery.data ? (
+            <div className="grid gap-5 xl:grid-cols-3">
+              <section className="project-console__card">
+                <DonutStatusChart
+                  title="运行状态分布"
+                  subtitle="查看调度是否集中在运行态或排队态。"
+                  items={Object.entries(systemQuery.data.counts.runs)
+                    .filter(([, value]) => value > 0)
+                    .map(([label, value]) => ({
+                      label,
+                      value,
+                      color: chartColorForStatus(label)
+                    }))}
+                />
+              </section>
+
+              <section className="project-console__card">
+                <DonutStatusChart
+                  title="采集状态分布"
+                  subtitle="直接确认采集链路是否稳定落盘。"
+                  items={Object.entries(systemQuery.data.counts.captures)
+                    .filter(([, value]) => value > 0)
+                    .map(([label, value]) => ({
+                      label,
+                      value,
+                      color: chartColorForStatus(label)
+                    }))}
+                />
+              </section>
+
+              <section className="project-console__card">
+                <DonutStatusChart
+                  title="网关状态分布"
+                  subtitle="关注就绪、忙碌、降级和离线状态的变化。"
+                  items={Object.entries(systemQuery.data.counts.gateways)
+                    .filter(([, value]) => value > 0)
+                    .map(([label, value]) => ({
+                      label,
+                      value,
+                      color: chartColorForStatus(label)
+                    }))}
+                />
+              </section>
+            </div>
+          ) : (
+            <section className="project-console__card">
+              <EmptyState
+                description={systemQuery.error instanceof Error ? systemQuery.error.message : '系统状态接口暂时不可用。'}
+                title="全局状态概览不可用"
+              />
+            </section>
+          )}
+        </div>
 
         <div className="project-console__layout">
           <aside className="project-console__rail">
@@ -340,7 +692,7 @@ export function ProjectsPage() {
                       </div>
                       <div className="project-console__summary-item">
                         <span>最新报告</span>
-                        <strong>{latestReport?.status ?? 'NONE'}</strong>
+                        <strong>{latestReport?.status ?? '无'}</strong>
                         <small>{latestReport ? latestReport.title : '还没有报告资产'}</small>
                       </div>
                       <div className="project-console__summary-item">
@@ -404,7 +756,7 @@ export function ProjectsPage() {
                                   <strong>{task.status}</strong>
                                   <small>{formatDateTime(task.updated_at_utc)}</small>
                                 </div>
-                                <small>{task.planned_run_count} runs</small>
+                                <small>{task.planned_run_count} 个运行</small>
                                 <Link className="horizon-button-secondary" to="/reports" viewTransition>
                                   去归档
                                 </Link>
@@ -421,8 +773,8 @@ export function ProjectsPage() {
                   <div className="project-console__section-stack">
                     <div className="project-console__summary-grid">
                       <div className="project-console__summary-item">
-                        <span>Executor</span>
-                        <strong>{systemQuery.data?.executor.status ?? 'UNKNOWN'}</strong>
+                        <span>执行器</span>
+                        <strong>{systemQuery.data?.executor.status ?? '未知'}</strong>
                         <small>{systemQuery.data?.executor.warning ?? '无额外警告'}</small>
                       </div>
                       <div className="project-console__summary-item">
@@ -479,7 +831,7 @@ export function ProjectsPage() {
                                   <strong>{gateway.status}</strong>
                                   <small>{gateway.address ?? gateway.gateway_id}</small>
                                 </div>
-                                <small>{gateway.current_run_id ? 'BUSY' : 'IDLE'}</small>
+                                <small>{gateway.current_run_id ? '忙碌' : '空闲'}</small>
                                 <Link className="horizon-button-secondary" to="/devices" viewTransition>
                                   去设备页
                                 </Link>

@@ -21,7 +21,7 @@ export function AppShell() {
       <aside className="console-sidebar">
         <div className="console-sidebar__brand console-sidebar__brand--minimal">
           <div>
-            <span className="console-sidebar__eyebrow">DuckPark / Console</span>
+            <span className="console-sidebar__eyebrow">DuckPark / 控制台</span>
             <h1>CARLA HIL</h1>
           </div>
           <button
@@ -66,7 +66,7 @@ export function AppShell() {
       <div className="console-main">
         <header className="console-topbar console-topbar--minimal">
           <div className="console-topbar__headline">
-            <span className="console-topbar__eyebrow">DuckPark Control Surface</span>
+            <span className="console-topbar__eyebrow">DuckPark 控制面</span>
             <h2 style={{ viewTransitionName: 'shell-current-page' }}>{currentItem.label}</h2>
           </div>
 

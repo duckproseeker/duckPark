@@ -42,7 +42,7 @@ export function DeviceDetailPage() {
     <div className="page-stack">
       <PageHeader
         title="设备详情"
-        eyebrow="Devices / Detail"
+        eyebrow="设备 / 详情"
         chips={['设备遥测', '采集证据链', '底层诊断']}
         description={gateway ? `${gateway.name} / ${gateway.gateway_id}` : gatewayId}
         actions={
@@ -111,11 +111,14 @@ export function DeviceDetailPage() {
                 ) : (
                   <div className="flex flex-col gap-4">
                     {captures.map((capture) => (
-                      <div key={capture.capture_id} className="rounded-[20px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
+                      <div
+                        key={capture.capture_id}
+                        className="rounded-[20px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4"
+                      >
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
-                            <strong className="block truncate text-sm font-bold text-navy-900">{capture.capture_id}</strong>
-                            <p className="mt-1 truncate text-xs text-secondaryGray-500">{capture.save_dir}</p>
+                            <strong className="block truncate text-sm font-bold text-text">{capture.capture_id}</strong>
+                            <p className="mt-1 truncate text-xs text-text-muted">{capture.save_dir}</p>
                           </div>
                           <StatusPill status={capture.status} />
                         </div>
@@ -126,7 +129,7 @@ export function DeviceDetailPage() {
                             value={capture.saved_frames}
                           />
                         </div>
-                        <p className="mt-3 text-xs text-secondaryGray-500">{formatDateTime(capture.updated_at_utc)}</p>
+                        <p className="mt-3 text-xs text-text-muted">{formatDateTime(capture.updated_at_utc)}</p>
                       </div>
                     ))}
                   </div>
@@ -141,12 +144,15 @@ export function DeviceDetailPage() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {benchmarkTasks.map((task) => (
-                      <div key={task.benchmark_task_id} className="rounded-[18px] border border-secondaryGray-200 bg-secondaryGray-50/70 px-4 py-4">
+                      <div
+                        key={task.benchmark_task_id}
+                        className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4"
+                      >
                         <div className="flex items-center justify-between gap-3">
-                          <strong className="text-sm font-bold text-navy-900">{task.benchmark_name}</strong>
+                          <strong className="text-sm font-bold text-text">{task.benchmark_name}</strong>
                           <StatusPill status={task.status} />
                         </div>
-                        <p className="mt-2 text-xs text-secondaryGray-500">
+                        <p className="mt-2 text-xs text-text-muted">
                           {task.dut_model ?? '未登记 DUT'} / {task.project_name}
                         </p>
                       </div>
@@ -159,7 +165,7 @@ export function DeviceDetailPage() {
                 <JsonBlock value={gateway.capabilities} />
               </Panel>
 
-              <Panel title="原始 metrics">
+              <Panel title="原始指标">
                 <JsonBlock compact value={gateway.metrics} />
               </Panel>
             </div>

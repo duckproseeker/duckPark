@@ -43,11 +43,11 @@ export function ReportsPage() {
       return [];
     }
     return [
-      { label: 'Total Runs', value: selectedTask.summary.counts?.total_runs ?? '-' },
-      { label: 'Completed', value: selectedTask.summary.counts?.completed_runs ?? '-' },
-      { label: 'Failed', value: selectedTask.summary.counts?.failed_runs ?? '-' },
-      { label: 'Canceled', value: selectedTask.summary.counts?.canceled_runs ?? '-' },
-      { label: 'Running', value: selectedTask.summary.counts?.running_runs ?? '-' }
+      { label: '总运行数', value: selectedTask.summary.counts?.total_runs ?? '-' },
+      { label: '已完成', value: selectedTask.summary.counts?.completed_runs ?? '-' },
+      { label: '失败', value: selectedTask.summary.counts?.failed_runs ?? '-' },
+      { label: '已取消', value: selectedTask.summary.counts?.canceled_runs ?? '-' },
+      { label: '运行中', value: selectedTask.summary.counts?.running_runs ?? '-' }
     ];
   }, [selectedTask]);
 
@@ -64,7 +64,7 @@ export function ReportsPage() {
   return (
     <div className="page-stack">
       <CompactPageHeader
-        stepLabel="Step 5 / Reports"
+        stepLabel="步骤 5 / 报告"
         title="报告分析工作台"
         description="报告中心聚焦分析和导出。左侧报告列表，中间摘要与对比，右侧给出导出动作和异常结论。"
         contextSummary={selectedReport ? `当前报告 ${selectedReport.title}` : '暂无报告资产'}
@@ -103,10 +103,10 @@ export function ReportsPage() {
               items={reports.map((report) => ({
                 id: report.report_id,
                 title: report.title,
-                subtitle: `Task ${report.benchmark_task_id}`,
+                subtitle: `任务 ${report.benchmark_task_id}`,
                 meta: formatDateTime(report.updated_at_utc),
                 status: report.status,
-                hint: report.dut_model ?? 'No DUT'
+                hint: report.dut_model ?? '未登记 DUT'
               }))}
               onSelect={setSelectedReportId}
               selectedId={selectedReport?.report_id ?? null}
@@ -123,12 +123,12 @@ export function ReportsPage() {
                 <div className="workbench-surface">
                   <h3 className="workbench-surface__title">{selectedReport.title}</h3>
                   <p className="workbench-copy" style={{ marginTop: '0.45rem' }}>
-                    Report ID: {selectedReport.report_id}
+                    报告 ID: {selectedReport.report_id}
                   </p>
                   <p className="workbench-copy">
-                    Project: {selectedReport.project_id} / Benchmark: {selectedReport.benchmark_definition_id}
+                    项目: {selectedReport.project_id} / 基准任务: {selectedReport.benchmark_definition_id}
                   </p>
-                  <p className="workbench-copy">DUT: {selectedReport.dut_model ?? '未登记'}</p>
+                  <p className="workbench-copy">待测设备: {selectedReport.dut_model ?? '未登记'}</p>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
@@ -136,7 +136,7 @@ export function ReportsPage() {
                     <p className="workbench-kicker">运行对比摘要</p>
                     {comparisonRows.length === 0 ? (
                       <p className="workbench-copy" style={{ marginTop: '0.45rem' }}>
-                        缺少关联 task summary。
+                        缺少关联任务摘要。
                       </p>
                     ) : (
                       <div className="workbench-stack" style={{ marginTop: '0.45rem' }}>
@@ -152,13 +152,13 @@ export function ReportsPage() {
                   <div className="workbench-surface">
                     <p className="workbench-kicker">平台聚合指标</p>
                     <p className="workbench-copy" style={{ marginTop: '0.45rem' }}>
-                      FPS: {selectedMetrics?.fps?.toFixed(1) ?? 'Pending'}
+                      平均帧率: {selectedMetrics?.fps?.toFixed(1) ?? '待生成'}
                     </p>
                     <p className="workbench-copy">
-                      Pass Rate: {selectedMetrics?.pass_rate?.toFixed(1) ?? 'Pending'}%
+                      通过率: {selectedMetrics?.pass_rate?.toFixed(1) ?? '待生成'}%
                     </p>
                     <p className="workbench-copy">
-                      Anomaly Rate: {selectedMetrics?.anomaly_rate?.toFixed(1) ?? 'Pending'}%
+                      异常率: {selectedMetrics?.anomaly_rate?.toFixed(1) ?? '待生成'}%
                     </p>
                   </div>
                 </div>
@@ -208,18 +208,18 @@ export function ReportsPage() {
 
         <div className="flex flex-col gap-3">
           <StatusPanel
-            label="Report Coverage"
-            note={`${workspace?.summary.report_count ?? 0} reports / ${workspace?.summary.benchmark_task_count ?? 0} benchmark tasks`}
+            label="报告覆盖率"
+            note={`${workspace?.summary.report_count ?? 0} 份报告 / ${workspace?.summary.benchmark_task_count ?? 0} 个基准任务`}
             status={reports.length > 0 ? 'READY' : 'UNKNOWN'}
           />
           <StatusPanel
-            label="Export Queue"
-            note={`${workspace?.summary.exportable_task_count ?? 0} tasks can be exported`}
+            label="导出队列"
+            note={`${workspace?.summary.exportable_task_count ?? 0} 个任务可导出`}
             status={exportableTasks.length > 0 ? 'READY' : 'UNKNOWN'}
           />
           <StatusPanel
-            label="Failure Focus"
-            note={`${workspace?.summary.recent_failure_count ?? 0} recent failed or canceled runs`}
+            label="异常聚焦"
+            note={`${workspace?.summary.recent_failure_count ?? 0} 个近期失败或取消的运行`}
             status={recentFailures.length > 0 ? 'FAILED' : 'COMPLETED'}
           />
 
