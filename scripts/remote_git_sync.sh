@@ -16,10 +16,12 @@ SYNC_REMOTE="${SYNC_REMOTE:-origin}"
 SYNC_REPO_URL="${SYNC_REPO_URL:-https://github.com/duckproseeker/duckPark.git}"
 REMOTE_OWNER="${REMOTE_OWNER:-${REMOTE_USER}}"
 REMOTE_NODE_IMAGE="${REMOTE_NODE_IMAGE:-node:20-bookworm-slim}"
+LOCAL_FRONTEND_FALLBACK="${LOCAL_FRONTEND_FALLBACK:-1}"
 SKIP_PUBLISH=0
 SKIP_FRONTEND_BUILD=0
 SKIP_RESTART=0
 SKIP_SMOKE=0
+LOCAL_DIST_ARCHIVE=""
 
 usage() {
   cat <<'EOF'
@@ -244,9 +246,45 @@ EOF
   remote_host_bash "${remote_script}"
 }
 
+build_local_frontend() {
+  (
+    cd "${PROJECT_ROOT}/frontend"
+    npm run build
+  )
+}
+
+upload_local_frontend_dist() {
+  local archive_name timestamp
+  timestamp="$(date +%Y%m%d%H%M%S)"
+  LOCAL_DIST_ARCHIVE="/tmp/duckpark_frontend_dist_${timestamp}.tgz"
+  archive_name="$(basename "${LOCAL_DIST_ARCHIVE}")"
+
+  tar czf "${LOCAL_DIST_ARCHIVE}" -C "${PROJECT_ROOT}/frontend" dist
+  remote_scp "${LOCAL_DIST_ARCHIVE}" "${REMOTE_USER}@${REMOTE_HOST}:/tmp/${archive_name}"
+  remote_host_bash "
+set -euo pipefail
+project_root=$(printf '%q' "${REMOTE_HOST_PROJECT_ROOT}")
+owner=$(printf '%q' "${REMOTE_OWNER}")
+mkdir -p \"\${project_root}/frontend\"
+rm -rf \"\${project_root}/frontend/dist\"
+tar xzf /tmp/${archive_name} -C \"\${project_root}/frontend\"
+rm -f /tmp/${archive_name}
+chown -R \"\${owner}:\${owner}\" \"\${project_root}/frontend/dist\"
+"
+  rm -f "${LOCAL_DIST_ARCHIVE}"
+  LOCAL_DIST_ARCHIVE=""
+}
+
 restart_and_smoke() {
   if (( SKIP_FRONTEND_BUILD == 0 )); then
-    build_remote_frontend
+    if ! build_remote_frontend; then
+      if [[ "${LOCAL_FRONTEND_FALLBACK}" == "1" || "${LOCAL_FRONTEND_FALLBACK}" == "true" ]]; then
+        build_local_frontend
+        upload_local_frontend_dist
+      else
+        return 1
+      fi
+    fi
   fi
 
   if (( SKIP_RESTART == 0 )); then
