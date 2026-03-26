@@ -666,9 +666,9 @@ export function ExecutionsPage() {
     <div className="page-stack execution-page">
       <CompactPageHeader
         className="compact-page-header--execution"
-        stepLabel="步骤 4 / 执行"
-        title="执行监控"
-        description="查看当前执行和历史任务。"
+        stepLabel="步骤 4 / 执行台"
+        title="执行台 / 运行监控"
+        description="统一查看当前运行、排队队列、历史任务和独立场景执行，避免在多个页面来回切换。"
         contextSummary={
           selectedTask
             ? `${selectedTask.benchmark_name} / ${selectedTask.dut_model ?? '未登记 DUT'}`
@@ -695,9 +695,9 @@ export function ExecutionsPage() {
       />
 
       <div className="grid gap-3 md:grid-cols-4">
-        <MetricCard accent="blue" label="活跃任务" value={activeTasks.length} hint="只统计当前执行中的批量任务" />
-        <MetricCard accent="teal" label="活动场景" value={activeRunCount} hint="同一时刻理论上只应有 1 个运行中场景" />
-        <MetricCard accent="orange" label="等待队列" value={queuedRunCount} hint="尚未进入当前执行的场景数量" />
+        <MetricCard accent="blue" label="运行中任务" value={activeTasks.length} hint="只统计当前执行中的批量任务" />
+        <MetricCard accent="teal" label="运行中场景" value={activeRunCount} hint="同一时刻理论上只应有 1 个运行中场景" />
+        <MetricCard accent="orange" label="排队场景" value={queuedRunCount} hint="尚未进入当前执行的场景数量" />
         <MetricCard accent="violet" label="归档任务" value={archiveCount} hint="已完成 / 失败 / 取消任务" />
       </div>
 
@@ -734,8 +734,8 @@ export function ExecutionsPage() {
                 <SelectionList
                   emptyDescription={
                     viewMode === 'current'
-                      ? '当前没有活跃批量任务。'
-                      : '当前还没有进入归档的批量任务。'
+                      ? '当前没有活跃批量任务。可以先去基准任务台创建批量任务，或到场景集直接发起单次运行。'
+                      : '当前还没有进入归档的批量任务。执行完成后这里会沉淀历史记录。'
                   }
                   emptyTitle={viewMode === 'current' ? '无活跃任务' : '无归档任务'}
                   items={visibleTasks.map((task) => {
