@@ -163,7 +163,11 @@ for persistent_dir in run_data artifacts; do
   fi
 done
 
-chown -R "\${owner}:\${owner}" "\${project_root}"
+chown "\${owner}:\${owner}" "\${project_root}" || true
+find "\${project_root}" -mindepth 1 -maxdepth 1 \
+  ! -name run_data \
+  ! -name artifacts \
+  -exec chown -R "\${owner}:\${owner}" {} + || true
 for persistent_dir in run_data artifacts; do
   if [[ -e "\${project_root}/\${persistent_dir}" ]]; then
     chown -R "\${owner}:\${owner}" "\${project_root}/\${persistent_dir}" || true
