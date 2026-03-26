@@ -161,6 +161,26 @@ conda run -n duckpark-carla-web bash scripts/start_platform.sh --carla-host 192.
 bash scripts/start_platform.sh --carla-host 127.0.0.1 --carla-port 2000 --traffic-manager-port 8010 --no-executor
 ```
 
+### 4) 远端主机改为 Git 同步部署
+
+适用场景：
+- 远端当前目录还不是 Git checkout，但后续希望通过 Git 分支同步 `carla_web_platform`
+- 保留旧目录备份，便于直接回滚
+
+本地先发布 `src/carla_web_platform` 为可直接 clone 的 deploy 分支，再让远端执行备份/clone/恢复：
+
+```bash
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+REMOTE_PASSWORD='<remote-password>' bash scripts/remote_git_sync.sh deploy
+```
+
+回滚时会删除当前新目录，再把最近一次 `carla_web_platform_bak_<timestamp>` 改回原名：
+
+```bash
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+REMOTE_PASSWORD='<remote-password>' bash scripts/remote_git_sync.sh rollback
+```
+
 ## 最小验证流程
 
 1. 打开 `http://127.0.0.1:8000/`，进入中文控制台
