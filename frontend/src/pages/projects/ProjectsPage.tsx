@@ -10,6 +10,8 @@ import { getSystemStatus } from '../../api/system';
 import { DonutStatusChart } from '../../components/common/DonutStatusChart';
 import { EmptyState } from '../../components/common/EmptyState';
 import { MetricCard } from '../../components/common/MetricCard';
+import { PageHeader } from '../../components/common/PageHeader';
+import { Panel } from '../../components/common/Panel';
 import { SelectionList } from '../../components/common/SelectionList';
 import { StatusPill } from '../../components/common/StatusPill';
 import { setWorkflowSelection, useWorkflowSelection } from '../../features/workflow/state';
@@ -215,27 +217,26 @@ export function ProjectsPage() {
   const platformApiStatus = normalizeApiStatus(systemQuery.data?.api.status);
 
   return (
-    <div className="page-stack">
-      <section className="project-console">
-        <header className="project-console__header">
-          <div>
-            <span className="project-console__eyebrow">项目管理</span>
-            <h1>项目归档台</h1>
-            <p>首页承接平台状态、异常入口和项目归档结果。</p>
-          </div>
-
-          <div className="project-console__header-actions">
+    <div className="page-stack project-console">
+      <PageHeader
+        title="项目台 / 归档与运行总览"
+        eyebrow="项目 / 归档与运行态"
+        chips={['平台健康', '项目归档', '运行态']}
+        description="项目页负责承接平台状态、异常入口和项目归档结果，不在这里展开模板编排细节。"
+        actions={
+          <>
             <Link className="horizon-button-secondary" to="/reports" viewTransition>
               打开报告中心
             </Link>
             <Link className="horizon-button" to="/benchmarks" viewTransition>
               去创建基准任务
             </Link>
-          </div>
-        </header>
+          </>
+        }
+      />
 
-        <div className="project-console__section-stack">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="project-console__section-stack">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <MetricCard accent="blue" label="平台健康" value={platformApiStatus} hint="FastAPI /system/status" />
             <MetricCard
               accent="violet"
@@ -273,134 +274,129 @@ export function ProjectsPage() {
             />
           </div>
 
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_360px]">
-            <section className="project-console__card">
-              <header className="project-console__card-header">
-                <div>
-                  <span className="project-console__section-label">平台着陆页</span>
-                  <strong>全局状态概览</strong>
-                </div>
-                <div className="flex flex-wrap gap-3">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_360px]">
+          <Panel
+            eyebrow="平台着陆页"
+            subtitle="项目首页现在承接平台健康、资源入口和异常排查。"
+            title="全局状态概览"
+            actions={
+              <div className="flex flex-wrap gap-3">
                   <Link className="horizon-button-secondary" to="/devices" viewTransition>
                     查看设备中心
                   </Link>
                   <Link className="horizon-button-secondary" to="/executions" viewTransition>
                     查看执行中心
                   </Link>
-                </div>
-              </header>
-
-              <div className="flex flex-col gap-4">
-                <div className="rounded-[24px] border border-border-glass bg-[var(--surface-glass)] px-5 py-5">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <StatusPill canonical status={executorHealthStatus} />
-                    <span className="project-console__chip">API {platformApiStatus}</span>
-                    <span className="project-console__chip project-console__chip--muted">
-                      Pi 网关 {normalizeRuntimeStatus(systemQuery.data?.pi_gateway.status)}
-                    </span>
-                  </div>
-                  <strong className="mt-4 block text-2xl font-extrabold tracking-[-0.04em] text-text">
-                    项目首页现在承接平台健康、资源入口和异常排查
-                  </strong>
-                  <p className="mt-2 text-sm leading-6 text-text-muted">
-                    当前队列 {systemQuery.data?.executor.pending_commands ?? 0} 条命令，最近采集{' '}
-                    {systemQuery.data?.capture_observability.latest_capture_id ?? '-'}，Pi 网关状态{' '}
-                    {normalizeRuntimeStatus(systemQuery.data?.pi_gateway.status)}。
-                  </p>
-                  {systemQuery.data?.executor.warning ? (
-                    <p className="mt-3 text-sm text-amber-300">{systemQuery.data.executor.warning}</p>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <Link
-                    className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4 transition hover:-translate-y-0.5 hover:border-[rgba(var(--accent-rgb),0.32)]"
-                    to={latestPlatformCapture ? `/devices/${latestPlatformCapture.gateway_id}` : '/devices'}
-                    viewTransition
-                  >
-                    <span className="block text-xs font-extrabold uppercase tracking-[0.16em] text-text-muted">
-                      最近采集
-                    </span>
-                    <strong className="mt-2 block text-sm text-text">
-                      {latestPlatformCapture?.capture_id ?? '暂无采集任务'}
-                    </strong>
-                    <small className="mt-2 block text-text-muted">
-                      {latestPlatformCapture
-                        ? `${latestPlatformCapture.saved_frames} 帧 / ${latestPlatformCapture.gateway_id}`
-                        : '设备中心会显示新的采集链路。'}
-                    </small>
-                  </Link>
-
-                  <Link
-                    className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4 transition hover:-translate-y-0.5 hover:border-[rgba(var(--accent-rgb),0.32)]"
-                    to={latestPlatformGateway ? `/devices/${latestPlatformGateway.gateway_id}` : '/devices'}
-                    viewTransition
-                  >
-                    <span className="block text-xs font-extrabold uppercase tracking-[0.16em] text-text-muted">
-                      最近网关
-                    </span>
-                    <strong className="mt-2 block text-sm text-text">
-                      {latestPlatformGateway?.name ?? '暂无设备'}
-                    </strong>
-                    <small className="mt-2 block text-text-muted">
-                      {latestPlatformGateway
-                        ? gatewaySummaryLabel(latestPlatformGateway)
-                        : '等待网关心跳与链路遥测。'}
-                    </small>
-                  </Link>
-
-                  <Link
-                    className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4 transition hover:-translate-y-0.5 hover:border-[rgba(var(--accent-rgb),0.32)]"
-                    to="/executions"
-                    viewTransition
-                  >
-                    <span className="block text-xs font-extrabold uppercase tracking-[0.16em] text-text-muted">
-                      执行器队列
-                    </span>
-                    <strong className="mt-2 block text-sm text-text">
-                      {systemQuery.data?.executor.active_run_id
-                        ? truncateMiddle(systemQuery.data.executor.active_run_id, 8)
-                        : '当前没有活动执行'}
-                    </strong>
-                    <small className="mt-2 block text-text-muted">
-                      最后命令 {systemQuery.data?.executor.last_command_run_id ?? '-'}
-                    </small>
-                  </Link>
-                </div>
               </div>
-            </section>
-
-            <section className="project-console__card">
-              <header className="project-console__card-header">
-                <div>
-                  <span className="project-console__section-label">最近异常</span>
-                  <strong>优先排查队列</strong>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <div className="rounded-[24px] border border-border-glass bg-[var(--surface-glass)] px-5 py-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <StatusPill canonical status={executorHealthStatus} />
+                  <span className="project-console__chip">API {platformApiStatus}</span>
+                  <span className="project-console__chip project-console__chip--muted">
+                    Pi 网关 {normalizeRuntimeStatus(systemQuery.data?.pi_gateway.status)}
+                  </span>
                 </div>
-              </header>
+                <strong className="mt-4 block text-2xl font-extrabold tracking-[-0.04em] text-text">
+                  项目首页现在承接平台健康、资源入口和异常排查
+                </strong>
+                <p className="mt-2 text-sm leading-6 text-text-muted">
+                  当前队列 {systemQuery.data?.executor.pending_commands ?? 0} 条命令，最近采集{' '}
+                  {systemQuery.data?.capture_observability.latest_capture_id ?? '-'}，Pi 网关状态{' '}
+                  {normalizeRuntimeStatus(systemQuery.data?.pi_gateway.status)}。
+                </p>
+                {systemQuery.data?.executor.warning ? (
+                  <p className="mt-3 text-sm text-amber-300">{systemQuery.data.executor.warning}</p>
+                ) : null}
+              </div>
 
-              {recentIncidents.length === 0 ? (
-                <EmptyState description="当前没有近期失败、离线或错误状态。" title="异常为空" />
-              ) : (
-                <div className="project-console__table">
-                  {recentIncidents.map((incident) => (
-                    <Link className="project-console__table-row" key={`${incident.type}-${incident.id}`} to={incident.to} viewTransition>
-                      <div>
-                        <span>{incident.type}</span>
-                        <strong>{truncateMiddle(incident.id, 10)}</strong>
-                        <small>{incident.message}</small>
-                      </div>
-                      <small>{formatDateTime(incident.updated_at_utc ?? incident.created_at_utc ?? null)}</small>
-                      <StatusPill status={incident.status} />
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Link
+                  className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4 transition hover:-translate-y-0.5 hover:border-[rgba(var(--accent-rgb),0.32)]"
+                  to={latestPlatformCapture ? `/devices/${latestPlatformCapture.gateway_id}` : '/devices'}
+                  viewTransition
+                >
+                  <span className="block text-xs font-extrabold uppercase tracking-[0.16em] text-text-muted">
+                    最近采集
+                  </span>
+                  <strong className="mt-2 block text-sm text-text">
+                    {latestPlatformCapture?.capture_id ?? '暂无采集任务'}
+                  </strong>
+                  <small className="mt-2 block text-text-muted">
+                    {latestPlatformCapture
+                      ? `${latestPlatformCapture.saved_frames} 帧 / ${latestPlatformCapture.gateway_id}`
+                      : '设备中心会显示新的采集链路。'}
+                  </small>
+                </Link>
 
-          {systemQuery.data ? (
-            <div className="grid gap-5 xl:grid-cols-3">
-              <section className="project-console__card">
+                <Link
+                  className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4 transition hover:-translate-y-0.5 hover:border-[rgba(var(--accent-rgb),0.32)]"
+                  to={latestPlatformGateway ? `/devices/${latestPlatformGateway.gateway_id}` : '/devices'}
+                  viewTransition
+                >
+                  <span className="block text-xs font-extrabold uppercase tracking-[0.16em] text-text-muted">
+                    最近网关
+                  </span>
+                  <strong className="mt-2 block text-sm text-text">
+                    {latestPlatformGateway?.name ?? '暂无设备'}
+                  </strong>
+                  <small className="mt-2 block text-text-muted">
+                    {latestPlatformGateway
+                      ? gatewaySummaryLabel(latestPlatformGateway)
+                      : '等待网关心跳与链路遥测。'}
+                  </small>
+                </Link>
+
+                <Link
+                  className="rounded-[18px] border border-border-glass bg-[var(--surface-glass)] px-4 py-4 transition hover:-translate-y-0.5 hover:border-[rgba(var(--accent-rgb),0.32)]"
+                  to="/executions"
+                  viewTransition
+                >
+                  <span className="block text-xs font-extrabold uppercase tracking-[0.16em] text-text-muted">
+                    执行器队列
+                  </span>
+                  <strong className="mt-2 block text-sm text-text">
+                    {systemQuery.data?.executor.active_run_id
+                      ? truncateMiddle(systemQuery.data.executor.active_run_id, 8)
+                      : '当前没有活动执行'}
+                  </strong>
+                  <small className="mt-2 block text-text-muted">
+                    最后命令 {systemQuery.data?.executor.last_command_run_id ?? '-'}
+                  </small>
+                </Link>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel eyebrow="最近异常" subtitle="按运行、采集和网关统一排序最近异常。" title="优先排查队列">
+            {recentIncidents.length === 0 ? (
+              <EmptyState
+                description="当前没有近期失败、离线或错误状态。后续有异常时，这里会直接给出去执行台或设备台的入口。"
+                title="异常为空"
+              />
+            ) : (
+              <div className="project-console__table">
+                {recentIncidents.map((incident) => (
+                  <Link className="project-console__table-row" key={`${incident.type}-${incident.id}`} to={incident.to} viewTransition>
+                    <div>
+                      <span>{incident.type}</span>
+                      <strong>{truncateMiddle(incident.id, 10)}</strong>
+                      <small>{incident.message}</small>
+                    </div>
+                    <small>{formatDateTime(incident.updated_at_utc ?? incident.created_at_utc ?? null)}</small>
+                    <StatusPill status={incident.status} />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        {systemQuery.data ? (
+          <div className="grid gap-5 xl:grid-cols-3">
+            <Panel className="h-full">
                 <DonutStatusChart
                   title="运行状态分布"
                   subtitle="查看调度是否集中在运行态或排队态。"
@@ -412,9 +408,9 @@ export function ProjectsPage() {
                       color: chartColorForStatus(label)
                     }))}
                 />
-              </section>
+            </Panel>
 
-              <section className="project-console__card">
+            <Panel className="h-full">
                 <DonutStatusChart
                   title="采集状态分布"
                   subtitle="直接确认采集链路是否稳定落盘。"
@@ -426,9 +422,9 @@ export function ProjectsPage() {
                       color: chartColorForStatus(label)
                     }))}
                 />
-              </section>
+            </Panel>
 
-              <section className="project-console__card">
+            <Panel className="h-full">
                 <DonutStatusChart
                   title="网关状态分布"
                   subtitle="关注就绪、忙碌、降级和离线状态的变化。"
@@ -440,90 +436,82 @@ export function ProjectsPage() {
                       color: chartColorForStatus(label)
                     }))}
                 />
-              </section>
-            </div>
-          ) : (
-            <section className="project-console__card">
+            </Panel>
+          </div>
+        ) : (
+          <Panel>
+            <EmptyState
+              description={systemQuery.error instanceof Error ? systemQuery.error.message : '系统状态接口暂时不可用。'}
+              title="全局状态概览不可用"
+            />
+          </Panel>
+        )}
+      </div>
+
+      <div className="project-console__layout">
+        <aside className="project-console__rail">
+          <Panel eyebrow="项目入口" subtitle="项目页只负责看归档和运行态，不在这里展开模板编排。" title="项目列表">
+            {projectsQuery.isLoading ? (
+              <EmptyState description="正在同步项目目录。" title="项目加载中" />
+            ) : projectsQuery.isError ? (
               <EmptyState
-                description={systemQuery.error instanceof Error ? systemQuery.error.message : '系统状态接口暂时不可用。'}
-                title="全局状态概览不可用"
+                description={
+                  projectsQuery.error instanceof Error ? projectsQuery.error.message : '项目接口异常。'
+                }
+                title="项目加载失败"
               />
-            </section>
-          )}
-        </div>
-
-        <div className="project-console__layout">
-          <aside className="project-console__rail">
-            <section className="project-console__card">
-              <header className="project-console__card-header">
-                <div>
-                  <span className="project-console__section-label">项目入口</span>
-                  <strong>项目列表</strong>
-                </div>
-              </header>
-
-              {projectsQuery.isLoading ? (
-                <EmptyState description="正在同步项目目录。" title="项目加载中" />
-              ) : projectsQuery.isError ? (
-                <EmptyState
-                  description={
-                    projectsQuery.error instanceof Error ? projectsQuery.error.message : '项目接口异常。'
-                  }
-                  title="项目加载失败"
-                />
-              ) : (
-                <SelectionList
-                  emptyDescription="后端暂未返回项目记录。"
-                  emptyTitle="没有项目"
-                  expandLabel="展开项目"
-                  maxVisible={6}
-                  items={projects.map((project) => ({
-                    id: project.project_id,
-                    title: project.name,
-                    subtitle: project.description,
-                    meta: `${project.vendor} / ${project.processor}`,
-                    status: project.status,
-                    hint: project.project_id
-                  }))}
-                  onSelect={(id) =>
-                    setWorkflowSelection({
-                      projectId: id,
-                      benchmarkDefinitionId: null,
-                      scenarioId: null
-                    })
-                  }
-                  selectedId={selectedProject?.project_id ?? null}
-                />
-              )}
-            </section>
-          </aside>
-
-          <div className="project-console__main">
-            {!selectedProject ? (
-              <section className="project-console__card project-console__card--empty">
-                <EmptyState description="先从左侧选择一个项目，再查看该项目的归档结果和运行态。" title="未选择项目" />
-              </section>
-            ) : workspaceQuery.isLoading ? (
-              <section className="project-console__card project-console__card--empty">
-                <EmptyState description="正在加载项目数据。" title="项目加载中" />
-              </section>
-            ) : workspaceQuery.isError || !workspace ? (
-              <section className="project-console__card project-console__card--empty">
-                <EmptyState
-                  description={
-                    workspaceQuery.error instanceof Error ? workspaceQuery.error.message : '项目接口异常。'
-                  }
-                  title="项目加载失败"
-                />
-              </section>
             ) : (
-              <section className="project-console__card">
-                <header className="project-console__card-header">
-                  <div>
-                    <span className="project-console__section-label">项目只读结果</span>
-                    <strong>{workspace.project.name}</strong>
-                  </div>
-                  <div className="project-console__toggle">
+              <SelectionList
+                emptyDescription="后端暂未返回项目记录。"
+                emptyTitle="没有项目"
+                expandLabel="展开项目"
+                maxVisible={6}
+                items={projects.map((project) => ({
+                  id: project.project_id,
+                  title: project.name,
+                  subtitle: project.description,
+                  meta: `${project.vendor} / ${project.processor}`,
+                  status: project.status,
+                  hint: project.project_id
+                }))}
+                onSelect={(id) =>
+                  setWorkflowSelection({
+                    projectId: id,
+                    benchmarkDefinitionId: null,
+                    scenarioId: null
+                  })
+                }
+                selectedId={selectedProject?.project_id ?? null}
+              />
+            )}
+          </Panel>
+        </aside>
+
+        <div className="project-console__main">
+          {!selectedProject ? (
+            <Panel bodyClassName="flex min-h-[320px] items-center">
+              <EmptyState description="先从左侧选择一个项目，再查看该项目的归档结果和运行态。" title="未选择项目" />
+            </Panel>
+          ) : workspaceQuery.isLoading ? (
+            <Panel bodyClassName="flex min-h-[320px] items-center">
+              <EmptyState description="正在加载项目数据。" title="项目加载中" />
+            </Panel>
+          ) : workspaceQuery.isError || !workspace ? (
+            <Panel bodyClassName="flex min-h-[320px] items-center">
+              <EmptyState
+                description={
+                  workspaceQuery.error instanceof Error ? workspaceQuery.error.message : '项目接口异常。'
+                }
+                title="项目加载失败"
+              />
+            </Panel>
+          ) : (
+            <Panel
+              eyebrow="项目只读结果"
+              subtitle="项目页只看归档与运行态，不再在这里展开模板和场景配置细节。"
+              title={workspace.project.name}
+              actions={
+                <div className="project-console__toggle">
                     <button
                       className={
                         viewMode === 'overview'
@@ -558,7 +546,8 @@ export function ProjectsPage() {
                       运行态
                     </button>
                   </div>
-                </header>
+              }
+            >
 
                 {viewMode === 'overview' && (
                   <div className="project-console__section-stack">
@@ -843,40 +832,26 @@ export function ProjectsPage() {
                     </div>
                   </div>
                 )}
-              </section>
+            </Panel>
+          )}
+        </div>
+
+        <aside className="project-console__summary">
+          <Panel eyebrow="当前项目" subtitle="项目页只承接归档与运行态。" title="项目定位">
+            {workspace ? (
+              <div className="project-console__summary-stack">
+                <p>项目: {workspace.project.name}</p>
+                <p>厂商: {workspace.project.vendor}</p>
+                <p>平台: {workspace.project.processor}</p>
+                <small>项目页只看归档与运行态，不再在这里展开模板和场景配置细节。</small>
+              </div>
+            ) : (
+              <EmptyState description="选择项目后显示项目定位。" title="没有项目定位" />
             )}
-          </div>
+          </Panel>
 
-          <aside className="project-console__summary">
-            <section className="project-console__card">
-              <header className="project-console__card-header">
-                <div>
-                  <span className="project-console__section-label">当前项目</span>
-                  <strong>项目定位</strong>
-                </div>
-              </header>
-
-              {workspace ? (
-                <div className="project-console__summary-stack">
-                  <p>项目: {workspace.project.name}</p>
-                  <p>厂商: {workspace.project.vendor}</p>
-                  <p>平台: {workspace.project.processor}</p>
-                  <small>项目页只看归档与运行态，不再在这里展开模板和场景配置细节。</small>
-                </div>
-              ) : (
-                <EmptyState description="选择项目后显示项目定位。" title="没有项目定位" />
-              )}
-            </section>
-
-            <section className="project-console__card">
-              <header className="project-console__card-header">
-                <div>
-                  <span className="project-console__section-label">快速跳转</span>
-                  <strong>下一步入口</strong>
-                </div>
-              </header>
-
-              <div className="project-console__action-grid">
+          <Panel eyebrow="快速跳转" subtitle="从项目归档直接跳到下一步操作。" title="下一步入口">
+            <div className="project-console__action-grid">
                 <Link className="horizon-button project-console__action-link" to="/benchmarks" viewTransition>
                   基准任务
                 </Link>
@@ -889,23 +864,16 @@ export function ProjectsPage() {
                 <Link className="horizon-button-secondary project-console__action-link" to="/scenario-sets" viewTransition>
                   场景集
                 </Link>
-              </div>
-            </section>
+            </div>
+          </Panel>
 
-            <section className="project-console__card">
-              <header className="project-console__card-header">
-                <div>
-                  <span className="project-console__section-label">最近归档</span>
-                  <strong>最新资产</strong>
-                </div>
-              </header>
-
-              {latestReport ? (
-                <div className="project-console__summary-stack">
-                  <p>报告: {latestReport.title}</p>
-                  <p>状态: {latestReport.status}</p>
-                  <p>时间: {formatDateTime(latestReport.updated_at_utc)}</p>
-                  <div className="project-console__report-actions">
+          <Panel eyebrow="最近归档" subtitle="优先显示最近导出的报告资产，没有报告时退回显示最近任务。" title="最新资产">
+            {latestReport ? (
+              <div className="project-console__summary-stack">
+                <p>报告: {latestReport.title}</p>
+                <p>状态: {latestReport.status}</p>
+                <p>时间: {formatDateTime(latestReport.updated_at_utc)}</p>
+                <div className="project-console__report-actions">
                     <a
                       className="horizon-button-secondary"
                       href={`/reports/${latestReport.report_id}/download?format=json`}
@@ -922,22 +890,21 @@ export function ProjectsPage() {
                     >
                       Markdown
                     </a>
-                  </div>
                 </div>
-              ) : latestTask ? (
-                <div className="project-console__summary-stack">
-                  <p>最近任务: {latestTask.benchmark_name}</p>
-                  <p>状态: {latestTask.status}</p>
-                  <p>时间: {formatDateTime(latestTask.updated_at_utc)}</p>
-                  <small>当前还没有导出报告，可以到报告中心继续归档。</small>
+              </div>
+            ) : latestTask ? (
+              <div className="project-console__summary-stack">
+                <p>最近任务: {latestTask.benchmark_name}</p>
+                <p>状态: {latestTask.status}</p>
+                <p>时间: {formatDateTime(latestTask.updated_at_utc)}</p>
+                <small>当前还没有导出报告，可以到报告中心继续归档。</small>
                 </div>
-              ) : (
-                <EmptyState description="当前项目还没有任务或报告资产。" title="没有归档内容" />
-              )}
-            </section>
-          </aside>
-        </div>
-      </section>
+            ) : (
+              <EmptyState description="当前项目还没有任务或报告资产。" title="没有归档内容" />
+            )}
+          </Panel>
+        </aside>
+      </div>
     </div>
   );
 }

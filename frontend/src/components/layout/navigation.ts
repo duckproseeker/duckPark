@@ -46,9 +46,9 @@ export const navigation: NavigationItem[] = [
   },
   {
     to: '/executions',
-    label: '执行',
+    label: '执行台',
     caption: '运行监控',
-    keywords: ['execution', 'run', 'monitor', '执行', '运行'],
+    keywords: ['execution', 'run', 'monitor', '执行台', '执行', '运行'],
     icon: HiOutlinePlayCircle
   },
   {
@@ -60,16 +60,16 @@ export const navigation: NavigationItem[] = [
   },
   {
     to: '/devices',
-    label: '设备',
-    caption: '采集链路',
-    keywords: ['device', 'gateway', 'capture', '设备', '网关'],
+    label: '设备台',
+    caption: '单 DUT 观测',
+    keywords: ['device', 'gateway', 'capture', '设备台', '设备', '网关'],
     icon: HiOutlineRadio
   },
   {
     to: '/studio',
-    label: '运维',
+    label: '运维台',
     caption: '车型与传感器',
-    keywords: ['studio', 'ops', 'sensor', 'profile', '运维', '传感器', '车型'],
+    keywords: ['studio', 'ops', 'sensor', 'profile', '运维台', '运维', '传感器', '车型'],
     icon: HiOutlineSquares2X2
   }
 ];
@@ -91,6 +91,6 @@ export const workflowSteps = [
   { to: '/projects', label: '项目', caption: '选择业务项目' },
   { to: '/benchmarks', label: '基准任务', caption: '选择评测模板' },
   { to: '/scenario-sets', label: '场景集', caption: '选择执行预设' },
-  { to: '/executions', label: '执行', caption: '启动并监控运行' },
+  { to: '/executions', label: '执行台', caption: '启动并监控运行' },
   { to: '/reports', label: '报告', caption: '复盘并导出结果' }
 ];

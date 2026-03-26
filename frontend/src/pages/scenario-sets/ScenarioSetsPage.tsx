@@ -20,6 +20,9 @@ import type {
   ScenarioTemplateParamValue
 } from '../../api/types';
 import { EmptyState } from '../../components/common/EmptyState';
+import { MetricCard } from '../../components/common/MetricCard';
+import { PageHeader } from '../../components/common/PageHeader';
+import { Panel } from '../../components/common/Panel';
 import { SelectionList } from '../../components/common/SelectionList';
 import { StatusPill } from '../../components/common/StatusPill';
 import { setWorkflowSelection, useWorkflowSelection } from '../../features/workflow/state';
@@ -336,6 +339,7 @@ export function ScenarioSetsPage() {
     mapsQuery.data?.map((item) => item.map_name) ??
     (selectedScenario ? [selectedScenario.default_map_name] : []);
   const selectedCapabilities = selectedScenario?.launch_capabilities;
+  const launchModeLabel = autoStart ? '创建后立即执行' : '仅创建待启动';
   const scenarioSections = selectedScenario
     ? buildScenarioSections(
         selectedScenario,
@@ -478,40 +482,66 @@ export function ScenarioSetsPage() {
   });
 
   return (
-    <div className="page-stack">
-      <section className="project-console">
-        <header className="project-console__header">
-          <div>
-            <span className="project-console__eyebrow">场景管理</span>
-            <h1>场景启动台</h1>
-            <p>选择场景并创建运行。</p>
-          </div>
-
-          <div className="project-console__header-actions">
+    <div className="page-stack project-console">
+      <PageHeader
+        title="场景集 / 单次运行启动"
+        eyebrow="场景集 / 参数编排"
+        chips={['地图与天气', '背景交通', '剧本参数']}
+        description="从场景目录选择一个运行模板，再为这次运行实例补齐地图、天气、传感器、背景交通和启动模式。"
+        actions={
+          <>
             <Link className="horizon-button-secondary" to="/benchmarks" viewTransition>
-              返回模板页
+              返回基准任务台
             </Link>
             <Link className="horizon-button-secondary" to="/executions" viewTransition>
-              查看执行列表
+              打开执行台
             </Link>
-          </div>
-        </header>
+          </>
+        }
+      />
 
-        <div className="project-console__layout project-console__layout--scenario">
-          <div className="project-console__main">
-            <section className="project-console__card project-console__picker-bar">
-              <div className="project-console__picker-copy">
-                <span className="project-console__section-label">场景选择</span>
-                <strong>{selectedScenario?.display_name ?? '尚未选择运行场景'}</strong>
-                <p>选择要运行的场景。</p>
-              </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          accent="blue"
+          label="当前场景"
+          value={selectedScenario?.display_name ?? '未选择'}
+          hint={selectedScenario?.scenario_id ?? '先从场景目录里选择'}
+        />
+        <MetricCard
+          accent="teal"
+          label="可选地图"
+          value={
+            selectedCapabilities?.map_editable === false
+              ? '固定'
+              : availableMaps.length > 0
+                ? availableMaps.length
+                : 1
+          }
+          hint={selectedMapName || selectedScenario?.default_map_name || '等待场景选择'}
+        />
+        <MetricCard
+          accent="orange"
+          label="剧本参数"
+          value={selectedScenario?.parameter_schema.length ?? 0}
+          hint="只展示当前场景支持直观调整的参数"
+        />
+        <MetricCard
+          accent="violet"
+          label="启动方式"
+          value={launchModeLabel}
+          hint={selectedSensorProfile?.display_name ?? '未绑定传感器模板'}
+        />
+      </div>
 
-              <div className="project-console__picker-actions">
-                {selectedScenario && (
-                  <span className="project-console__state-chip project-console__state-chip--ready">
-                    场景已选
-                  </span>
-                )}
+      <div className="project-console__layout project-console__layout--scenario">
+        <div className="project-console__main">
+          <Panel
+            eyebrow="场景选择"
+            subtitle="从目录里选出这次要运行的场景模板，后续所有配置都只作用于当前运行实例。"
+            title={selectedScenario?.display_name ?? '尚未选择运行场景'}
+            actions={
+              <div className="flex flex-wrap items-center gap-3">
+                {selectedScenario && <StatusPill canonical status="READY" />}
                 <button
                   className="project-console__picker-button"
                   onClick={() => setSelectorOpen(true)}
@@ -520,37 +550,32 @@ export function ScenarioSetsPage() {
                   {selectedScenario ? '切换场景' : '选择运行场景'}
                 </button>
               </div>
-            </section>
+            }
+          >
+            <p className="text-sm leading-6 text-text-muted">
+              {selectedScenario
+                ? selectedScenario.description
+                : '先通过右侧按钮打开场景目录，选择一个场景后再继续设置地图、天气和背景参与者数量。'}
+            </p>
+          </Panel>
 
-            {!selectedScenario ? (
-              <section className="project-console__card project-console__card--empty">
-                <EmptyState
-                  description="先通过上方触发器选择场景，再设置地图、天气和背景参与者数量。"
-                  title="未选择场景"
-                />
-              </section>
-            ) : (
-              <>
-                <section className="project-console__card">
-                  <header className="project-console__card-header">
-                    <div>
-                      <span className="project-console__section-label">运行前配置</span>
-                      <strong>{selectedScenario.display_name}</strong>
-                    </div>
-                    <span
-                      className={[
-                        'project-console__state-chip',
-                        autoStart
-                          ? 'project-console__state-chip--warm'
-                          : 'project-console__state-chip--muted'
-                      ].join(' ')}
-                    >
-                      {autoStart ? '创建后立即执行' : '仅创建待启动'}
-                    </span>
-                  </header>
-
-                  <div className="project-console__form-stack">
-                    <div className="form-grid">
+          {!selectedScenario ? (
+            <Panel bodyClassName="flex min-h-[260px] items-center" eyebrow="运行前配置" title="还不能发起运行">
+              <EmptyState
+                description="先选择场景，再设置地图、天气、传感器模板和背景交通。"
+                title="未选择场景"
+              />
+            </Panel>
+          ) : (
+            <>
+              <Panel
+                eyebrow="运行前配置"
+                subtitle="地图、天气、传感器模板和背景交通都只写入本次运行，不会改变模板默认值。"
+                title={selectedScenario.display_name}
+                actions={<StatusPill status={autoStart ? 'READY' : 'CREATED'} />}
+              >
+                <div className="project-console__form-stack">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                       <label className="field">
                         <span>测试地图</span>
                         <select
@@ -685,8 +710,8 @@ export function ScenarioSetsPage() {
                         <strong>{autoStart ? '创建后立即执行' : '仅创建到执行队列'}</strong>
                         <p>
                           {autoStart
-                            ? '提交后立即执行。'
-                            : '提交后稍后手动启动。'}
+                          ? '提交后立即执行。'
+                          : '提交后稍后手动启动。'}
                         </p>
                       </div>
 
@@ -724,7 +749,7 @@ export function ScenarioSetsPage() {
                           <span className="project-console__section-label">剧本参数</span>
                         </div>
 
-                        <div className="form-grid">
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                           {selectedScenario.parameter_schema.map((parameter) => {
                             if (parameter.type === 'boolean') {
                               return (
@@ -869,113 +894,93 @@ export function ScenarioSetsPage() {
                       </button>
                     </div>
                   </div>
-                </section>
+              </Panel>
 
-                <section className="project-console__card">
-                  <header className="project-console__card-header">
-                    <div>
-                      <span className="project-console__section-label">场景简报</span>
-                      <strong>{selectedScenario.display_name}</strong>
-                    </div>
-                  </header>
-
-                  <div className="project-console__section-grid project-console__section-grid--scenario">
-                    {scenarioSections.map((section) => (
-                      <section className="project-console__parameter-card" key={section.title}>
-                        <header>
-                          <strong>{section.title}</strong>
-                        </header>
-                        <div className="project-console__parameter-rows">
-                          {section.rows.map((row) => (
-                            <div
-                              className="project-console__parameter-row"
-                              key={`${section.title}-${row.label}`}
-                            >
-                              <span>{row.label}</span>
-                              <strong>{row.value}</strong>
-                            </div>
-                          ))}
-                        </div>
-                      </section>
-                    ))}
-                  </div>
-                </section>
-              </>
-            )}
-          </div>
-
-          <aside className="project-console__summary">
-            <section className="project-console__card">
-              <header className="project-console__card-header">
-                <div>
-                  <span className="project-console__section-label">当前接入</span>
-                  <strong>运行上下文</strong>
-                </div>
-                {selectedScenario && (
-                  <span className="project-console__state-chip project-console__state-chip--ready">
-                    已完成配置
-                  </span>
-                )}
-              </header>
-
-              {selectedScenario ? (
-                <div className="project-console__summary-stack">
-                  <p>项目: {selectedProject?.name ?? '未选择项目'}</p>
-                  <p>模板: {selectedBenchmark?.name ?? '未选择模板'}</p>
-                  <p>地图: {selectedMapName || selectedScenario.default_map_name}</p>
-                  <p>天气: {selectedEnvironmentPreset?.display_name ?? '未选择'}</p>
-                  <p>背景车辆: {vehicleCount}</p>
-                  <p>背景行人: {walkerCount}</p>
-                  <p>随机种子: {trafficSeedInput.trim() || '自动生成'}</p>
-                  {selectedScenario.parameter_schema.map((parameter) => (
-                    <p key={parameter.field}>
-                      {parameter.label}:{' '}
-                      {formatTemplateParamValue(parameter, templateParams[parameter.field])}
-                    </p>
-                  ))}
-                  <small>{autoStart ? '创建后会直接执行。' : '创建后等待手动启动。'}</small>
-                </div>
-              ) : (
-                <EmptyState description="选择场景后显示当前运行上下文。" title="没有运行上下文" />
-              )}
-            </section>
-
-            {selectedScenario && (
-              <section className="project-console__card">
-                <header className="project-console__card-header">
-                  <div>
-                    <span className="project-console__section-label">启动提示</span>
-                    <strong>场景说明</strong>
-                  </div>
-                </header>
-                <div className="project-console__summary-stack">
-                  <p>{selectedScenario.description}</p>
-                  {selectedScenario.launch_capabilities.notes.map((note) => (
-                    <small key={note}>{note}</small>
+              <Panel eyebrow="场景简报" subtitle="这里汇总场景真正会带进运行的配置。" title={selectedScenario.display_name}>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {scenarioSections.map((section) => (
+                    <section className="project-console__parameter-card" key={section.title}>
+                      <header>
+                        <strong>{section.title}</strong>
+                      </header>
+                      <div className="project-console__parameter-rows">
+                        {section.rows.map((row) => (
+                          <div
+                            className="project-console__parameter-row"
+                            key={`${section.title}-${row.label}`}
+                          >
+                            <span>{row.label}</span>
+                            <strong>{row.value}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
                   ))}
                 </div>
-              </section>
-            )}
-          </aside>
+              </Panel>
+            </>
+          )}
         </div>
 
-        {selectorOpen && (
-          <button
-            aria-label="关闭场景选择抽屉"
-            className="project-console__drawer-backdrop"
-            onClick={() => setSelectorOpen(false)}
-            type="button"
-          />
-        )}
+        <aside className="project-console__summary">
+          <Panel
+            eyebrow="当前上下文"
+            subtitle="这里显示当前运行真正会落到后端 payload 里的关键字段。"
+            title="运行上下文"
+            actions={selectedScenario ? <StatusPill canonical status="READY" /> : undefined}
+          >
+            {selectedScenario ? (
+              <div className="project-console__summary-stack">
+                <p>项目: {selectedProject?.name ?? '未选择项目'}</p>
+                <p>模板: {selectedBenchmark?.name ?? '未选择模板'}</p>
+                <p>地图: {selectedMapName || selectedScenario.default_map_name}</p>
+                <p>天气: {selectedEnvironmentPreset?.display_name ?? '未选择'}</p>
+                <p>背景车辆: {vehicleCount}</p>
+                <p>背景行人: {walkerCount}</p>
+                <p>随机种子: {trafficSeedInput.trim() || '自动生成'}</p>
+                {selectedScenario.parameter_schema.map((parameter) => (
+                  <p key={parameter.field}>
+                    {parameter.label}:{' '}
+                    {formatTemplateParamValue(parameter, templateParams[parameter.field])}
+                  </p>
+                ))}
+                <small>{autoStart ? '创建后会直接执行。' : '创建后等待手动启动。'}</small>
+              </div>
+            ) : (
+              <EmptyState description="选择场景后，这里会汇总当前运行上下文。" title="没有运行上下文" />
+            )}
+          </Panel>
 
-        <aside
-          aria-hidden={!selectorOpen}
-          className={
-            selectorOpen
-              ? 'project-console__drawer project-console__drawer--open'
-              : 'project-console__drawer'
-          }
-        >
+          {selectedScenario && (
+            <Panel eyebrow="启动提示" subtitle="运行前再确认一次场景说明和现场限制。" title="场景说明">
+              <div className="project-console__summary-stack">
+                <p>{selectedScenario.description}</p>
+                {selectedScenario.launch_capabilities.notes.map((note) => (
+                  <small key={note}>{note}</small>
+                ))}
+              </div>
+            </Panel>
+          )}
+        </aside>
+      </div>
+
+      {selectorOpen && (
+        <button
+          aria-label="关闭场景选择抽屉"
+          className="project-console__drawer-backdrop"
+          onClick={() => setSelectorOpen(false)}
+          type="button"
+        />
+      )}
+
+      <aside
+        aria-hidden={!selectorOpen}
+        className={
+          selectorOpen
+            ? 'project-console__drawer project-console__drawer--open'
+            : 'project-console__drawer'
+        }
+      >
           <header className="project-console__drawer-header">
             <div>
               <span className="project-console__section-label">选择运行场景</span>
@@ -1020,8 +1025,7 @@ export function ScenarioSetsPage() {
               selectedId={selectedScenario?.scenario_id ?? null}
             />
           )}
-        </aside>
-      </section>
+      </aside>
     </div>
   );
 }

@@ -182,6 +182,9 @@ export function ReportsPage() {
                     >
                       下载 Markdown
                     </a>
+                    <button className="horizon-button-secondary" disabled title="PDF 导出将在后续版本提供" type="button">
+                      导出 PDF - 规划中
+                    </button>
                   </div>
                 </div>
               </div>
