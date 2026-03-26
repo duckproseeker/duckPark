@@ -30,7 +30,7 @@ deploy:
   2. 远端旧目录改名为 carla_web_platform_bak_<timestamp>
   3. 在原路径重新 clone
   4. 恢复 .env.local
-  5. 将 run_data / artifacts 挂回新目录
+  5. 将 run_data / artifacts 从备份恢复到新目录
   6. 重启 API / executor
   7. 做 smoke
 
@@ -109,7 +109,7 @@ clone_checkout() {
     for persistent_dir in run_data artifacts; do
       if [[ -e "\${backup_path}/\${persistent_dir}" ]]; then
         rm -rf "\${project_root}/\${persistent_dir}"
-        ln -s "\${backup_path}/\${persistent_dir}" "\${project_root}/\${persistent_dir}"
+        cp -a "\${backup_path}/\${persistent_dir}" "\${project_root}/\${persistent_dir}"
       fi
     done
 
@@ -138,6 +138,15 @@ if [[ -d "\${project_root}/.git" ]]; then
 
     if [[ ! -f "\${project_root}/.env.local" && -n "\${backup_path}" && -f "\${backup_path}/.env.local" ]]; then
       cp -a "\${backup_path}/.env.local" "\${project_root}/.env.local"
+    fi
+
+    if [[ -n "\${backup_path}" ]]; then
+      for persistent_dir in run_data artifacts; do
+        if [[ -e "\${backup_path}/\${persistent_dir}" && ( ! -e "\${project_root}/\${persistent_dir}" || -L "\${project_root}/\${persistent_dir}" ) ]]; then
+          rm -rf "\${project_root}/\${persistent_dir}"
+          cp -a "\${backup_path}/\${persistent_dir}" "\${project_root}/\${persistent_dir}"
+        fi
+      done
     fi
   fi
 else

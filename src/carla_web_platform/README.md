@@ -167,7 +167,7 @@ bash scripts/start_platform.sh --carla-host 127.0.0.1 --carla-port 2000 --traffi
 - 远端当前目录还不是 Git checkout，但后续希望通过 Git 分支同步 `carla_web_platform`
 - 保留旧目录备份，便于直接回滚
 
-本地先发布 `src/carla_web_platform` 为可直接 clone 的 deploy 分支，再让远端执行备份/clone/恢复：
+本地先发布 `src/carla_web_platform` 为可直接 clone 的 deploy 分支，再让远端执行备份/clone/恢复。脚本会从备份目录复制回 `.env.local`、`run_data`、`artifacts`，然后重启 API / executor 并做 smoke：
 
 ```bash
 cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
