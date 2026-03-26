@@ -189,10 +189,10 @@ npm run build
 3. `pytest -q`
 4. `cd frontend && npm run check-types`
 5. `cd frontend && npm run build`
-6. `REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode basic`
+6. `REMOTE_PASSWORD='***' bash scripts/remote_git_sync.sh deploy`
 7. 如果改动涉及场景启动、运行时控制或采集链路，再跑：
-   - `REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode scenario`
-   - 或 `REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode capture`
+   - `python3 scripts/remote_smoke.py --base-url http://192.168.110.151:8000 --mode scenario`
+   - 或 `python3 scripts/remote_smoke.py --base-url http://192.168.110.151:8000 --mode capture`
 
 ## 常见错误
 

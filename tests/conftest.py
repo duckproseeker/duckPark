@@ -38,9 +38,14 @@ def reset_settings_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         parents=True, exist_ok=True
     )
     (project_root / "configs" / "sensors").mkdir(parents=True, exist_ok=True)
+    (project_root / "frontend" / "dist" / "assets").mkdir(parents=True, exist_ok=True)
     (project_root / "artifacts").mkdir(parents=True, exist_ok=True)
     (project_root / "artifacts" / "captures").mkdir(parents=True, exist_ok=True)
     (project_root / "artifacts" / "reports").mkdir(parents=True, exist_ok=True)
+    (project_root / "frontend" / "dist" / "index.html").write_text(
+        "<!doctype html><html><body><div id=\"root\"></div><script src=\"/assets/test.js\"></script></body></html>",
+        encoding="utf-8",
+    )
 
     monkeypatch.setenv("PROJECT_ROOT", str(project_root))
     monkeypatch.setenv("RUNS_ROOT", str(project_root / "run_data" / "runs"))

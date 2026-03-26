@@ -17,50 +17,6 @@ REMOTE_API_BASE_URL="${REMOTE_API_BASE_URL:-http://${REMOTE_HOST}:8000}"
 REMOTE_PASSWORD="${REMOTE_PASSWORD:-}"
 EXPECT_TIMEOUT="${EXPECT_TIMEOUT:-600}"
 
-REMOTE_DEPLOY_TARGETS=(
-  .dockerignore
-  .env.local.example
-  .gitignore
-  DESIGN.md
-  FRONTEND_REACT_PHASE1.md
-  Makefile
-  README.md
-  app
-  configs
-  contracts
-  docker
-  docs
-  environment.web.yml
-  frontend
-  pyproject.toml
-  pytest.ini
-  requirements-dev.txt
-  requirements.txt
-  scripts
-  tests
-)
-
-REMOTE_BUNDLE_EXCLUDES=(
-  .pytest_cache
-  .ruff_cache
-  __pycache__
-  .DS_Store
-  frontend/.env
-  frontend/.env.*
-  frontend/node_modules
-  frontend/tmp
-  frontend/*.tsbuildinfo
-  run_data
-  artifacts
-)
-
-REMOTE_PERSISTENT_KEEP=(
-  .env.local
-  .git
-  artifacts
-  run_data
-)
-
 remote_log() {
   printf '[remote-ops] %s\n' "$*"
 }
@@ -144,84 +100,6 @@ remote_container_bash() {
   encoded="$(printf '%s' "$script" | _b64_no_wrap)"
   python_cmd="import base64,subprocess; script=base64.b64decode('${encoded}').decode('utf-8'); subprocess.run(['docker','exec','${REMOTE_CONTAINER}','bash','-lc',script], check=True)"
   remote_ssh "python3 -c $(printf '%q' "$python_cmd")"
-}
-
-remote_container_bash_capture() {
-  local script="$1"
-  local encoded
-  local python_cmd
-  encoded="$(printf '%s' "$script" | _b64_no_wrap)"
-  python_cmd="import base64,subprocess,sys; script=base64.b64decode('${encoded}').decode('utf-8'); result=subprocess.run(['docker','exec','${REMOTE_CONTAINER}','bash','-lc',script], check=True, text=True, capture_output=True); sys.stdout.write(result.stdout)"
-  remote_ssh "python3 -c $(printf '%q' "$python_cmd")"
-}
-
-render_remote_targets_array() {
-  local target
-  printf 'targets=('
-  for target in "${REMOTE_DEPLOY_TARGETS[@]}"; do
-    printf ' %q' "$target"
-  done
-  printf ' )'
-}
-
-render_remote_keep_array() {
-  local keep_entry
-  printf 'keep_entries=('
-  for keep_entry in "${REMOTE_PERSISTENT_KEEP[@]}"; do
-    printf ' %q' "$keep_entry"
-  done
-  printf ' )'
-}
-
-render_remote_cleanup_snippet() {
-  cat <<'EOF'
-find . -name '._*' -delete || true
-find . -name '.DS_Store' -delete || true
-find . -name '__pycache__' -type d -prune -exec rm -rf {} + || true
-rm -rf .pytest_cache .ruff_cache frontend/tmp || true
-find "$(dirname "$PWD")" -maxdepth 1 -name '._*' -delete || true
-EOF
-}
-
-render_remote_prune_top_level_snippet() {
-  cat <<'EOF'
-shopt -s dotglob nullglob
-allowed_entries=("${targets[@]}" "${keep_entries[@]}")
-for entry in * .*; do
-  name="$(basename "$entry")"
-  case "$name" in
-    .|..)
-      continue
-      ;;
-  esac
-
-  keep=0
-  for allowed in "${allowed_entries[@]}"; do
-    if [[ "$name" == "$allowed" ]]; then
-      keep=1
-      break
-    fi
-  done
-
-  if (( keep == 0 )); then
-    rm -rf "$name"
-  fi
-done
-shopt -u dotglob nullglob
-EOF
-}
-
-create_remote_bundle() {
-  local archive_path="$1"
-  local exclude_args=()
-  local pattern
-  for pattern in "${REMOTE_BUNDLE_EXCLUDES[@]}"; do
-    exclude_args+=(--exclude="$pattern")
-    exclude_args+=(--exclude="./$pattern")
-    exclude_args+=(--exclude="*/$pattern")
-  done
-  COPYFILE_DISABLE=1 COPY_EXTENDED_ATTRIBUTES_DISABLE=1 \
-    tar czf "$archive_path" --no-mac-metadata --no-xattrs "${exclude_args[@]}" -C "$PROJECT_ROOT" "${REMOTE_DEPLOY_TARGETS[@]}"
 }
 
 stop_remote_services() {
