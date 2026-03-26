@@ -95,27 +95,10 @@ owner=$(printf '%q' "${REMOTE_OWNER}")
 backup_marker=".git-sync-backup-path"
 timestamp=\$(date +%Y%m%d_%H%M%S)
 backup_path=""
+latest_backup=""
+failed_path=""
 
-mkdir -p "\$(dirname "\${project_root}")"
-
-if [[ -d "\${project_root}/.git" ]]; then
-  git -C "\${project_root}" remote set-url origin "\${repo_url}"
-  git -C "\${project_root}" fetch --depth 1 origin "\${branch}"
-  git -C "\${project_root}" checkout -B "\${branch}" "origin/\${branch}"
-  git -C "\${project_root}" reset --hard "origin/\${branch}"
-
-  if [[ ! -f "\${project_root}/.env.local" && -f "\${project_root}/\${backup_marker}" ]]; then
-    backup_path=\$(cat "\${project_root}/\${backup_marker}")
-    if [[ -f "\${backup_path}/.env.local" ]]; then
-      cp -a "\${backup_path}/.env.local" "\${project_root}/.env.local"
-    fi
-  fi
-else
-  if [[ -e "\${project_root}" ]]; then
-    backup_path="\${project_root}_bak_\${timestamp}"
-    mv "\${project_root}" "\${backup_path}"
-  fi
-
+clone_checkout() {
   git clone --depth 1 --branch "\${branch}" "\${repo_url}" "\${project_root}"
 
   if [[ -n "\${backup_path}" ]]; then
@@ -132,6 +115,38 @@ else
 
     printf '%s\n' "\${backup_path}" > "\${project_root}/\${backup_marker}"
   fi
+}
+
+mkdir -p "\$(dirname "\${project_root}")"
+latest_backup=\$(find "\$(dirname "\${project_root}")" -maxdepth 1 -type d -name "$(basename "${REMOTE_HOST_PROJECT_ROOT}")_bak_*" | sort | tail -n 1)
+
+if [[ -d "\${project_root}/.git" ]]; then
+  if [[ -f "\${project_root}/\${backup_marker}" ]]; then
+    backup_path=\$(cat "\${project_root}/\${backup_marker}")
+  elif [[ -n "\${latest_backup}" ]]; then
+    backup_path="\${latest_backup}"
+    failed_path="\${project_root}_failed_\${timestamp}"
+    mv "\${project_root}" "\${failed_path}"
+    clone_checkout
+  fi
+
+  if [[ -z "\${failed_path}" ]]; then
+    git -C "\${project_root}" remote set-url origin "\${repo_url}"
+    git -C "\${project_root}" fetch --depth 1 origin "\${branch}"
+    git -C "\${project_root}" checkout -B "\${branch}" "origin/\${branch}"
+    git -C "\${project_root}" reset --hard "origin/\${branch}"
+
+    if [[ ! -f "\${project_root}/.env.local" && -n "\${backup_path}" && -f "\${backup_path}/.env.local" ]]; then
+      cp -a "\${backup_path}/.env.local" "\${project_root}/.env.local"
+    fi
+  fi
+else
+  if [[ -e "\${project_root}" ]]; then
+    backup_path="\${project_root}_bak_\${timestamp}"
+    mv "\${project_root}" "\${backup_path}"
+  fi
+
+  clone_checkout
 fi
 
 for persistent_dir in run_data artifacts; do
@@ -151,6 +166,9 @@ printf 'project_root=%s\n' "\${project_root}"
 printf 'branch=%s\n' "\${branch}"
 if [[ -n "\${backup_path}" ]]; then
   printf 'backup_path=%s\n' "\${backup_path}"
+fi
+if [[ -n "\${failed_path}" ]]; then
+  printf 'failed_path=%s\n' "\${failed_path}"
 fi
 EOF
 )"
@@ -279,10 +297,12 @@ case "${COMMAND}" in
     if (( SKIP_PUBLISH == 0 )); then
       publish_sync_branch
     fi
+    stop_remote_services
     deploy_remote_checkout
     restart_and_smoke
     ;;
   rollback)
+    stop_remote_services
     rollback_remote_checkout
     restart_and_smoke
     ;;
