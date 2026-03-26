@@ -259,7 +259,8 @@ upload_local_frontend_dist() {
   LOCAL_DIST_ARCHIVE="/tmp/duckpark_frontend_dist_${timestamp}.tgz"
   archive_name="$(basename "${LOCAL_DIST_ARCHIVE}")"
 
-  tar czf "${LOCAL_DIST_ARCHIVE}" -C "${PROJECT_ROOT}/frontend" dist
+  COPYFILE_DISABLE=1 COPY_EXTENDED_ATTRIBUTES_DISABLE=1 \
+    tar czf "${LOCAL_DIST_ARCHIVE}" --no-mac-metadata --no-xattrs -C "${PROJECT_ROOT}/frontend" dist
   remote_scp "${LOCAL_DIST_ARCHIVE}" "${REMOTE_USER}@${REMOTE_HOST}:/tmp/${archive_name}"
   remote_host_bash "
 set -euo pipefail
@@ -268,6 +269,7 @@ owner=$(printf '%q' "${REMOTE_OWNER}")
 mkdir -p \"\${project_root}/frontend\"
 rm -rf \"\${project_root}/frontend/dist\"
 tar xzf /tmp/${archive_name} -C \"\${project_root}/frontend\"
+find \"\${project_root}/frontend/dist\" -name '._*' -delete || true
 rm -f /tmp/${archive_name}
 chown -R \"\${owner}:\${owner}\" \"\${project_root}/frontend/dist\"
 "
