@@ -92,11 +92,39 @@ project_root=$(printf '%q' "${REMOTE_HOST_PROJECT_ROOT}")
 repo_url=$(printf '%q' "${SYNC_REPO_URL}")
 branch=$(printf '%q' "${SYNC_BRANCH}")
 owner=$(printf '%q' "${REMOTE_OWNER}")
+helper_container=$(printf '%q' "${REMOTE_CONTAINER}")
 backup_marker=".git-sync-backup-path"
 timestamp=\$(date +%Y%m%d_%H%M%S)
 backup_path=""
 latest_backup=""
 failed_path=""
+project_parent=\$(dirname "\${project_root}")
+owner_uid=\$(id -u "\${owner}")
+owner_gid=\$(id -g "\${owner}")
+helper_image=\$(docker inspect --format '{{.Config.Image}}' "\${helper_container}" 2>/dev/null | head -n 1 || true)
+
+if [[ -z "\${helper_image}" ]]; then
+  helper_image="busybox:1.36"
+fi
+
+restore_persistent_dir() {
+  local persistent_dir="\$1"
+  local backup_entry="\${backup_path}/\${persistent_dir}"
+  local project_entry="\${project_root}/\${persistent_dir}"
+
+  if [[ ! -e "\${backup_entry}" ]]; then
+    return 0
+  fi
+
+  rm -rf "\${project_entry}"
+  if cp -a "\${backup_entry}" "\${project_entry}" 2>/dev/null; then
+    return 0
+  fi
+
+  rm -rf "\${project_entry}"
+  docker run --rm -v "\${project_parent}:\${project_parent}" "\${helper_image}" sh -lc \
+    "cp -a \"\${backup_entry}\" \"\${project_entry}\" && chown -R \${owner_uid}:\${owner_gid} \"\${project_entry}\""
+}
 
 clone_checkout() {
   git clone --depth 1 --branch "\${branch}" "\${repo_url}" "\${project_root}"
@@ -108,8 +136,7 @@ clone_checkout() {
 
     for persistent_dir in run_data artifacts; do
       if [[ -e "\${backup_path}/\${persistent_dir}" ]]; then
-        rm -rf "\${project_root}/\${persistent_dir}"
-        cp -a "\${backup_path}/\${persistent_dir}" "\${project_root}/\${persistent_dir}"
+        restore_persistent_dir "\${persistent_dir}"
       fi
     done
 
@@ -143,8 +170,7 @@ if [[ -d "\${project_root}/.git" ]]; then
     if [[ -n "\${backup_path}" ]]; then
       for persistent_dir in run_data artifacts; do
         if [[ -e "\${backup_path}/\${persistent_dir}" && ( ! -e "\${project_root}/\${persistent_dir}" || -L "\${project_root}/\${persistent_dir}" ) ]]; then
-          rm -rf "\${project_root}/\${persistent_dir}"
-          cp -a "\${backup_path}/\${persistent_dir}" "\${project_root}/\${persistent_dir}"
+          restore_persistent_dir "\${persistent_dir}"
         fi
       done
     fi
