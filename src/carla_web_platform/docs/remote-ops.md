@@ -1,225 +1,159 @@
-# 远端部署与清理
+# Git 同步远端部署
 
 ## 适用环境
 
-- 本机职责：只负责修改代码、跑本地验证、触发远端部署。
-- 正式服务：`192.168.110.151`
-- 远端容器：`ros2-dev`
-- 正式代码目录：`/ros2_ws/src/carla_web_platform`
-- CARLA 服务：单独容器，通常通过 `~/startCarla.sh` 拉起
+- 本机仓库是唯一的代码审查与提交来源。
+- 正式主机：`192.168.110.151`
+- 主机 checkout：`/home/du/ros2-humble/src/carla_web_platform`
+- 运行容器：`ros2-dev`
+- 容器内项目目录：`/ros2_ws/src/carla_web_platform`
+- Git 同步分支：`rabbitank/carla-web-platform-sync`
 
-不要把正式远端目录当作 Git 审查工作区。它是运行时镜像目录，真正的代码审查、提交和变更范围确认都应该以本机仓库为准。
+不要把主机上的运行目录当作人工改代码的工作区。现在正式环境已经切到 Git checkout，同步方式统一走脚本，不再走 bundle 覆盖或远端手工清目录。
 
-如果你这次目标不是“部署代码”，而是“把主机上的 Web、headed CARLA、跟车显示链真的拉起来”，优先看：
+如果目标是把 headed CARLA、主机显示链、Pi/Jetson 一起带起来，优先看：
 
 - `docs/host-bringup.md`
 
 ## 入口脚本
 
-### 1. 清理远端垃圾文件
+- `scripts/publish_git_sync_branch.sh`
+  - 把 `src/carla_web_platform` 做 `git subtree split`
+  - 强推到 `rabbitank/carla-web-platform-sync`
+- `scripts/remote_git_sync.sh`
+  - 执行主机 checkout 更新、前端构建、服务重启和 smoke
+- `scripts/remote_smoke.py`
+  - 对已经跑起来的远端 API 做 smoke，不走 SSH
+
+## 快速命令
+
+部署：
 
 ```bash
 cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
-REMOTE_PASSWORD='***' bash scripts/remote_cleanup.sh
+REMOTE_PASSWORD='***' bash scripts/remote_git_sync.sh deploy
 ```
 
-清理内容：
-
-- `._*` AppleDouble 垃圾文件
-- `.DS_Store`
-- `__pycache__/`
-- `.pytest_cache/`
-- `.ruff_cache/`
-- `frontend/tmp/`
-- 项目目录上一层的 `._*` 残留
-
-如果只想预览：
-
-```bash
-REMOTE_PASSWORD='***' bash scripts/remote_cleanup.sh --dry-run
-```
-
-如果要顺手把正式目录顶层不在白名单里的旧文件也一起清掉：
-
-```bash
-REMOTE_PASSWORD='***' bash scripts/remote_cleanup.sh --prune-top-level
-```
-
-### 2. 部署到正式远端
+回滚：
 
 ```bash
 cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
-REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode basic
+REMOTE_PASSWORD='***' bash scripts/remote_git_sync.sh rollback
 ```
 
-支持的 smoke 模式：
+Makefile 包装：
+
+```bash
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+make remote-sync
+make remote-rollback
+SMOKE_MODE=scenario make remote-smoke
+SMOKE_MODE=capture make remote-smoke
+```
+
+只做远端 smoke：
+
+```bash
+cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
+python3 scripts/remote_smoke.py --base-url http://192.168.110.151:8000 --mode basic
+python3 scripts/remote_smoke.py --base-url http://192.168.110.151:8000 --mode core
+python3 scripts/remote_smoke.py --base-url http://192.168.110.151:8000 --mode scenario
+python3 scripts/remote_smoke.py --base-url http://192.168.110.151:8000 --mode capture
+```
+
+## `deploy` 实际做的事
+
+`scripts/remote_git_sync.sh deploy` 会按顺序执行：
+
+1. 发布 `src/carla_web_platform` 的 subtree 分支。
+2. 停掉主机上当前 API、executor 和 recorder worker。
+3. 在主机上执行下面两种路径之一：
+   - 现有目录已经是 Git checkout：直接 `fetch + checkout + reset --hard`
+   - 现有目录不是 Git checkout：先改名为 `carla_web_platform_bak_<timestamp>`，再重新 clone
+4. 从备份目录恢复：
+   - `.env.local`
+   - `run_data/`
+   - `artifacts/`
+5. 确保新目录和持久目录归属为 `du:du`。
+6. 重新构建 `frontend/dist`。
+   - 优先在主机上用 Node 20 helper container 构建
+   - 如果主机拉不到 Node 镜像，则回退到本机构建并上传 `frontend/dist`
+7. 重启 API 和 executor。
+8. 跑 `basic` smoke：
+   - `/healthz`
+   - `/system/status`
+   - `/ui`
+
+这条链路的关键点是“主机目录本身变成 Git checkout”，以后同步只需要更新 branch，而不是反复打 bundle 覆盖。
+
+## `rollback` 实际做的事
+
+`scripts/remote_git_sync.sh rollback` 会：
+
+1. 停掉当前 API 和 executor。
+2. 删除当前主机 checkout。
+3. 把最近一次 `carla_web_platform_bak_<timestamp>` 改回原路径。
+4. 重新构建 `frontend/dist`、重启服务、再跑 `basic` smoke。
+
+当前 checkout 根目录会写一个 `.git-sync-backup-path`，用于记录最近一次可回滚的备份目录。
+
+## 常用选项
+
+- `--source-ref <ref>`
+  - 指定 subtree split 的来源，默认 `main`
+- `--sync-branch <branch>`
+  - 指定发布到远端主机的同步分支
+- `--skip-publish`
+  - 不重新发布 subtree，直接用远端已有 branch 部署
+- `--skip-frontend-build`
+  - 跳过 `frontend/dist` 构建，适合只验证代码 checkout/服务重启
+- `--skip-restart`
+  - 只同步目录，不重启服务
+- `--skip-smoke`
+  - 不跑 smoke
+
+## 验证分层
 
 - `basic`
-  - 校验 `/healthz`
-  - 校验 `/system/status`
-  - 校验 `/ui`
+  - 只证明远端 API、executor 和 `/ui` 基本可用
+- `core`
+  - 在 `basic` 基础上跑一条最小 native runtime run
 - `scenario`
-  - 在 `basic` 基础上，再启动一条短时 `free_drive_sensor_collection` 并停止
+  - 在 `basic` 基础上跑短时 `free_drive_sensor_collection`
 - `capture`
-  - 在 `scenario` 基础上，再验证 recorder、手动开始/停止传感器采集、viewer 抓帧
-
-补充说明：
-
-- `basic` smoke 只覆盖 API、executor 和 `/ui` 基本存活
-- 如果这次改动影响 `设备中心 / 单 DUT 运行观测`，除了 smoke 之外，还应额外检查：
-  - `GET /gateways`
-  - `GET /devices/workspace`
-  - Pi `gateway_agent` 是否持续 heartbeat
-
-常用例子：
-
-```bash
-REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode scenario
-REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode capture
-REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --skip-contract-sync --skip-frontend-build
-```
-
-也可以直接走 Makefile 包装：
-
-```bash
-make remote-clean
-SMOKE_MODE=scenario make remote-deploy
-SMOKE_MODE=capture make remote-deploy
-```
-
-## 部署脚本做的事
-
-`scripts/remote_deploy.sh` 会按顺序执行：
-
-1. 可选执行 `make contract-sync`
-2. 可选执行 `frontend` 生产构建
-3. 打包本地要同步的目标文件
-4. 在远端正式目录生成备份 tar
-5. 把远端目标目录整目录删除后再解压新的 bundle
-6. 清理远端垃圾文件
-7. 重启 API 和 executor
-8. 运行 smoke
-9. 如果 smoke 失败，自动回滚到备份并再次重启
-
-这套流程的关键点是“整目录替换”，不是“覆盖拷贝”。这样可以一起清掉历史部署遗留的旧文件。
-
-## 顶层保留白名单
-
-部署和 `--prune-top-level` 清理时，远端正式目录只保留这些长期存在的顶层项：
-
-- `.env.local`
-- `.git`
-- `artifacts/`
-- `run_data/`
-- 当前 bundle 应该同步的源码和文档目录
-
-这意味着历史遗留的顶层旧文件、旧目录、错误同步出来的孤儿文件都会被清掉，不会继续混在正式目录里。
-
-## 当前同步范围
-
-部署脚本默认同步这些目录和文件：
-
-- `.dockerignore`
-- `.env.local.example`
-- `.gitignore`
-- `DESIGN.md`
-- `FRONTEND_REACT_PHASE1.md`
-- `Makefile`
-- `README.md`
-- `app/`
-- `configs/`
-- `contracts/`
-- `docker/`
-- `docs/`
-- `environment.web.yml`
-- `frontend/`
-- `pyproject.toml`
-- `pytest.ini`
-- `requirements-dev.txt`
-- `requirements.txt`
-- `scripts/`
-- `tests/`
-
-不会同步：
-
-- `.env.local`
-- `run_data/`
-- `artifacts/`
-- `frontend/node_modules/`
-- `frontend/tmp/`
-- 本地缓存目录
+  - 在 `scenario` 基础上再验证 capture / recorder 证据链
 
 注意：
 
-- 这个平台部署 bundle 当前只覆盖 `src/carla_web_platform/`
-- `src/hil_runtime/` 下的 host / Pi / Jetson 运行资产需要按目标机器单独同步，不会被这条平台部署链自动带上
-- 换句话说：`remote_deploy.sh` 能把 `/ui`、API 和 executor 更新到远端，但不会自动替你部署 headed CARLA 或主机/Pi/Jetson sidecar 脚本
-
-## 回滚说明
-
-部署时会在远端容器内生成类似下面的备份：
-
-```text
-/tmp/duckpark_remote_backup_<timestamp>.tgz
-```
-
-如果 smoke 失败，脚本会自动：
-
-1. 删除本次同步进去的目标目录
-2. 还原备份 tar
-3. 重启 API 和 executor
-4. 再跑一次 `basic` smoke
+- `remote_git_sync.sh` 自带的部署后 smoke 固定是 `basic`
+- 更深的运行链验证要额外执行 `python3 scripts/remote_smoke.py --mode ...`
+- `remote_smoke.py` 是直接打 HTTP，不需要 `REMOTE_PASSWORD`
 
 ## 建议流程
 
 1. 本机先跑：
+   - `make contract-sync`
    - `make lint`
    - `pytest -q`
-   - `make contract-sync`
    - `cd frontend && npm run check-types && npm run build`
-2. 远端先清理一次：
-   - `bash scripts/remote_cleanup.sh`
-3. 再部署：
-   - `bash scripts/remote_deploy.sh --smoke-mode scenario`
-4. 涉及采集链路时，再补一轮：
-   - `bash scripts/remote_deploy.sh --smoke-mode capture`
+2. 部署主机：
+   - `REMOTE_PASSWORD='***' bash scripts/remote_git_sync.sh deploy`
+3. 如果改动涉及 native runtime、环境控制或采集链路，再补：
+   - `python3 scripts/remote_smoke.py --base-url http://192.168.110.151:8000 --mode scenario`
+   - 或 `python3 scripts/remote_smoke.py --base-url http://192.168.110.151:8000 --mode capture`
 
-如果这次目标是观察 native runtime 的执行速率，建议在 `scenario` smoke 之后再补一次最小 run：
+## 范围边界
 
-- traffic 设为 `0/0`
-- 关闭不必要的 recorder / sidecar
-- 结束后读取 `GET /runs/{run_id}` 里的 `achieved_tick_rate_hz`
-
-这样得到的值更接近“native runtime 自身执行链”的基线，不会把背景交通或采集链路的额外开销混进一起看。
-
-如果这次目标是验证 Jetson / Pi 观测链，建议再补这组检查：
-
-```bash
-curl http://127.0.0.1:8000/gateways
-curl http://127.0.0.1:8000/devices/workspace
-```
-
-重点看：
-
-- `last_heartbeat_at_utc`
-- `heartbeat_age_seconds`
-- `status`
-- `metrics.dut_received_at_utc`
-- `metrics.output_fps`
-- `metrics.avg_latency_ms`
-- `metrics.temperature_c`
-
-如果这次只改了文档、脚本或后端非契约逻辑，可以先用：
-
-- `bash scripts/remote_deploy.sh --smoke-mode basic --skip-contract-sync --skip-frontend-build`
+- 这条 Git 同步链只覆盖 `src/carla_web_platform/`
+- `src/hil_runtime/` 下的 host / Pi / Jetson 运行资产仍需单独同步
+- 换句话说：它负责平台 `/ui`、API、executor 和前端 bundle，不负责 headed CARLA 或 Pi/Jetson sidecar 的发布
 
 ## 已知注意事项
 
-- `capture` smoke 会依赖 CARLA、平台 native runtime、viewer 和传感器链路，耗时最长，也最容易暴露环境问题。
-- 设备页里看到 Jetson 指标，不仅依赖 `dut_result_receiver` 收到结果，还依赖 Pi `gateway_agent` 持续上报 heartbeat；前者在更新而后者停掉时，页面只会表现成旧快照或离线状态。
-- CARLA recorder 目前状态链路已接通，但 recorder 文件落盘还受 CARLA server 容器与 executor 容器之间的路径共享方式影响。部署 smoke 不应只看“recorder 状态为 RUNNING”，还要结合产物验证。
-- 当前远端重启日志默认写到：
+- `basic` smoke 不能证明 CARLA、Pi、Jetson、viewer 或 HDMI 链路是 live 的。
+- `capture` smoke 依赖更多外部环境，最容易因为现场环境而失败。
+- 设备页的实时在线判定依赖 Pi `gateway_agent` heartbeat，不是只看 Jetson 结果文件。
+- 远端重启日志默认写到：
   - `/tmp/carla_api_restore.log`
   - `/tmp/carla_executor_restore.log`
-  如果 smoke 失败，先看这两个日志，再判断是不是需要回滚。
-- 部署脚本重启服务时会带上 `PYTHONDONTWRITEBYTECODE=1`，避免正式目录里不断累积 `__pycache__/`，减少远端误判“源码脏了”的噪音。
+- 服务重启时会带上 `PYTHONDONTWRITEBYTECODE=1`，避免远端目录继续长出 `__pycache__/` 噪音。

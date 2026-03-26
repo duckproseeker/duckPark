@@ -31,7 +31,7 @@ def get_system_dependencies() -> dict[str, Any]:
         "run_store": RunStore(settings.runs_root),
         "capture_store": CaptureStore(settings.captures_root),
         "gateway_store": GatewayStore(settings.gateways_root),
-        "frontend_dist": Path(settings.runs_root).parents[1] / "frontend" / "dist" / "index.html",
+        "frontend_dist": settings.project_root / "frontend" / "dist" / "index.html",
     }
 
 

@@ -28,13 +28,12 @@ app = FastAPI(
         "\n\n"
         "- `/docs`：开发调试用的 Swagger 页面"
         "\n"
-        "- `/` 或 `/ui`：最小中文 Web 控制台"
+        "- `/` 或 `/ui`：React Web 控制台"
     ),
 )
 
 _app_root = Path(__file__).resolve().parents[1]
 _project_root = _app_root.parent
-app.mount("/static", StaticFiles(directory=str(_app_root / "static")), name="static")
 app.mount(
     "/assets",
     StaticFiles(directory=str(_project_root / "frontend" / "dist" / "assets"), check_dir=False),

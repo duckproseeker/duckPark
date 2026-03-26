@@ -25,7 +25,7 @@
 
 重要约束：
 
-- `scripts/remote_deploy.sh` 只会同步 `carla_web_platform/`
+- `scripts/remote_git_sync.sh` 负责把 `carla_web_platform/` 作为 Git checkout 同步到主机
 - `hil_runtime/` 需要单独同步到主机
 - headed CARLA 在物理主机上启动，不在 `ros2-dev` 容器里启动
 
@@ -53,7 +53,7 @@ rsync -av /path/to/duckPark/src/hil_runtime/ du@192.168.110.151:/home/du/ros2-hu
 
 ```bash
 cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
-REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode basic
+REMOTE_PASSWORD='***' bash scripts/remote_git_sync.sh deploy
 ```
 
 这会在远端重启 API 和 executor，并校验：

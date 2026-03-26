@@ -274,7 +274,7 @@ docker compose -f docker/docker-compose.yml up -d --build
 
 注意：
 
-- 这里的 `remote_cleanup.sh` / `remote_deploy.sh` 只针对 `src/carla_web_platform/`
+- 这里统一使用 `remote_git_sync.sh`
 - `src/hil_runtime/` 下的 host / Pi / Jetson 运行资产需要按目标机器单独同步
 - 如果要把主机上的 Web、headed CARLA、native follow 显示链一起拉起来，直接看 `docs/host-bringup.md`
 
@@ -282,19 +282,16 @@ docker compose -f docker/docker-compose.yml up -d --build
 
 ```bash
 cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
-REMOTE_PASSWORD='***' bash scripts/remote_cleanup.sh
-REMOTE_PASSWORD='***' bash scripts/remote_cleanup.sh --prune-top-level
-REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode scenario
-REMOTE_PASSWORD='***' bash scripts/remote_deploy.sh --smoke-mode capture
+REMOTE_PASSWORD='***' bash scripts/remote_git_sync.sh deploy
+REMOTE_PASSWORD='***' bash scripts/remote_git_sync.sh rollback
 ```
 
 Makefile 包装：
 
 ```bash
 cd /Users/kavin/Documents/GitHub/duckPark/src/carla_web_platform
-make remote-clean
-SMOKE_MODE=basic make remote-deploy
-SMOKE_MODE=scenario make remote-deploy
+make remote-sync
+make remote-rollback
 ```
 
 ## 常用命令
