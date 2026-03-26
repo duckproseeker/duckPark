@@ -224,6 +224,98 @@ create_remote_bundle() {
     tar czf "$archive_path" --no-mac-metadata --no-xattrs "${exclude_args[@]}" -C "$PROJECT_ROOT" "${REMOTE_DEPLOY_TARGETS[@]}"
 }
 
+stop_remote_services() {
+  local stop_script
+  stop_script="$(cat <<'PY'
+from __future__ import annotations
+
+import json
+import os
+import signal
+import subprocess
+import time
+from pathlib import Path
+
+
+def find_matching_pids(pattern: str) -> list[int]:
+    result = subprocess.run(
+        ["pgrep", "-f", pattern],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode not in (0, 1):
+        raise RuntimeError(f"pgrep failed for pattern {pattern!r}: {result.stderr.strip()}")
+    if result.returncode == 1:
+        return []
+
+    current_pid = os.getpid()
+    parent_pid = os.getppid()
+    pids: list[int] = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        pid = int(line)
+        if pid not in (current_pid, parent_pid):
+            pids.append(pid)
+    return pids
+
+
+def terminate_patterns(patterns: list[str], timeout_seconds: float) -> dict[str, list[int]]:
+    pending: set[int] = set()
+    for pattern in patterns:
+        pending.update(find_matching_pids(pattern))
+
+    for pid in pending:
+        os.kill(pid, signal.SIGTERM)
+
+    deadline = time.monotonic() + timeout_seconds
+    while pending and time.monotonic() < deadline:
+        time.sleep(0.5)
+        pending = {pid for pid in pending if Path(f"/proc/{pid}").exists()}
+
+    for pid in list(pending):
+        os.kill(pid, signal.SIGKILL)
+
+    return {
+        "api": find_matching_pids(api_patterns[0]) or find_matching_pids(api_patterns[1]),
+        "executor": find_matching_pids(executor_patterns[0]) or find_matching_pids(executor_patterns[1]),
+        "workers": find_matching_pids(worker_patterns[0]) or find_matching_pids(worker_patterns[1]),
+    }
+
+
+api_patterns = [
+    "".join(["python3 -m", " uvicorn app.api.main:app --host 0.0.0.0 --port 8000"]),
+    "".join(["uvicorn", " app.api.main:app --host 0.0.0.0 --port 8000"]),
+]
+executor_patterns = [
+    "".join(["python3 -m", " app.executor.service"]),
+    "app.executor.service",
+]
+worker_patterns = [
+    "".join(["python3 -m", " app.executor.sensor_recorder_worker"]),
+    "app.executor.sensor_recorder_worker",
+]
+
+print(
+    json.dumps(
+        {"remaining": terminate_patterns(api_patterns + executor_patterns + worker_patterns, timeout_seconds=10.0)},
+        ensure_ascii=False,
+    )
+)
+PY
+)"
+
+  remote_container_bash "
+set -euo pipefail
+cd $(printf '%q' "$REMOTE_PROJECT_ROOT")
+python3 - <<'PY'
+${stop_script}
+PY
+"
+}
+
 restart_remote_services() {
   local restart_script
   restart_script="$(cat <<'PY'
