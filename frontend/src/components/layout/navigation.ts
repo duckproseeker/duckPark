@@ -77,12 +77,12 @@ export const navigation: NavigationItem[] = [
 export const navigationGroups: NavigationGroup[] = [
   {
     id: 'workflow',
-    label: 'Workflow',
+    label: '流程',
     items: navigation.slice(0, 4)
   },
   {
     id: 'operations',
-    label: 'Operations',
+    label: '运维',
     items: navigation.slice(4)
   }
 ];

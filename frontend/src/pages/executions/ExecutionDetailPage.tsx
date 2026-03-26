@@ -402,7 +402,7 @@ export function ExecutionDetailPage() {
     <div className="page-stack">
       <PageHeader
         title={monitorMode ? '执行监控' : '执行详情'}
-        eyebrow="Executions / Detail"
+        eyebrow="执行 / 详情"
         chips={
           monitorMode
             ? ['自动跳转', '流式监控', run?.execution_backend === 'scenario_runner' ? '官方 runner' : '天气热更新']
@@ -882,7 +882,7 @@ export function ExecutionDetailPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
-                            Sensor Capture
+                            传感器采集
                           </span>
                           <strong className="mt-2 block text-sm text-navy-900">
                             {sensorCaptureControl?.enabled
@@ -928,7 +928,7 @@ export function ExecutionDetailPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-secondaryGray-500">
-                            Capture Evidence
+                            采集证据
                           </span>
                           <strong className="mt-2 block text-sm text-navy-900">
                             用目录和样本数确认传感器确实在录
@@ -954,7 +954,7 @@ export function ExecutionDetailPage() {
                               <div className="flex items-start justify-between gap-3">
                                 <strong className="text-sm text-navy-900">{item.sensor_id}</strong>
                                 <span className="text-xs font-semibold text-secondaryGray-500">
-                                  {item.sample_count} samples
+                                  {item.sample_count} 个样本
                                 </span>
                               </div>
                               <div className="mt-2 space-y-1 text-xs text-secondaryGray-600">

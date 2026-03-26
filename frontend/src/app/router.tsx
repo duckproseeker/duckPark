@@ -14,12 +14,12 @@ import { StudioPage } from '../pages/studio/StudioPage';
 
 function LegacyRunRedirect() {
   const { runId = '' } = useParams();
-  return <Navigate replace to={runId ? `/executions/${runId}` : '/executions'} />;
+  return <Navigate to={runId ? `/executions/${runId}` : '/executions'} replace />;
 }
 
 function LegacyGatewayRedirect() {
   const { gatewayId = '' } = useParams();
-  return <Navigate replace to={gatewayId ? `/devices/${gatewayId}` : '/devices'} />;
+  return <Navigate to={gatewayId ? `/devices/${gatewayId}` : '/devices'} replace />;
 }
 
 const router = createBrowserRouter(
@@ -29,22 +29,22 @@ const router = createBrowserRouter(
       element: <AppShell />,
       children: [
         { index: true, element: <Navigate to="/projects" replace /> },
+        { path: 'overview', element: <Navigate to="/projects" replace /> },
         { path: 'projects', element: <ProjectsPage /> },
         { path: 'benchmarks', element: <BenchmarksPage /> },
         { path: 'scenario-sets', element: <ScenarioSetsPage /> },
+        { path: 'runs', element: <Navigate to="/executions" replace /> },
+        { path: 'runs/:runId', element: <LegacyRunRedirect /> },
         { path: 'executions', element: <ExecutionsPage /> },
         { path: 'executions/:runId', element: <ExecutionDetailPage /> },
         { path: 'reports', element: <ReportsPage /> },
-        { path: 'devices', element: <DevicesPage /> },
-        { path: 'devices/:gatewayId', element: <DeviceDetailPage /> },
-        { path: 'overview', element: <Navigate to="/projects" replace /> },
-        { path: 'studio', element: <StudioPage /> },
-        { path: 'scenario-library', element: <Navigate to="/scenario-sets" replace /> },
-        { path: 'runs', element: <Navigate to="/executions" replace /> },
-        { path: 'runs/:runId', element: <LegacyRunRedirect /> },
         { path: 'gateways', element: <Navigate to="/devices" replace /> },
         { path: 'gateways/:gatewayId', element: <LegacyGatewayRedirect /> },
         { path: 'captures', element: <Navigate to="/devices" replace /> },
+        { path: 'captures/:captureId', element: <Navigate to="/devices" replace /> },
+        { path: 'devices', element: <DevicesPage /> },
+        { path: 'devices/:gatewayId', element: <DeviceDetailPage /> },
+        { path: 'studio', element: <StudioPage /> },
         { path: 'settings', element: <SettingsPage /> }
       ]
     }

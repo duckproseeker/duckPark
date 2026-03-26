@@ -69,7 +69,7 @@ export function DonutStatusChart({ title, subtitle, items }: DonutStatusChartPro
             total: {
               show: true,
               showAlways: true,
-              label: 'Total',
+              label: '总量',
               color: subtleColor,
               fontSize: '12px',
               fontWeight: 700,

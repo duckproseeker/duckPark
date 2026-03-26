@@ -45,6 +45,8 @@ REMOTE_BUNDLE_EXCLUDES=(
   .ruff_cache
   __pycache__
   .DS_Store
+  frontend/.env
+  frontend/.env.*
   frontend/node_modules
   frontend/tmp
   frontend/*.tsbuildinfo
